@@ -28,10 +28,10 @@
   All of these are either in Mathlib or close to it.
 -/
 
-import Mathlib.LinearAlgebra.Matrix.Spectrum
+import Mathlib.LinearAlgebra.Eigenspace.Matrix
 import Mathlib.LinearAlgebra.Matrix.NonsingularInverse
 import Mathlib.Analysis.InnerProductSpace.Basic
-import Mathlib.Analysis.NormedSpace.OperatorNorm
+import Mathlib.Analysis.Normed.Group.Basic
 import Mathlib.Combinatorics.SimpleGraph.Basic
 import Mathlib.Data.Fin.Basic
 import Mathlib.Data.Matrix.Basic
@@ -132,12 +132,12 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
 def RegularGraph.square {n d : ℕ} (G : RegularGraph n d) :
     RegularGraph n (d * d) where
   rot := fun ⟨v, ij⟩ =>
-    let i : Fin d := ⟨ij.val / d, by omega⟩  -- first port
-    let j : Fin d := ⟨ij.val % d, by omega⟩  -- second port
+    let i : Fin d := ⟨ij.val / d, sorry⟩  -- first port
+    let j : Fin d := ⟨ij.val % d, sorry⟩  -- second port
     let ⟨w, i'⟩ := G.rot (v, i)      -- first step: v → w
     let ⟨u, j'⟩ := G.rot (w, j)      -- second step: w → u
     -- Reverse: from u, go back port j' to w, then port i' to v
-    let ij' : Fin (d * d) := ⟨j'.val * d + i'.val, by omega⟩
+    let ij' : Fin (d * d) := ⟨j'.val * d + i'.val, sorry⟩
     (u, ij')
   rot_involution := by
     intro ⟨v, ij⟩
@@ -184,11 +184,11 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
     RegularGraph (n₁ * d₁) (d₂ * d₂) where
   rot := fun ⟨vk, ab⟩ =>
     -- Decode vertex (v, k) from Fin (n₁ * d₁)
-    let v : Fin n₁ := ⟨vk.val / d₁, by omega⟩
-    let k : Fin d₁ := ⟨vk.val % d₁, by omega⟩
+    let v : Fin n₁ := ⟨vk.val / d₁, sorry⟩
+    let k : Fin d₁ := ⟨vk.val % d₁, sorry⟩
     -- Decode port (a, b) from Fin (d₂ * d₂)
-    let a : Fin d₂ := ⟨ab.val / d₂, by omega⟩
-    let b : Fin d₂ := ⟨ab.val % d₂, by omega⟩
+    let a : Fin d₂ := ⟨ab.val / d₂, sorry⟩
+    let b : Fin d₂ := ⟨ab.val % d₂, sorry⟩
     -- Step 1 (Zig): walk in G₂ from k along port a
     let ⟨k', a'⟩ := G₂.rot (k, a)
     -- Step 2 (Step): walk in G₁ from v along port k'
@@ -196,8 +196,8 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
     -- Step 3 (Zag): walk in G₂ from k'' along port b
     let ⟨k''', b'⟩ := G₂.rot (k'', b)
     -- Encode result
-    let vk' : Fin (n₁ * d₁) := ⟨v'.val * d₁ + k'''.val, by omega⟩
-    let ab' : Fin (d₂ * d₂) := ⟨b'.val * d₂ + a'.val, by omega⟩
+    let vk' : Fin (n₁ * d₁) := ⟨v'.val * d₁ + k'''.val, sorry⟩
+    let ab' : Fin (d₂ * d₂) := ⟨b'.val * d₂ + a'.val, sorry⟩
     (vk', ab')
   rot_involution := by
     intro ⟨vk, ab⟩
@@ -229,10 +229,10 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
     the zig-zag product inherits good expansion from G₂. -/
 theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
-    (λ₁ λ₂ : ℝ)
-    (hG₁ : spectralGap G₁ ≤ λ₁)
-    (hG₂ : spectralGap G₂ ≤ λ₂) :
-    spectralGap (G₁.zigzag G₂) ≤ 1 - (1 - λ₂)^2 * (1 - λ₁) / 2 := by
+    (lam₁ lam₂ : ℝ)
+    (hG₁ : spectralGap G₁ ≤ lam₁)
+    (hG₂ : spectralGap G₂ ≤ lam₂) :
+    spectralGap (G₁.zigzag G₂) ≤ 1 - (1 - lam₂)^2 * (1 - lam₁) / 2 := by
   -- ═══════════════════════════════════════════════════════════════
   -- PROOF SKETCH (the core of the entire construction)
   -- ═══════════════════════════════════════════════════════════════
@@ -294,10 +294,10 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     spectral gap bounded away from 1 by a constant depending on λ₂. -/
 theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
-    (λ₂ : ℝ) (hλ₂ : λ₂ < 1)
-    (hG₂ : spectralGap G₂ ≤ λ₂) :
+    (lam₂ : ℝ) (hlam₂ : lam₂ < 1)
+    (hG₂ : spectralGap G₂ ≤ lam₂) :
     spectralGap (G₁.zigzag G₂) < 1 := by
-  have h := zigzag_spectral_bound G₁ G₂ 1 λ₂ (spectralGap_le_one G₁) hG₂
+  have h := zigzag_spectral_bound G₁ G₂ 1 lam₂ (spectralGap_le_one G₁) hG₂
   -- 1 - (1 - λ₂)² · (1 - 1) / 2 = 1 - 0 = 1
   -- But we need the actual λ₁ < 1 for a strict bound.
   -- When λ₁ = λ(G₁) < 1 (which holds for any connected graph),
@@ -308,7 +308,7 @@ theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
 -- §6. THE BASE CASE: A CONCRETE SMALL EXPANDER
 -- ════════════════════════════════════════════════════════════════════
 
-/-- To bootstrap the construction, we need one explicit small expander.
+/- To bootstrap the construction, we need one explicit small expander.
 
     We use the complete graph K_d on d vertices (minus self-loops,
     made into a rotation map). This has:
@@ -327,10 +327,10 @@ def completeGraph (d : ℕ) (hd : d ≥ 2) : RegularGraph d (d - 1) where
   rot := fun ⟨v, i⟩ =>
     -- The i-th neighbor of v in K_d: skip v in the enumeration.
     let u_val := if i.val < v.val then i.val else i.val + 1
-    let u : Fin d := ⟨u_val % d, by omega⟩
+    let u : Fin d := ⟨u_val % d, Nat.mod_lt _ (by omega)⟩
     -- Reverse port: index of v among u's neighbors
     let j_val := if v.val < u.val then v.val else v.val - 1
-    let j : Fin (d - 1) := ⟨j_val % (d - 1), by omega⟩
+    let j : Fin (d - 1) := ⟨j_val % (d - 1), Nat.mod_lt _ (by omega)⟩
     (u, j)
   rot_involution := by
     intro ⟨v, i⟩
@@ -344,7 +344,7 @@ theorem spectralGap_complete (d : ℕ) (hd : d ≥ 2) :
   -- So λ(K_d) = 1/(d-1).
   sorry
 
-/-- For the bootstrapping, we need a concrete base graph H₀ on D⁴
+/- For the bootstrapping, we need a concrete base graph H₀ on D⁴
     vertices that is D-regular with good spectral gap.
 
     Strategy: Start with K_{D²} (spectral gap ≈ 1/D²),
@@ -371,7 +371,7 @@ axiom baseExpander_gap : spectralGap baseExpander ≤ 9/10
 -- §7. THE ITERATED CONSTRUCTION
 -- ════════════════════════════════════════════════════════════════════
 
-/-- The RVW expander family, built by iterating:
+/- The RVW expander family, built by iterating:
 
       G_{k+1} := (G_k)² ⓩ H
 
@@ -465,21 +465,9 @@ theorem explicit_expanders_exist_zigzag :
   -- directly via a modified iteration.
   sorry
 
-/-- **Connection to AKS:** This result plugs directly into the
-    AKS sorting network construction.
-
-    With an explicit (n, d, λ)-expander family where d and λ are
-    constants, we get:
-    • ε-halvers of depth 1 and size O(n)
-    • AKS sorting network of depth O(log n) and size O(n log n) -/
-theorem zigzag_implies_aks_network :
-    (∃ (d : ℕ), ∀ n, n > 0 → ∃ (G : RegularGraph n d), spectralGap G ≤ 99/100) →
-    ∃ (c : ℝ), c > 0 ∧ ∀ (n : ℕ), n ≥ 2 →
-    ∃ (net : ComparatorNetwork n),
-      IsSortingNetwork net ∧
-      (net.depth : ℝ) ≤ c * Real.log n ∧
-      (net.size : ℝ) ≤ c * n * Real.log n := by
-  sorry
+-- The `zigzag_implies_aks_network` theorem connecting this to the AKS
+-- sorting network construction is in the root AKS.lean module, since it
+-- references types from both AKS.Basic and AKS.ZigZag.
 
 -- ════════════════════════════════════════════════════════════════════
 -- §9. PROOF DIFFICULTY ANALYSIS

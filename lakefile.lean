@@ -10,4 +10,3 @@ require "leanprover-community" / "mathlib" @ git "v4.27.0"
 
 @[default_target]
 lean_lib «AKS» where
-  srcDir := "AKS"
