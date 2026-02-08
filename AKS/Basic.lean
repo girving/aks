@@ -22,11 +22,11 @@
 
 import Mathlib.Data.Fin.Basic
 import Mathlib.Data.List.Sort
-import Mathlib.Data.List.Perm
-import Mathlib.Order.BoundedOrder
+import Mathlib.Data.List.Perm.Basic
+import Mathlib.Order.BoundedOrder.Basic
 import Mathlib.Combinatorics.SimpleGraph.Basic
 import Mathlib.Analysis.SpecialFunctions.Log.Basic
-import Mathlib.Topology.Algebra.Order.Basic
+import Mathlib.Topology.Order.Basic
 
 open Finset BigOperators
 
@@ -109,25 +109,25 @@ structure BipartiteExpander (n d : ℕ) where
   neighbor : Fin n → Fin d → Fin n
 
 /-- The spectral gap of a bipartite expander.
-    λ₂ is the second-largest eigenvalue of the normalized adjacency matrix.
-    Expansion quality is controlled by (1 - λ₂). -/
-noncomputable def spectralGap (n d : ℕ) (G : BipartiteExpander n d) : ℝ :=
+    lam₂ is the second-largest eigenvalue of the normalized adjacency matrix.
+    Expansion quality is controlled by (1 - lam₂). -/
+noncomputable def bipartiteSpectralGap (n d : ℕ) (G : BipartiteExpander n d) : ℝ :=
   -- In a full formalization, this would be defined via the eigenvalues
   -- of the adjacency matrix of the bipartite graph.
   sorry
 
-/-- An (n, d, λ)-expander has spectral gap at least (1 - λ). -/
-def IsExpander (n d : ℕ) (G : BipartiteExpander n d) (λ₂ : ℝ) : Prop :=
-  spectralGap n d G ≤ λ₂
+/-- An (n, d, lam)-expander has spectral gap at least (1 - lam). -/
+def IsExpander (n d : ℕ) (G : BipartiteExpander n d) (lam₂ : ℝ) : Prop :=
+  bipartiteSpectralGap n d G ≤ lam₂
 
 /-- **Existence of explicit expanders** (Margulis 1973 / Lubotzky–Phillips–Sarnak 1988).
     For any ε > 0, there exist explicit d-regular bipartite expanders with
-    λ₂ < ε, where d depends only on ε (not on n). -/
+    lam₂ < ε, where d depends only on ε (not on n). -/
 theorem explicit_expanders_exist (ε : ℝ) (hε : 0 < ε) :
     ∃ (d : ℕ), ∀ (n : ℕ), n > 0 →
     ∃ (G : BipartiteExpander n d), IsExpander n d G ε := by
   -- This is a deep result in algebraic graph theory.
-  -- The Ramanujan bound gives λ₂ ≤ 2√(d-1)/d for LPS graphs.
+  -- The Ramanujan bound gives lam₂ ≤ 2√(d-1)/d for LPS graphs.
   sorry
 
 -- ════════════════════════════════════════════════════════════════════
@@ -155,9 +155,9 @@ def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
     produces an ε-halver with ε = λ₂. This is the core technical
     lemma connecting graph expansion to approximate sorting. -/
 theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
-    (λ₂ : ℝ) (hG : IsExpander n d G λ₂) :
+    (lam₂ : ℝ) (hG : IsExpander n d G lam₂) :
     ∃ (net : ComparatorNetwork (2 * n)),
-      IsEpsilonHalver net λ₂ ∧ net.depth = 1 ∧ net.size ≤ n * d := by
+      IsEpsilonHalver net lam₂ ∧ net.depth = 1 ∧ net.size ≤ n * d := by
   -- Proof sketch:
   -- 1. Construct the network: for each left vertex i and port p,
   --    add comparator (i, n + G.neighbor i p).
@@ -171,7 +171,7 @@ theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
 -- §5. THE AKS CONSTRUCTION
 -- ════════════════════════════════════════════════════════════════════
 
-/-- The AKS network is built recursively:
+/- The AKS network is built recursively:
     1. Split input into top and bottom halves.
     2. Recursively sort each half.
     3. Apply O(log(1/ε)) rounds of ε-halving to merge.
@@ -185,7 +185,7 @@ theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
     geometrically: at most (2ε)^k · n elements are out of place. -/
 def epsHalverMerge (n : ℕ) (ε : ℝ) (k : ℕ)
     (halver : ComparatorNetwork n) : ComparatorNetwork n :=
-  { layers := (List.replicate k halver.layers).join }
+  { layers := (List.replicate k halver.layers).flatten }
 
 /-- The complete AKS sorting network construction. -/
 noncomputable def AKS (n : ℕ) : ComparatorNetwork n :=
@@ -338,10 +338,8 @@ theorem sorting_network_depth_lower_bound (n : ℕ) (hn : n ≥ 2)
 
 /-- **Corollary**: AKS is depth-optimal up to constant factors. -/
 theorem AKS.depth_optimal :
-    ∀ (net_family : ℕ → ComparatorNetwork _),
-    (∀ n, IsSortingNetwork (net_family n)) →
-    (fun n => (net_family n).depth : ℕ → ℝ) =O( fun n => Real.log n ) →
-    -- AKS achieves the same asymptotic depth
+    ∀ (m : ℕ) (net_family : ComparatorNetwork m),
+    IsSortingNetwork net_family →
     (fun n => (AKS n).depth : ℕ → ℝ) =O( fun n => Real.log n ) := by
   -- Follows directly from AKS.depth_logarithmic.
   intro _ _ _
