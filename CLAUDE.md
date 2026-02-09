@@ -75,7 +75,7 @@ Basic.lean: AKS construction + correctness
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` (Fin arithmetic + `rot_involution` via extracted `square_rot` def with encode/decode simp lemmas)
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (Fin encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas)
 
 **Achievable (weeks):** `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
 

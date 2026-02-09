@@ -129,33 +129,35 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
 /-- The square G² of a d-regular graph: take two steps.
     G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
     then edge j from the result. -/
-private theorem Fin.pair_lt {d : ℕ} (j i : Fin d) : j.val * d + i.val < d * d :=
+private theorem Fin.pair_lt {n d : ℕ} (j : Fin n) (i : Fin d) :
+    j.val * d + i.val < n * d :=
   calc j.val * d + i.val
       < j.val * d + d := Nat.add_lt_add_left i.isLt _
     _ = (j.val + 1) * d := by ring
-    _ ≤ d * d := Nat.mul_le_mul_right d (Nat.succ_le_of_lt j.isLt)
+    _ ≤ n * d := Nat.mul_le_mul_right d (Nat.succ_le_of_lt j.isLt)
 
 /-- Decode-encode: dividing x*d+y by d gives x. -/
-private theorem fin_encode_fst {d : ℕ} (x y : Fin d)
-    (h : (x.val * d + y.val) / d < d) :
-    (⟨(x.val * d + y.val) / d, h⟩ : Fin d) = x := by
+private theorem fin_encode_fst {n d : ℕ} (x : Fin n) (y : Fin d)
+    (h : (x.val * d + y.val) / d < n) :
+    (⟨(x.val * d + y.val) / d, h⟩ : Fin n) = x := by
   apply Fin.ext
-  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; simp at h)
+  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd y.isLt (by omega))
   show (x.val * d + y.val) / d = x.val
   rw [Nat.add_comm, Nat.add_mul_div_right _ _ hd, Nat.div_eq_of_lt y.isLt]; omega
 
 /-- Decode-encode: x*d+y mod d gives y. -/
-private theorem fin_encode_snd {d : ℕ} (x y : Fin d)
+private theorem fin_encode_snd {n d : ℕ} (x : Fin n) (y : Fin d)
     (h : (x.val * d + y.val) % d < d) :
     (⟨(x.val * d + y.val) % d, h⟩ : Fin d) = y := by
   apply Fin.ext
   show (x.val * d + y.val) % d = y.val
+  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd y.isLt (by omega))
   rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt y.isLt]
 
 /-- Encode-decode: (ij/d)*d + ij%d = ij. -/
-private theorem fin_div_add_mod {d : ℕ} (ij : Fin (d * d))
-    (h : (ij.val / d) * d + ij.val % d < d * d) :
-    (⟨(ij.val / d) * d + ij.val % d, h⟩ : Fin (d * d)) = ij := by
+private theorem fin_div_add_mod {n d : ℕ} (ij : Fin (n * d))
+    (h : (ij.val / d) * d + ij.val % d < n * d) :
+    (⟨(ij.val / d) * d + ij.val % d, h⟩ : Fin (n * d)) = ij := by
   apply Fin.ext
   show (ij.val / d) * d + ij.val % d = ij.val
   rw [Nat.mul_comm]; exact Nat.div_add_mod ij.val d
@@ -218,32 +220,42 @@ theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
        Arrive at final port k'''.
 
     The pair (a, b) ∈ [d₂] × [d₂] encodes the d₂²-valued port. -/
+private def zigzag_rot {n₁ d₁ d₂ : ℕ}
+    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
+    (p : Fin (n₁ * d₁) × Fin (d₂ * d₂)) : Fin (n₁ * d₁) × Fin (d₂ * d₂) :=
+  have hd₁ : 0 < d₁ :=
+    Nat.pos_of_ne_zero (by rintro rfl; exact absurd p.1.isLt (by simp))
+  have hd₂ : 0 < d₂ :=
+    Nat.pos_of_ne_zero (by rintro rfl; exact absurd p.2.isLt (by simp))
+  -- Decode vertex (v, k) from Fin (n₁ * d₁)
+  let v : Fin n₁ := ⟨p.1.val / d₁, (Nat.div_lt_iff_lt_mul hd₁).mpr p.1.isLt⟩
+  let k : Fin d₁ := ⟨p.1.val % d₁, Nat.mod_lt _ hd₁⟩
+  -- Decode port (a, b) from Fin (d₂ * d₂)
+  let a : Fin d₂ := ⟨p.2.val / d₂, (Nat.div_lt_iff_lt_mul hd₂).mpr p.2.isLt⟩
+  let b : Fin d₂ := ⟨p.2.val % d₂, Nat.mod_lt _ hd₂⟩
+  -- Zig: walk in G₂ from k along port a
+  let zig := G₂.rot (k, a)
+  -- Step: walk in G₁ from v along port zig.1
+  let step := G₁.rot (v, zig.1)
+  -- Zag: walk in G₂ from step.2 along port b
+  let zag := G₂.rot (step.2, b)
+  -- Encode: vertex = (step.1, zag.1), port = (zag.2, zig.2)
+  (⟨step.1.val * d₁ + zag.1.val, Fin.pair_lt step.1 zag.1⟩,
+   ⟨zag.2.val * d₂ + zig.2.val, Fin.pair_lt zag.2 zig.2⟩)
+
+private theorem zigzag_rot_involution {n₁ d₁ d₂ : ℕ}
+    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
+    (p : Fin (n₁ * d₁) × Fin (d₂ * d₂)) :
+    zigzag_rot G₁ G₂ (zigzag_rot G₁ G₂ p) = p := by
+  obtain ⟨vk, ab⟩ := p
+  simp only [zigzag_rot, fin_encode_fst, fin_encode_snd, Prod.mk.eta,
+    G₁.rot_involution, G₂.rot_involution, fin_div_add_mod]
+
 def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂) :
     RegularGraph (n₁ * d₁) (d₂ * d₂) where
-  rot := fun ⟨vk, ab⟩ ↦
-    -- Decode vertex (v, k) from Fin (n₁ * d₁)
-    let v : Fin n₁ := ⟨vk.val / d₁, sorry⟩
-    let k : Fin d₁ := ⟨vk.val % d₁, sorry⟩
-    -- Decode port (a, b) from Fin (d₂ * d₂)
-    let a : Fin d₂ := ⟨ab.val / d₂, sorry⟩
-    let b : Fin d₂ := ⟨ab.val % d₂, sorry⟩
-    -- Step 1 (Zig): walk in G₂ from k along port a
-    let ⟨k', a'⟩ := G₂.rot (k, a)
-    -- Step 2 (Step): walk in G₁ from v along port k'
-    let ⟨v', k''⟩ := G₁.rot (v, k')
-    -- Step 3 (Zag): walk in G₂ from k'' along port b
-    let ⟨k''', b'⟩ := G₂.rot (k'', b)
-    -- Encode result
-    let vk' : Fin (n₁ * d₁) := ⟨v'.val * d₁ + k'''.val, sorry⟩
-    let ab' : Fin (d₂ * d₂) := ⟨b'.val * d₂ + a'.val, sorry⟩
-    (vk', ab')
-  rot_involution := by
-    intro ⟨vk, ab⟩
-    -- Follows from involution of G₁.rot and G₂.rot.
-    -- Zig-zag-step in reverse: zag⁻¹ = zag, step⁻¹ = step, zig⁻¹ = zig.
-    -- The reversed port (b', a') encodes the reverse path correctly.
-    sorry
+  rot := zigzag_rot G₁ G₂
+  rot_involution := zigzag_rot_involution G₁ G₂
 
 -- ════════════════════════════════════════════════════════════════════
 -- §5. THE SPECTRAL COMPOSITION THEOREM
