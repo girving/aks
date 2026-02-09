@@ -65,10 +65,10 @@ Basic.lean: AKS construction + correctness
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive)
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` (Fin arithmetic + `rot_involution` via extracted `square_rot` def with encode/decode simp lemmas)
 
 **Achievable (weeks):** `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
 
-**Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`, rotation map involution proofs
+**Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`

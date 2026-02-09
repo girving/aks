@@ -135,26 +135,53 @@ private theorem Fin.pair_lt {d : ℕ} (j i : Fin d) : j.val * d + i.val < d * d 
     _ = (j.val + 1) * d := by ring
     _ ≤ d * d := Nat.mul_le_mul_right d (Nat.succ_le_of_lt j.isLt)
 
+/-- Decode-encode: dividing x*d+y by d gives x. -/
+private theorem fin_encode_fst {d : ℕ} (x y : Fin d)
+    (h : (x.val * d + y.val) / d < d) :
+    (⟨(x.val * d + y.val) / d, h⟩ : Fin d) = x := by
+  apply Fin.ext
+  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; simp at h)
+  show (x.val * d + y.val) / d = x.val
+  rw [Nat.add_comm, Nat.add_mul_div_right _ _ hd, Nat.div_eq_of_lt y.isLt]; omega
+
+/-- Decode-encode: x*d+y mod d gives y. -/
+private theorem fin_encode_snd {d : ℕ} (x y : Fin d)
+    (h : (x.val * d + y.val) % d < d) :
+    (⟨(x.val * d + y.val) % d, h⟩ : Fin d) = y := by
+  apply Fin.ext
+  show (x.val * d + y.val) % d = y.val
+  rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt y.isLt]
+
+/-- Encode-decode: (ij/d)*d + ij%d = ij. -/
+private theorem fin_div_add_mod {d : ℕ} (ij : Fin (d * d))
+    (h : (ij.val / d) * d + ij.val % d < d * d) :
+    (⟨(ij.val / d) * d + ij.val % d, h⟩ : Fin (d * d)) = ij := by
+  apply Fin.ext
+  show (ij.val / d) * d + ij.val % d = ij.val
+  rw [Nat.mul_comm]; exact Nat.div_add_mod ij.val d
+
+/-- The rotation map for G²: decode port as (i,j), take step i then step j,
+    encode the reverse ports as j'*d + i'. Uses projections (not destructuring)
+    so that simp can work with it. -/
+private def square_rot {n d : ℕ} (G : RegularGraph n d)
+    (p : Fin n × Fin (d * d)) : Fin n × Fin (d * d) :=
+  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd p.2.isLt (by simp))
+  let i : Fin d := ⟨p.2.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.2.isLt⟩
+  let j : Fin d := ⟨p.2.val % d, Nat.mod_lt _ hd⟩
+  let step1 := G.rot (p.1, i)
+  let step2 := G.rot (step1.1, j)
+  (step2.1, ⟨step2.2.val * d + step1.2.val, Fin.pair_lt step2.2 step1.2⟩)
+
+private theorem square_rot_involution {n d : ℕ} (G : RegularGraph n d)
+    (p : Fin n × Fin (d * d)) : square_rot G (square_rot G p) = p := by
+  obtain ⟨v, ij⟩ := p
+  simp only [square_rot, fin_encode_fst, fin_encode_snd, Prod.mk.eta, G.rot_involution,
+    fin_div_add_mod]
+
 def RegularGraph.square {n d : ℕ} (G : RegularGraph n d) :
     RegularGraph n (d * d) where
-  rot := fun ⟨v, ij⟩ ↦
-    have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd ij.isLt (by simp))
-    let i : Fin d := ⟨ij.val / d, (Nat.div_lt_iff_lt_mul hd).mpr ij.isLt⟩
-    let j : Fin d := ⟨ij.val % d, Nat.mod_lt _ hd⟩
-    let ⟨w, i'⟩ := G.rot (v, i)      -- first step: v → w
-    let ⟨u, j'⟩ := G.rot (w, j)      -- second step: w → u
-    -- Reverse: from u, go back port j' to w, then port i' to v
-    let ij' : Fin (d * d) := ⟨j'.val * d + i'.val, Fin.pair_lt j' i'⟩
-    (u, ij')
-  rot_involution := by
-    intro ⟨v, ij⟩
-    have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd ij.isLt (by simp))
-    -- Proof sketch: applying rot twice reverses both G.rot steps.
-    -- After first rot: (u, ⟨j'*d + i', _⟩), where (w,i')=G.rot(v,i), (u,j')=G.rot(w,j)
-    -- Decoding j'*d+i' gives back (j', i') by Nat.add_mul_div_right / mod_self_right.
-    -- Then G.rot(u,j')=(w,j) and G.rot(w,i')=(v,i) by G.rot_involution.
-    -- The port i*d+j = (ij/d)*d + ij%d = ij by Nat.div_add_mod.
-    sorry
+  rot := square_rot G
+  rot_involution := square_rot_involution G
 
 /-- **Squaring squares the spectral gap.**
 
