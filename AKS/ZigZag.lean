@@ -129,19 +129,31 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
 /-- The square G² of a d-regular graph: take two steps.
     G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
     then edge j from the result. -/
+private theorem Fin.pair_lt {d : ℕ} (j i : Fin d) : j.val * d + i.val < d * d :=
+  calc j.val * d + i.val
+      < j.val * d + d := Nat.add_lt_add_left i.isLt _
+    _ = (j.val + 1) * d := by ring
+    _ ≤ d * d := Nat.mul_le_mul_right d (Nat.succ_le_of_lt j.isLt)
+
 def RegularGraph.square {n d : ℕ} (G : RegularGraph n d) :
     RegularGraph n (d * d) where
   rot := fun ⟨v, ij⟩ ↦
-    let i : Fin d := ⟨ij.val / d, sorry⟩  -- first port
-    let j : Fin d := ⟨ij.val % d, sorry⟩  -- second port
+    have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd ij.isLt (by simp))
+    let i : Fin d := ⟨ij.val / d, (Nat.div_lt_iff_lt_mul hd).mpr ij.isLt⟩
+    let j : Fin d := ⟨ij.val % d, Nat.mod_lt _ hd⟩
     let ⟨w, i'⟩ := G.rot (v, i)      -- first step: v → w
     let ⟨u, j'⟩ := G.rot (w, j)      -- second step: w → u
     -- Reverse: from u, go back port j' to w, then port i' to v
-    let ij' : Fin (d * d) := ⟨j'.val * d + i'.val, sorry⟩
+    let ij' : Fin (d * d) := ⟨j'.val * d + i'.val, Fin.pair_lt j' i'⟩
     (u, ij')
   rot_involution := by
     intro ⟨v, ij⟩
-    -- Follows from G.rot_involution applied twice.
+    have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd ij.isLt (by simp))
+    -- Proof sketch: applying rot twice reverses both G.rot steps.
+    -- After first rot: (u, ⟨j'*d + i', _⟩), where (w,i')=G.rot(v,i), (u,j')=G.rot(w,j)
+    -- Decoding j'*d+i' gives back (j', i') by Nat.add_mul_div_right / mod_self_right.
+    -- Then G.rot(u,j')=(w,j) and G.rot(w,i')=(v,i) by G.rot_involution.
+    -- The port i*d+j = (ij/d)*d + ij%d = ij by Nat.div_add_mod.
     sorry
 
 /-- **Squaring squares the spectral gap.**
