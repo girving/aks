@@ -28,12 +28,12 @@
   All of these are either in Mathlib or close to it.
 -/
 
+import AKS.Fin
 import Mathlib.LinearAlgebra.Eigenspace.Matrix
 import Mathlib.LinearAlgebra.Matrix.NonsingularInverse
 import Mathlib.Analysis.InnerProductSpace.Basic
 import Mathlib.Analysis.Normed.Group.Basic
 import Mathlib.Combinatorics.SimpleGraph.Basic
-import Mathlib.Data.Fin.Basic
 import Mathlib.Data.Matrix.Basic
 
 open Matrix BigOperators Finset
@@ -126,41 +126,9 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
 -- §3. GRAPH SQUARING
 -- ════════════════════════════════════════════════════════════════════
 
-/-- The square G² of a d-regular graph: take two steps.
-    G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
-    then edge j from the result. -/
-private theorem Fin.pair_lt {n d : ℕ} (j : Fin n) (i : Fin d) :
-    j.val * d + i.val < n * d :=
-  calc j.val * d + i.val
-      < j.val * d + d := Nat.add_lt_add_left i.isLt _
-    _ = (j.val + 1) * d := by ring
-    _ ≤ n * d := Nat.mul_le_mul_right d (Nat.succ_le_of_lt j.isLt)
-
-/-- Decode-encode: dividing x*d+y by d gives x. -/
-private theorem fin_encode_fst {n d : ℕ} (x : Fin n) (y : Fin d)
-    (h : (x.val * d + y.val) / d < n) :
-    (⟨(x.val * d + y.val) / d, h⟩ : Fin n) = x := by
-  apply Fin.ext
-  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd y.isLt (by omega))
-  show (x.val * d + y.val) / d = x.val
-  rw [Nat.add_comm, Nat.add_mul_div_right _ _ hd, Nat.div_eq_of_lt y.isLt]; omega
-
-/-- Decode-encode: x*d+y mod d gives y. -/
-private theorem fin_encode_snd {n d : ℕ} (x : Fin n) (y : Fin d)
-    (h : (x.val * d + y.val) % d < d) :
-    (⟨(x.val * d + y.val) % d, h⟩ : Fin d) = y := by
-  apply Fin.ext
-  show (x.val * d + y.val) % d = y.val
-  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd y.isLt (by omega))
-  rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt y.isLt]
-
-/-- Encode-decode: (ij/d)*d + ij%d = ij. -/
-private theorem fin_div_add_mod {n d : ℕ} (ij : Fin (n * d))
-    (h : (ij.val / d) * d + ij.val % d < n * d) :
-    (⟨(ij.val / d) * d + ij.val % d, h⟩ : Fin (n * d)) = ij := by
-  apply Fin.ext
-  show (ij.val / d) * d + ij.val % d = ij.val
-  rw [Nat.mul_comm]; exact Nat.div_add_mod ij.val d
+-- The square G² of a d-regular graph: take two steps.
+-- G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
+-- then edge j from the result.
 
 /-- The rotation map for G²: decode port as (i,j), take step i then step j,
     encode the reverse ports as j'*d + i'. Uses projections (not destructuring)
