@@ -29,9 +29,8 @@ import Mathlib.Topology.Order.Basic
 
 open Finset BigOperators
 
--- ════════════════════════════════════════════════════════════════════
--- §1. COMPARATOR NETWORKS
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §1. Comparator Networks -/
 
 /-- A comparator on `n` wires swaps positions `i` and `j` if out of order. -/
 structure Comparator (n : ℕ) where
@@ -101,9 +100,8 @@ def IsSortingNetwork {n : ℕ} (net : ComparatorNetwork n) : Prop :=
   ∀ (α : Type*) [LinearOrder α] (v : Fin n → α),
     Monotone (net.exec v)
 
--- ════════════════════════════════════════════════════════════════════
--- §2. THE 0-1 PRINCIPLE
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §2. The 0-1 Principle -/
 
 /-- The 0-1 Principle: A comparator network sorts all inputs iff it
     sorts all Boolean (0-1) inputs. This is the key reduction that
@@ -137,9 +135,8 @@ theorem zero_one_principle {n : ℕ} (net : ComparatorNetwork n) :
       show (f ∘ net.exec v) j = false from decide_eq_false_iff_not.mpr (lt_irrefl _)] at h_sorted
   exact absurd h_sorted (by decide)
 
--- ════════════════════════════════════════════════════════════════════
--- §3. EXPANDER GRAPHS
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §3. Expander Graphs -/
 
 /-- A `d`-regular bipartite graph on `n + n` vertices,
     represented by a neighbor function. -/
@@ -169,9 +166,8 @@ theorem explicit_expanders_exist (ε : ℝ) (hε : 0 < ε) :
   -- The Ramanujan bound gives lam₂ ≤ 2√(d-1)/d for LPS graphs.
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §4. ε-HALVERS
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §4. ε-Halvers -/
 
 /-- A comparator network is an ε-halver if, for every 0-1 input,
     after applying the network, the top half has at most (1/2 + ε)
@@ -202,9 +198,8 @@ theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
   --    to show enough swaps occur to achieve ε-halving.
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §5. THE AKS CONSTRUCTION
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §5. The AKS Construction -/
 
 /- The AKS network is built recursively:
     1. Split input into top and bottom halves.
@@ -232,9 +227,8 @@ noncomputable def AKS (n : ℕ) : ComparatorNetwork n :=
   -- The ε is chosen as a sufficiently small constant (e.g., 1/4).
   sorry -- Full construction requires careful index bookkeeping
 
--- ════════════════════════════════════════════════════════════════════
--- §6. SIZE ANALYSIS
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §6. Size Analysis -/
 
 /-- Asymptotic notation for stating complexity bounds. -/
 def IsBigO (f g : ℕ → ℝ) : Prop :=
@@ -258,9 +252,8 @@ theorem AKS.size_nlogn :
   -- By the Master theorem: S(n) = O(n log n).
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §7. CORRECTNESS
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §7. Correctness -/
 
 /-- An ε-sorted vector: at most εn elements are not in their
     correct sorted position. -/
@@ -315,11 +308,9 @@ theorem AKS.sorts (n : ℕ) : IsSortingNetwork (AKS n) := by
   -- 5. Therefore the output is sorted. ∎
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §8. DISCUSSION
--- ════════════════════════════════════════════════════════════════════
 
-/-!
+/-! ## §8. Discussion
+
 ## What would a complete formalization require?
 
 The `sorry`s above cluster into three categories of difficulty:

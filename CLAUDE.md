@@ -60,6 +60,7 @@ Basic.lean: AKS construction + correctness
 
 - Use `↦` (not `=>`) for lambda arrows: `fun x ↦ ...`
 - In markdown/comments, backtick-quote Lean identifiers and filenames: `` `Fin` ``, not `Fin`; `` `ZigZag.lean` ``, not `ZigZag.lean`
+- Use `/-! ## §N. Title -/` for section headers (Mathlib style), not decorative `-- ═══` lines
 - Keep mathematically high-level files (e.g., `ZigZag.lean`) clean by moving reusable helpers (e.g., `Fin` arithmetic lemmas) into their own files (e.g., `AKS/Fin.lean`). Iterate with helpers in the same file during development, then extract as a final pass before committing.
 
 ## Key Lean/Mathlib Conventions

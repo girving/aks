@@ -38,9 +38,8 @@ import Mathlib.Data.Matrix.Basic
 
 open Matrix BigOperators Finset
 
--- ════════════════════════════════════════════════════════════════════
--- §1. REGULAR GRAPHS AND ADJACENCY MATRICES
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §1. Regular Graphs and Adjacency Matrices -/
 
 /-- A d-regular graph on n vertices, represented by a rotation map.
 
@@ -76,9 +75,8 @@ noncomputable def adjMatrix {n d : ℕ} (G : RegularGraph n d) :
   Matrix.of fun u v ↦
     ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ) / d
 
--- ════════════════════════════════════════════════════════════════════
--- §2. SPECTRAL GAP
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §2. Spectral Gap -/
 
 /-- The spectral gap λ(G): the second-largest singular value of the
     normalized adjacency matrix.
@@ -122,9 +120,8 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
   -- then bounding the cross term using the spectral gap.
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §3. GRAPH SQUARING
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §3. Graph Squaring -/
 
 -- The square G² of a d-regular graph: take two steps.
 -- G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
@@ -167,9 +164,8 @@ theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
   -- second-largest eigenvalue of M.
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §4. THE ZIG-ZAG PRODUCT
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §4. The Zig-Zag Product -/
 
 /-- **The zig-zag product** G₁ ⓩ G₂.
 
@@ -225,9 +221,8 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
   rot := zigzag_rot G₁ G₂
   rot_involution := zigzag_rot_involution G₁ G₂
 
--- ════════════════════════════════════════════════════════════════════
--- §5. THE SPECTRAL COMPOSITION THEOREM
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §5. The Spectral Composition Theorem -/
 
 /-- **The Main Theorem (Reingold–Vadhan–Wigderson 2002):**
 
@@ -323,9 +318,8 @@ theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
   -- we get a strict inequality.
   sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §6. THE BASE CASE: A CONCRETE SMALL EXPANDER
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §6. The Base Case: A Concrete Small Expander -/
 
 /- To bootstrap the construction, we need one explicit small expander.
 
@@ -390,9 +384,8 @@ axiom baseExpander : RegularGraph 4096 8
 
 axiom baseExpander_gap : spectralGap baseExpander ≤ 9/10
 
--- ════════════════════════════════════════════════════════════════════
--- §7. THE ITERATED CONSTRUCTION
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §7. The Iterated Construction -/
 
 /- The RVW expander family, built by iterating:
 
@@ -461,9 +454,8 @@ theorem zigzagFamily_gap (k : ℕ) :
     -- The actual RVW paper optimizes these constants carefully.
     sorry
 
--- ════════════════════════════════════════════════════════════════════
--- §8. THE MAIN RESULT
--- ════════════════════════════════════════════════════════════════════
+
+/-! ## §8. The Main Result -/
 
 /-- **Explicit expander families exist** (via zig-zag).
 
@@ -486,11 +478,9 @@ theorem explicit_expanders_exist_zigzag :
 -- sorting network construction is in the root AKS.lean module, since it
 -- references types from both AKS.Basic and AKS.ZigZag.
 
--- ════════════════════════════════════════════════════════════════════
--- §9. PROOF DIFFICULTY ANALYSIS
--- ════════════════════════════════════════════════════════════════════
 
-/-!
+/-! ## §9. Proof Difficulty Analysis
+
 ## Formalization Difficulty Assessment
 
 ### Category 1: Within Reach (weeks each)
