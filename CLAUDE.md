@@ -65,7 +65,9 @@ Basic.lean: AKS construction + correctness
 
 ## Proof Status by Difficulty
 
-**Achievable (weeks):** `zero_one_principle`, `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive)
+
+**Achievable (weeks):** `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`, rotation map involution proofs
 

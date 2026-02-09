@@ -60,6 +60,42 @@ def ComparatorNetwork.exec {n : ℕ} {α : Type*} [LinearOrder α]
     (net : ComparatorNetwork n) (v : Fin n → α) : Fin n → α :=
   net.comparators.foldl (fun acc c ↦ c.apply acc) v
 
+/-- Monotone functions commute with a single comparator application.
+    This is the key lemma for the 0-1 principle: min/max commute
+    with monotone functions on linear orders. -/
+theorem Comparator.apply_comp_monotone {n : ℕ} {α β : Type*}
+    [LinearOrder α] [LinearOrder β]
+    (c : Comparator n) {f : α → β} (hf : Monotone f) (v : Fin n → α) :
+    f ∘ c.apply v = c.apply (f ∘ v) := by
+  ext k
+  simp only [Function.comp, Comparator.apply]
+  split_ifs with h1 h2
+  · exact hf.map_min
+  · exact hf.map_max
+  · rfl
+
+/-- Monotone functions commute with sequential comparator application. -/
+private theorem foldl_comp_monotone {n : ℕ} {α β : Type*}
+    [LinearOrder α] [LinearOrder β]
+    (cs : List (Comparator n)) {f : α → β} (hf : Monotone f)
+    (v : Fin n → α) :
+    f ∘ cs.foldl (fun acc c ↦ c.apply acc) v =
+      cs.foldl (fun acc c ↦ c.apply acc) (f ∘ v) := by
+  induction cs generalizing v with
+  | nil => rfl
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    rw [ih (c.apply v), c.apply_comp_monotone hf v]
+
+/-- Monotone functions commute with network execution.
+    Extends `apply_comp_monotone` to the full comparator sequence. -/
+theorem ComparatorNetwork.exec_comp_monotone {n : ℕ} {α β : Type*}
+    [LinearOrder α] [LinearOrder β]
+    (net : ComparatorNetwork n) {f : α → β} (hf : Monotone f)
+    (v : Fin n → α) :
+    f ∘ net.exec v = net.exec (f ∘ v) :=
+  foldl_comp_monotone net.comparators hf v
+
 /-- A network is a *sorting network* if it sorts every input. -/
 def IsSortingNetwork {n : ℕ} (net : ComparatorNetwork n) : Prop :=
   ∀ (α : Type*) [LinearOrder α] (v : Fin n → α),
@@ -78,13 +114,28 @@ theorem zero_one_principle {n : ℕ} (net : ComparatorNetwork n) :
   intro h_bool
   unfold IsSortingNetwork
   intro α _ v
-  -- Classic proof: for any α-valued input that isn't sorted after
-  -- applying the network, we can construct a monotone function
-  -- f : α → Bool such that the Boolean projection f ∘ v also
-  -- isn't sorted, contradicting h_bool.
-  -- The function is f(x) := if x ≤ threshold then false else true
-  -- for a suitably chosen threshold.
-  sorry
+  -- By contradiction: if net.exec v isn't sorted, construct a
+  -- Boolean witness via a threshold function.
+  by_contra h_not_mono
+  simp only [Monotone, not_forall, not_le] at h_not_mono
+  obtain ⟨i, j, hij, hlt⟩ := h_not_mono
+  -- hlt : (net.exec v) j < (net.exec v) i, with hij : i ≤ j
+  -- Threshold function: true iff strictly above (net.exec v) j
+  let f : α → Bool := fun x ↦ decide ((net.exec v) j < x)
+  have hf : Monotone f := by
+    intro a b hab
+    show decide ((net.exec v) j < a) ≤ decide ((net.exec v) j < b)
+    by_cases ha : (net.exec v) j < a
+    · have hb : (net.exec v) j < b := lt_of_lt_of_le ha hab
+      simp [ha, hb]
+    · simp [ha]
+  -- By exec_comp_monotone: net.exec (f ∘ v) = f ∘ (net.exec v)
+  have hcomm := (net.exec_comp_monotone (f := f) hf v).symm
+  -- The Boolean input f ∘ v is not sorted by the network
+  have h_sorted := (h_bool (f ∘ v)) hij
+  rw [hcomm, show (f ∘ net.exec v) i = true from decide_eq_true_eq.mpr hlt,
+      show (f ∘ net.exec v) j = false from decide_eq_false_iff_not.mpr (lt_irrefl _)] at h_sorted
+  exact absurd h_sorted (by decide)
 
 -- ════════════════════════════════════════════════════════════════════
 -- §3. EXPANDER GRAPHS
@@ -273,9 +324,12 @@ theorem AKS.sorts (n : ℕ) : IsSortingNetwork (AKS n) := by
 
 The `sorry`s above cluster into three categories of difficulty:
 
+### Done
+- `zero_one_principle`: Proved via `Comparator.apply_comp_monotone` and
+  `ComparatorNetwork.exec_comp_monotone` (monotone functions commute with
+  comparators), then contrapositive with a threshold function.
+
 ### Achievable (weeks of work)
-- `zero_one_principle`: Standard proof by contradiction with monotone
-  threshold functions. Mostly bookkeeping in Lean.
 - `halver_convergence`: Geometric series argument, straightforward
   once `halver_composition` is established.
 
