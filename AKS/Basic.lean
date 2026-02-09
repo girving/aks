@@ -42,7 +42,7 @@ structure Comparator (n : ℕ) where
 /-- Apply a single comparator to a vector. -/
 def Comparator.apply {n : ℕ} {α : Type*} [LinearOrder α]
     (c : Comparator n) (v : Fin n → α) : Fin n → α :=
-  fun k =>
+  fun k ↦
     if k = c.i then min (v c.i) (v c.j)
     else if k = c.j then max (v c.i) (v c.j)
     else v k
@@ -58,7 +58,7 @@ def ComparatorNetwork.size {n : ℕ} (net : ComparatorNetwork n) : ℕ :=
 /-- Execute an entire comparator network on an input vector. -/
 def ComparatorNetwork.exec {n : ℕ} {α : Type*} [LinearOrder α]
     (net : ComparatorNetwork n) (v : Fin n → α) : Fin n → α :=
-  net.comparators.foldl (fun acc c => c.apply acc) v
+  net.comparators.foldl (fun acc c ↦ c.apply acc) v
 
 /-- A network is a *sorting network* if it sorts every input. -/
 def IsSortingNetwork {n : ℕ} (net : ComparatorNetwork n) : Prop :=
@@ -122,20 +122,16 @@ theorem explicit_expanders_exist (ε : ℝ) (hε : 0 < ε) :
 -- §4. ε-HALVERS
 -- ════════════════════════════════════════════════════════════════════
 
-/-- Given a Boolean vector, count the fraction of 1s. -/
-noncomputable def onesFraction (n : ℕ) (v : Fin n → Bool) : ℝ :=
-  (Finset.univ.filter (fun i => v i = true)).card / n
-
 /-- A comparator network is an ε-halver if, for every 0-1 input,
     after applying the network, the top half has at most (1/2 + ε)
-    fraction of 1s, and the bottom half has at least (1/2 - ε).
+    fraction of 1s.
 
-    Intuitively: it "approximately halves" the 1s between top and bottom. -/
+    Intuitively: it pushes 1s toward the bottom half. -/
 def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
   ∀ (v : Fin n → Bool),
     let w := net.exec v
-    let topHalf := Finset.univ.filter (fun i : Fin n => (i : ℕ) < n / 2)
-    let onesInTop := (topHalf.filter (fun i => w i = true)).card
+    let topHalf := Finset.univ.filter (fun i : Fin n ↦ (i : ℕ) < n / 2)
+    let onesInTop := (topHalf.filter (fun i ↦ w i = true)).card
     (onesInTop : ℝ) ≤ (n / 2 : ℝ) * (1 / 2 + ε)
 
 /-- **Expanders yield ε-halvers.**
@@ -162,11 +158,11 @@ theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
 /- The AKS network is built recursively:
     1. Split input into top and bottom halves.
     2. Recursively sort each half.
-    3. Apply O(log(1/ε)) rounds of ε-halving to merge.
+    3. Apply rounds of ε-halving to merge.
 
-    The key insight: ε-halvers with constant ε compose to give
-    exact sorting after O(log n) rounds of halving at each level,
-    and there are O(log n) levels of recursion. -/
+    The key insight: with the refined AKS analysis, each of the
+    O(log n) recursion levels needs only O(1) rounds of ε-halving,
+    giving O(n log n) total comparators. -/
 
 /-- Merge two sorted halves using iterated ε-halvers.
     After k rounds of ε-halving, the "unsortedness" decreases
@@ -177,11 +173,11 @@ def epsHalverMerge (n : ℕ) (ε : ℝ) (k : ℕ)
 
 /-- The complete AKS sorting network construction. -/
 noncomputable def AKS (n : ℕ) : ComparatorNetwork n :=
-  -- Base case: for small n, use any O(1)-depth network.
+  -- Base case: for small n, use any fixed sorting network.
   -- Recursive case:
   --   1. Split into halves
-  --   2. Recurse on each half (in parallel → same depth)
-  --   3. Merge using O(log n) rounds of ε-halving
+  --   2. Recurse on each half
+  --   3. Merge using O(1) rounds of ε-halving
   -- The ε is chosen as a sufficiently small constant (e.g., 1/4).
   sorry -- Full construction requires careful index bookkeeping
 
@@ -197,11 +193,11 @@ notation f " =O(" g ")" => IsBigO f g
 
 /-- **Theorem (AKS 1983): The AKS network has O(n log n) size.**
 
-    Each of the O(log n) depth levels uses O(n) comparators
-    (each ε-halver round touches each wire at most d times,
+    Each of the O(log n) recursion levels uses O(n) comparators
+    (each ε-halver round uses at most n·d comparators,
     where d is the expander degree, a constant). -/
 theorem AKS.size_nlogn :
-    (fun n => (AKS n).size : ℕ → ℝ) =O( fun n => n * Real.log n ) := by
+    (fun n ↦ (AKS n).size : ℕ → ℝ) =O( fun n ↦ n * Real.log n ) := by
   -- Size recurrence:
   --   S(n) = 2·S(n/2) + O(n)
   -- The O(n) merge cost comes from:
@@ -219,7 +215,7 @@ theorem AKS.size_nlogn :
     correct sorted position. -/
 def IsEpsilonSorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
   ∃ (w : Fin n → Bool), Monotone w ∧
-    ((Finset.univ.filter (fun i => v i ≠ w i)).card : ℝ) ≤ ε * n
+    ((Finset.univ.filter (fun i ↦ v i ≠ w i)).card : ℝ) ≤ ε * n
 
 /-- **Halver composition lemma**: Applying an ε-halver to a
     δ-sorted sequence yields a (δ·2ε)-sorted sequence.
@@ -306,5 +302,5 @@ this but the network remains impractical. In practice, Batcher's
 bitonic sort (O(log² n) depth) or the zig-zag sorting network are
 preferred. The AKS result is primarily of theoretical significance:
 it resolved a long-standing open problem about the existence of
-O(n log n) sorting networks.
+O(log n)-depth sorting networks.
 -/

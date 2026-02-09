@@ -73,8 +73,8 @@ def RegularGraph.reversePort {n d : ℕ} (G : RegularGraph n d)
     is determined by the second-largest eigenvalue. -/
 noncomputable def adjMatrix {n d : ℕ} (G : RegularGraph n d) :
     Matrix (Fin n) (Fin n) ℝ :=
-  Matrix.of fun u v =>
-    ((Finset.univ.filter (fun i : Fin d => G.neighbor u i = v)).card : ℝ) / d
+  Matrix.of fun u v ↦
+    ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ) / d
 
 -- ════════════════════════════════════════════════════════════════════
 -- §2. SPECTRAL GAP
@@ -88,8 +88,8 @@ noncomputable def adjMatrix {n d : ℕ} (G : RegularGraph n d) :
 
       λ(G) = max { |⟨Mx, x⟩| / ⟨x, x⟩ : x ⊥ 𝟏 }
 
-    We have 0 ≤ λ(G) ≤ 1, with λ(G) = 0 iff G is a complete
-    bipartite graph, and λ(G) close to 0 meaning excellent expansion. -/
+    We have 0 ≤ λ(G) ≤ 1, with λ(G) close to 0 meaning
+    excellent expansion. -/
 noncomputable def spectralGap {n d : ℕ} (G : RegularGraph n d) : ℝ :=
   -- Defined as the operator norm of M restricted to 𝟏⊥.
   -- In Mathlib terms: the second-largest eigenvalue magnitude of adjMatrix G.
@@ -112,7 +112,7 @@ theorem spectralGap_le_one {n d : ℕ} (G : RegularGraph n d) :
     This is the link between spectral and combinatorial expansion. -/
 theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
     (S T : Finset (Fin n)) :
-    |((Finset.sum S fun v => (T.filter (fun u =>
+    |((Finset.sum S fun v ↦ (T.filter (fun u ↦
         ∃ i : Fin d, G.neighbor v i = u)).card) : ℝ) / d
       - S.card * T.card / n|
     ≤ spectralGap G * Real.sqrt (S.card * T.card) := by
@@ -131,7 +131,7 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
     then edge j from the result. -/
 def RegularGraph.square {n d : ℕ} (G : RegularGraph n d) :
     RegularGraph n (d * d) where
-  rot := fun ⟨v, ij⟩ =>
+  rot := fun ⟨v, ij⟩ ↦
     let i : Fin d := ⟨ij.val / d, sorry⟩  -- first port
     let j : Fin d := ⟨ij.val % d, sorry⟩  -- second port
     let ⟨w, i'⟩ := G.rot (v, i)      -- first step: v → w
@@ -182,7 +182,7 @@ theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
 def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂) :
     RegularGraph (n₁ * d₁) (d₂ * d₂) where
-  rot := fun ⟨vk, ab⟩ =>
+  rot := fun ⟨vk, ab⟩ ↦
     -- Decode vertex (v, k) from Fin (n₁ * d₁)
     let v : Fin n₁ := ⟨vk.val / d₁, sorry⟩
     let k : Fin d₁ := ⟨vk.val % d₁, sorry⟩
@@ -324,7 +324,7 @@ theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
 /-- The complete graph on d vertices as a regular graph.
     K_d is (d-1)-regular. λ(K_d) = 1/(d-1). -/
 def completeGraph (d : ℕ) (hd : d ≥ 2) : RegularGraph d (d - 1) where
-  rot := fun ⟨v, i⟩ =>
+  rot := fun ⟨v, i⟩ ↦
     -- The i-th neighbor of v in K_d: skip v in the enumeration.
     let u_val := if i.val < v.val then i.val else i.val + 1
     let u : Fin d := ⟨u_val % d, Nat.mod_lt _ (by omega)⟩
@@ -373,16 +373,18 @@ axiom baseExpander_gap : spectralGap baseExpander ≤ 9/10
 
 /- The RVW expander family, built by iterating:
 
-      G_{k+1} := (G_k)² ⓩ H
+      G_{k+1} := (G_k)² ⓩ H₀
 
-    where H is the base small expander (on D vertices).
+    where H₀ = baseExpander (D⁴ = 4096 vertices, D = 8 regular).
 
-    Properties at each step:
-    • G_k has n_k = D^(4 · 2^k) vertices  (doubly exponential growth)
-    • G_k is D²-regular                    (constant degree!)
-    • λ(G_k) ≤ λ_max < 1                  (constant spectral gap)
+    Properties at each step (D = 8):
+    • G_k is D²-regular (= 64-regular, constant degree!)
+    • G_k² is D⁴-regular (= 4096-regular)
+    • Zig-zag with H₀ (D⁴ vertices, D-regular) restores D²-regularity
+    • n_k = D^(4(k+1)) vertices (exponential growth)
+    • λ(G_k) ≤ λ_max < 1 (constant spectral gap)
 
-    To get expanders at EVERY size n (not just n = D^(4·2^k)):
+    To get expanders at EVERY size n (not just n = D^(4(k+1))):
     • For arbitrary n, pick k such that n_k ≥ n.
     • Take an n-vertex subgraph or use the Friedman–Wigderson
       derandomized squaring to interpolate sizes.
@@ -391,14 +393,6 @@ axiom baseExpander_gap : spectralGap baseExpander ≤ 9/10
 
     The key point: the degree D² is a CONSTANT independent of n,
     which is what we need for the AKS sorting network. -/
-
-/-- The small graph H used in zig-zag iteration.
-    This must be a D-regular graph on D²-many vertices.
-    (D² because G_k is D²-regular, and the zig-zag product
-    G ⓩ H requires H to have |V| = degree(G) = D² vertices.) -/
--- For D = 8, H has 64 vertices and is 8-regular.
-axiom smallExpander : RegularGraph 64 8
-axiom smallExpander_gap : spectralGap smallExpander ≤ 9/10
 
 /-- Build the k-th graph in the zig-zag iteration.
     Returns a graph with degree 64 = 8² at each level. -/
@@ -429,9 +423,9 @@ theorem zigzagFamily_gap (k : ℕ) :
     sorry
   | succ k ih =>
     -- Inductive step:
-    -- λ(G_{k+1}) = λ(Gₖ² ⓩ H₀)
-    --            ≤ 1 - (1 - λ(H₀))² · (1 - λ(Gₖ²)) / 2
-    --            = 1 - (1 - 9/10)² · (1 - λ(Gₖ)²) / 2
+    -- λ(G_{k+1}) = λ(Gₖ² ⓩ baseExpander)
+    --            ≤ 1 - (1 - λ(baseExpander))² · (1 - λ(Gₖ²)) / 2
+    --            ≤ 1 - (1 - 9/10)² · (1 - λ(Gₖ)²) / 2
     --
     -- Since λ(Gₖ) ≤ 99/100 by IH:
     --   λ(Gₖ²) = λ(Gₖ)² ≤ (99/100)² ≈ 0.9801
@@ -439,7 +433,7 @@ theorem zigzagFamily_gap (k : ℕ) :
     --   (1 - 0.9)² · 0.0199 / 2 = 0.01 · 0.0199 / 2 ≈ 0.0000995
     --
     -- So λ(G_{k+1}) ≤ 1 - 0.0000995 < 1, and with better constants
-    -- (smaller λ₂ for H₀) this stays ≤ 99/100.
+    -- (smaller λ for baseExpander) this stays ≤ 99/100.
     --
     -- The actual RVW paper optimizes these constants carefully.
     sorry
@@ -511,8 +505,8 @@ theorem explicit_expanders_exist_zigzag :
 
 ### Category 3: Engineering (weeks, but fiddly)
 
-- `baseExpander`, `smallExpander` (replacing axioms with definitions)
-  Construct specific Cayley graphs and verify their spectral gap
+- `baseExpander` (replacing axiom with definition)
+  Construct a specific Cayley graph and verify its spectral gap
   using interval arithmetic or `native_decide` on a finite matrix
   eigenvalue computation. The matrix is at most 4096 × 4096.
 

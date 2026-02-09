@@ -40,7 +40,7 @@ Sections build on each other sequentially:
 3. **Graph squaring** — `G.square`, spectral gap squares: λ(G²) = λ(G)²
 4. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
 5. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ 1 - (1-λ₂)²(1-λ₁)/2
-6. **Base case** — concrete small expanders (axiomatized: `baseExpander`, `smallExpander`)
+6. **Base case** — concrete small expander (axiomatized: `baseExpander`)
 7. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
 8. **Main result** — `explicit_expanders_exist_zigzag`
 
@@ -52,6 +52,10 @@ AKS.lean: zigzag_implies_aks_network
     ↑ (uses sorting network machinery)
 Basic.lean: AKS construction + correctness
 ```
+
+## Style
+
+- Use `↦` (not `=>`) for lambda arrows: `fun x ↦ ...`
 
 ## Key Lean/Mathlib Conventions
 
@@ -65,4 +69,4 @@ Basic.lean: AKS construction + correctness
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`, rotation map involution proofs
 
-**Engineering (weeks, fiddly):** replacing `baseExpander`/`smallExpander` axioms with concrete verified graphs, all-sizes interpolation in `explicit_expanders_exist_zigzag`
+**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
