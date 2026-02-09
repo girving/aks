@@ -26,14 +26,13 @@ There are no tests or linter configurations. Correctness is verified through Lea
 
 ### `AKS/Basic.lean` — Sorting Network Theory
 Sections build on each other sequentially:
-1. **Comparator networks** — `Comparator`, `ComparatorNetwork`, execution model
+1. **Comparator networks** — `Comparator`, `ComparatorNetwork` (flat list of comparators), execution model
 2. **0-1 principle** — reduces sorting correctness to Boolean inputs
 3. **Expander graphs** — `BipartiteExpander`, spectral gap, existence
 4. **ε-halvers** — approximate sorting via expanders (`IsEpsilonHalver`)
 5. **AKS construction** — recursive build: split → recurse → merge with halvers
-6. **Complexity analysis** — `IsBigO` notation, O(log n) depth, O(n log n) size
+6. **Complexity analysis** — `IsBigO` notation, O(n log n) size
 7. **Correctness** — `halver_composition` (geometric decrease), `AKS.sorts`
-8. **Optimality** — depth lower bound Ω(log n)
 
 ### `AKS/ZigZag.lean` — Explicit Expander Construction
 1. **Regular graphs** — `RegularGraph` with rotation maps (port-based representation)
@@ -62,7 +61,7 @@ Basic.lean: AKS construction + correctness
 
 ## Proof Status by Difficulty
 
-**Achievable (weeks):** `zero_one_principle`, `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`, `sorting_network_depth_lower_bound`
+**Achievable (weeks):** `zero_one_principle`, `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`, rotation map involution proofs
 

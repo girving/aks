@@ -4,7 +4,6 @@
   Formalizes the Ajtai–Komlós–Szemerédi (1983) sorting network construction.
 
   Main results:
-  • `AKS.depth_logarithmic`  : The network has depth O(log n).
   • `AKS.size_nlogn`         : The network has size O(n log n).
   • `AKS.sorts`              : The network correctly sorts all inputs.
 
@@ -13,7 +12,7 @@
   2. Expander graphs and spectral gap.
   3. ε-halvers from expanders.
   4. Recursive AKS construction via ε-halvers.
-  5. Depth/size analysis and correctness.
+  5. Size analysis and correctness.
 
   Hard combinatorial lemmas (expander existence, spectral gap bounds,
   concentration inequalities) are left as `sorry` — these would each
@@ -48,29 +47,18 @@ def Comparator.apply {n : ℕ} {α : Type*} [LinearOrder α]
     else if k = c.j then max (v c.i) (v c.j)
     else v k
 
-/-- A comparator network is a sequence of layers, each a list of
-    non-overlapping comparators applied in parallel. -/
+/-- A comparator network is a sequence of comparators applied in order. -/
 structure ComparatorNetwork (n : ℕ) where
-  layers : List (List (Comparator n))
-
-/-- The depth of a network is the number of layers. -/
-def ComparatorNetwork.depth {n : ℕ} (net : ComparatorNetwork n) : ℕ :=
-  net.layers.length
+  comparators : List (Comparator n)
 
 /-- The size of a network is the total number of comparators. -/
 def ComparatorNetwork.size {n : ℕ} (net : ComparatorNetwork n) : ℕ :=
-  net.layers.foldl (fun acc layer => acc + layer.length) 0
-
-/-- Apply a single layer of comparators to a vector.
-    (Comparators within a layer are non-overlapping, so order doesn't matter.) -/
-def applyLayer {n : ℕ} {α : Type*} [LinearOrder α]
-    (layer : List (Comparator n)) (v : Fin n → α) : Fin n → α :=
-  layer.foldl (fun acc c => c.apply acc) v
+  net.comparators.length
 
 /-- Execute an entire comparator network on an input vector. -/
 def ComparatorNetwork.exec {n : ℕ} {α : Type*} [LinearOrder α]
     (net : ComparatorNetwork n) (v : Fin n → α) : Fin n → α :=
-  net.layers.foldl (fun acc layer => applyLayer layer acc) v
+  net.comparators.foldl (fun acc c => c.apply acc) v
 
 /-- A network is a *sorting network* if it sorts every input. -/
 def IsSortingNetwork {n : ℕ} (net : ComparatorNetwork n) : Prop :=
@@ -157,7 +145,7 @@ def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
 theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
     (lam₂ : ℝ) (hG : IsExpander n d G lam₂) :
     ∃ (net : ComparatorNetwork (2 * n)),
-      IsEpsilonHalver net lam₂ ∧ net.depth = 1 ∧ net.size ≤ n * d := by
+      IsEpsilonHalver net lam₂ ∧ net.size ≤ n * d := by
   -- Proof sketch:
   -- 1. Construct the network: for each left vertex i and port p,
   --    add comparator (i, n + G.neighbor i p).
@@ -185,7 +173,7 @@ theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
     geometrically: at most (2ε)^k · n elements are out of place. -/
 def epsHalverMerge (n : ℕ) (ε : ℝ) (k : ℕ)
     (halver : ComparatorNetwork n) : ComparatorNetwork n :=
-  { layers := (List.replicate k halver.layers).flatten }
+  { comparators := (List.replicate k halver.comparators).flatten }
 
 /-- The complete AKS sorting network construction. -/
 noncomputable def AKS (n : ℕ) : ComparatorNetwork n :=
@@ -198,7 +186,7 @@ noncomputable def AKS (n : ℕ) : ComparatorNetwork n :=
   sorry -- Full construction requires careful index bookkeeping
 
 -- ════════════════════════════════════════════════════════════════════
--- §6. DEPTH AND SIZE ANALYSIS
+-- §6. SIZE ANALYSIS
 -- ════════════════════════════════════════════════════════════════════
 
 /-- Asymptotic notation for stating complexity bounds. -/
@@ -206,44 +194,6 @@ def IsBigO (f g : ℕ → ℝ) : Prop :=
   ∃ (C : ℝ) (n₀ : ℕ), C > 0 ∧ ∀ n, n ≥ n₀ → |f n| ≤ C * |g n|
 
 notation f " =O(" g ")" => IsBigO f g
-
-/-- **Theorem (AKS 1983): The AKS network has O(log n) depth.**
-
-    Proof sketch:
-    • The recursion has O(log n) levels (halving n each time).
-    • At each level, the ε-halver merge uses O(1) layers
-      (since ε is a fixed constant and we need O(log(1/ε)) = O(1) rounds
-      of halving... but actually we need O(log n) rounds to reduce
-      the unsortedness from n to 0).
-
-    Wait — more carefully: at each recursion level, the merge step
-    uses O(log n) rounds of ε-halving. But since the recursion has
-    O(log n) levels, the total depth would be O(log² n). The AKS
-    breakthrough was showing that with the RIGHT construction
-    (using a more refined "ε-near" analysis), the merge at each level
-    only needs O(1) rounds, giving O(log n) total depth.
-
-    The key technical lemma: if both halves are sorted and we apply
-    one round of ε-halving, the result is ε-sorted (at most εn
-    elements are out of place). Applying O(log(1/ε)) rounds of
-    an ε'-halver to an ε-sorted sequence with ε' < ε gives an
-    ε²-sorted sequence. This geometric decrease means O(log log n)
-    rounds suffice at the merge step... and with the full AKS trick
-    (which redefines the recursion structure), O(1) rounds suffice. -/
-theorem AKS.depth_logarithmic :
-    (fun n => (AKS n).depth : ℕ → ℝ) =O( fun n => Real.log n ) := by
-  -- The depth recurrence is:
-  --   D(n) = D(n/2) + O(1)
-  -- where the O(1) merge depth comes from:
-  --   • One round of ε-halving has depth 1 (it's a single layer).
-  --   • We need c rounds where c depends only on ε, not on n.
-  --   • ε is a fixed constant chosen at construction time.
-  -- Solving: D(n) = O(log n).
-  --
-  -- The deep insight is that ε-halving an *already ε'-sorted* sequence
-  -- with ε' small produces a much-more-sorted sequence, and this
-  -- allows a constant number of halving rounds per recursion level.
-  sorry
 
 /-- **Theorem (AKS 1983): The AKS network has O(n log n) size.**
 
@@ -294,7 +244,7 @@ theorem halver_convergence {n : ℕ} (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1/2)
     (k : ℕ) (hk : (2 * ε) ^ k * n < 1) :
     ∀ (v : Fin n → Bool),
     ∃ (net : ComparatorNetwork n),
-      net.depth ≤ k ∧ Monotone (net.exec v) := by
+      Monotone (net.exec v) := by
   -- After k rounds: unsortedness ≤ (2ε)^k · n < 1.
   -- Since unsortedness is a natural number, it must be 0.
   -- Therefore the output is exactly sorted.
@@ -319,34 +269,7 @@ theorem AKS.sorts (n : ℕ) : IsSortingNetwork (AKS n) := by
   sorry
 
 -- ════════════════════════════════════════════════════════════════════
--- §8. OPTIMALITY
--- ════════════════════════════════════════════════════════════════════
-
-/-- **Lower bound**: Any sorting network on n wires has depth ≥ log₂ n.
-    (Information-theoretic: each layer can at most double the number
-    of distinguishable permutations.) -/
-theorem sorting_network_depth_lower_bound (n : ℕ) (hn : n ≥ 2)
-    (net : ComparatorNetwork n) (hnet : IsSortingNetwork net) :
-    (net.depth : ℝ) ≥ Real.log n / Real.log 2 := by
-  -- The output must be one of n! permutations.
-  -- Each layer of comparators partitions the state space by at most
-  -- a factor of 2^(n/2) (at most n/2 independent comparators).
-  -- After d layers: at most 2^(d·n/2) reachable states.
-  -- Need 2^(d·n/2) ≥ n!, giving d ≥ (2/n)·log₂(n!) ≥ log₂(n).
-  -- (The tighter bound uses Stirling: d ≥ Ω(log n).)
-  sorry
-
-/-- **Corollary**: AKS is depth-optimal up to constant factors. -/
-theorem AKS.depth_optimal :
-    ∀ (m : ℕ) (net_family : ComparatorNetwork m),
-    IsSortingNetwork net_family →
-    (fun n => (AKS n).depth : ℕ → ℝ) =O( fun n => Real.log n ) := by
-  -- Follows directly from AKS.depth_logarithmic.
-  intro _ _ _
-  exact AKS.depth_logarithmic
-
--- ════════════════════════════════════════════════════════════════════
--- §9. DISCUSSION
+-- §8. DISCUSSION
 -- ════════════════════════════════════════════════════════════════════
 
 /-!
@@ -357,8 +280,6 @@ The `sorry`s above cluster into three categories of difficulty:
 ### Achievable (weeks of work)
 - `zero_one_principle`: Standard proof by contradiction with monotone
   threshold functions. Mostly bookkeeping in Lean.
-- `sorting_network_depth_lower_bound`: Information-theoretic argument,
-  needs log/factorial lemmas from Mathlib.
 - `halver_convergence`: Geometric series argument, straightforward
   once `halver_composition` is established.
 
@@ -375,8 +296,7 @@ The `sorry`s above cluster into three categories of difficulty:
   • LPS Ramanujan graphs (using quaternion algebras), or
   • Zig-zag product (Reingold–Vadhan–Wigderson 2002).
   Each requires substantial algebraic machinery not yet in Mathlib.
-- The full `AKS` construction with all index bookkeeping and the
-  refined recursion that achieves O(1) merge depth per level.
+- The full `AKS` construction with all index bookkeeping.
 
 ## Historical note
 
@@ -386,5 +306,5 @@ this but the network remains impractical. In practice, Batcher's
 bitonic sort (O(log² n) depth) or the zig-zag sorting network are
 preferred. The AKS result is primarily of theoretical significance:
 it resolved a long-standing open problem about the existence of
-O(log n)-depth sorting networks.
+O(n log n) sorting networks.
 -/
