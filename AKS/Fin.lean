@@ -9,8 +9,6 @@
 import Mathlib.Data.Fin.Basic
 import Mathlib.Tactic.Ring
 
-set_option autoImplicit false
-
 /-- Encoding a pair `(j, i) : Fin n × Fin d` as `j * d + i` stays in bounds. -/
 theorem Fin.pair_lt {n d : ℕ} (j : Fin n) (i : Fin d) :
     j.val * d + i.val < n * d :=

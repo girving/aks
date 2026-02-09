@@ -64,7 +64,7 @@ Basic.lean: AKS construction + correctness
 
 ## Key Lean/Mathlib Conventions
 
-- `autoImplicit` is **disabled** (`lakefile.lean`) — all variables must be explicitly declared
+- `autoImplicit` is **disabled** globally in `lakefile.lean` — do not add `set_option autoImplicit false` in individual files
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 
