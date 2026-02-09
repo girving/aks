@@ -80,11 +80,15 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`Fin` arithmetic: `omega` vs. specialized lemmas.** `omega` handles linear `Nat` arithmetic but not nonlinear (`a * b` where both vary). For `j * d + i < n * d`: use `calc` with `Nat.add_lt_add_left` + `Nat.mul_le_mul_right`. For div/mod: `Nat.add_mul_div_right`, `Nat.add_mul_mod_self_right`, `Nat.div_eq_of_lt`, `Nat.mod_eq_of_lt`. For `(ij/d)*d + ij%d = ij`: `rw [Nat.mul_comm]; exact Nat.div_add_mod` (`omega` can't prove this).
 
+**Avoid inline `⟨expr, by omega⟩` inside definitions — use Mathlib helpers or named functions instead.** Constructing `Fin` values with embedded proof terms (e.g., `⟨i.val + 1, by omega⟩`) inside a `def` creates opaque terms that `omega`/`simp` can't see through after unfolding. In particular, `omega` cannot reduce `(⟨a, h⟩ : Fin n).val` or `(x, y).1` after `split_ifs`. Instead: search Mathlib for existing helpers (e.g., `Fin.succAbove`/`Fin.predAbove` for "skip one value" embeddings), or define small named functions with `.val` simp lemmas. Reparameterize types to match Mathlib signatures (e.g., `Fin (n+1)` instead of `Fin d` with `hd : d ≥ 2`). This turned `complete_rot_involution` from 8+ failed attempts into a 2-line `simp only` proof.
+
+**When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. The pattern of repeated `omega`/`simp` failures usually indicates the definitions need restructuring, not that the proof needs a cleverer tactic combination.
+
 **Mathlib already has `Monotone.map_min` and `Monotone.map_max`** in `Mathlib.Order.MinMax`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas)
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`)
 
 **Achievable (weeks):** `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
 

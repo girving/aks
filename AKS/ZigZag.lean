@@ -372,27 +372,31 @@ theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
     graph where D is a chosen constant. We can take D = 16 and
     verify the spectral gap of a 16-vertex graph computationally. -/
 
-/-- The complete graph on d vertices as a regular graph.
-    K_d is (d-1)-regular. λ(K_d) = 1/(d-1). -/
-def completeGraph (d : ℕ) (hd : d ≥ 2) : RegularGraph d (d - 1) where
-  rot := fun ⟨v, i⟩ ↦
-    -- The i-th neighbor of v in K_d: skip v in the enumeration.
-    let u_val := if i.val < v.val then i.val else i.val + 1
-    let u : Fin d := ⟨u_val % d, Nat.mod_lt _ (by omega)⟩
-    -- Reverse port: index of v among u's neighbors
-    let j_val := if v.val < u.val then v.val else v.val - 1
-    let j : Fin (d - 1) := ⟨j_val % (d - 1), Nat.mod_lt _ (by omega)⟩
-    (u, j)
-  rot_involution := by
-    intro ⟨v, i⟩
-    sorry  -- Verification that skipping indices compose correctly.
+/-- Rotation map for the complete graph K_{n+1}: the i-th neighbor of v is
+    obtained by skipping v in the enumeration, using `Fin.succAbove`.
+    The reverse port is `Fin.predAbove`. -/
+private def complete_rot {n : ℕ}
+    (p : Fin (n + 1) × Fin n) : Fin (n + 1) × Fin n :=
+  (p.1.succAbove p.2, p.2.predAbove p.1)
+
+private theorem complete_rot_involution {n : ℕ}
+    (p : Fin (n + 1) × Fin n) :
+    complete_rot (complete_rot p) = p := by
+  simp only [complete_rot, Fin.succAbove_succAbove_predAbove,
+    Fin.predAbove_predAbove_succAbove, Prod.mk.eta]
+
+/-- The complete graph on `n + 1` vertices as a regular graph.
+    K_{n+1} is n-regular. λ(K_{n+1}) = 1/n. -/
+def completeGraph (n : ℕ) : RegularGraph (n + 1) n where
+  rot := complete_rot
+  rot_involution := complete_rot_involution
 
 /-- The spectral gap of the complete graph. -/
-theorem spectralGap_complete (d : ℕ) (hd : d ≥ 2) :
-    spectralGap (completeGraph d hd) = 1 / (d - 1 : ℝ) := by
-  -- The eigenvalues of the normalized adjacency matrix of K_d are:
-  --   1 (multiplicity 1) and -1/(d-1) (multiplicity d-1).
-  -- So λ(K_d) = 1/(d-1).
+theorem spectralGap_complete (n : ℕ) (hn : n ≥ 1) :
+    spectralGap (completeGraph n) = 1 / (n : ℝ) := by
+  -- The eigenvalues of the normalized adjacency matrix of K_{n+1} are:
+  --   1 (multiplicity 1) and -1/n (multiplicity n).
+  -- So λ(K_{n+1}) = 1/n.
   sorry
 
 /- For the bootstrapping, we need a concrete base graph H₀ on D⁴
