@@ -64,6 +64,10 @@ Basic.lean: AKS construction + correctness
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 
+## Proof Workflow
+
+Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
+
 ## Proof Tactics
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here. The goal is to accumulate lessons so future proofs go faster.
