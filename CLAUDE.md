@@ -63,6 +63,16 @@ Basic.lean: AKS construction + correctness
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 
+## Proof Tactics
+
+**Extract defs from `where` blocks before proving properties.** Proving involutions/identities inline in a `where` block produces goals with fully-unfolded terms — nested `G.1` instead of `G.rot`, `Fin` literals with opaque `isLt` proof terms, and destructuring `let` compiled to `match`. Instead: extract the function as a standalone `private def` using `.1`/`.2` projections (not `let ⟨a, b⟩ := ...`), prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` can unfold + rewrite in one pass. See `square_rot` / `square_rot_involution` in ZigZag.lean.
+
+**Fin simp lemmas: quantify over proof terms.** When writing simp lemmas for `Fin` encode/decode, take the `isLt` proof as a parameter `(h : ... < d)` so the lemma matches any proof term Lean generates internally.
+
+**Fin arithmetic: omega vs. specialized lemmas.** `omega` handles linear Nat arithmetic but not nonlinear (`a * b` where both vary). For `j * d + i < d * d`: use `calc` with `Nat.add_lt_add_left` + `Nat.mul_le_mul_right`. For div/mod: `Nat.add_mul_div_right`, `Nat.add_mul_mod_self_right`, `Nat.div_eq_of_lt`, `Nat.mod_eq_of_lt`. For `(ij/d)*d + ij%d = ij`: `rw [Nat.mul_comm]; exact Nat.div_add_mod` (omega can't prove this).
+
+**Mathlib already has `Monotone.map_min` and `Monotone.map_max`** in `Mathlib.Order.MinMax`.
+
 ## Proof Status by Difficulty
 
 **Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` (Fin arithmetic + `rot_involution` via extracted `square_rot` def with encode/decode simp lemmas)
