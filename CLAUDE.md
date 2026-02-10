@@ -22,7 +22,7 @@ There are no tests or linter configurations. Correctness is verified through Lea
 
 **Entry point:** `AKS.lean` — imports both modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
 
-**Three modules with a bottom-up dependency:**
+**Four modules with a bottom-up dependency:**
 
 ### `AKS/Fin.lean` — `Fin` Arithmetic Helpers
 Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product indexing: `Fin.pair_lt`, `fin_encode_fst`, `fin_encode_snd`, `fin_div_add_mod`.
@@ -37,23 +37,28 @@ Sections build on each other sequentially:
 6. **Complexity analysis** — `IsBigO` notation, O(n log n) size
 7. **Correctness** — `halver_composition` (geometric decrease), `AKS.sorts`
 
-### `AKS/ZigZag.lean` — Explicit Expander Construction
-1. **Regular graphs** — `RegularGraph` with rotation maps (port-based representation)
-2. **Spectral gap** — second-largest eigenvalue of normalized adjacency matrix
-3. **Graph squaring** — `G.square`, spectral gap squares: λ(G²) = λ(G)²
-4. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
-5. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ 1 - (1-λ₂)²(1-λ₁)/2
-6. **Base case** — concrete small expander (axiomatized: `baseExpander`)
-7. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
-8. **Main result** — `explicit_expanders_exist_zigzag`
+### `AKS/RegularGraph.lean` — Regular Graph Theory
+General theory of d-regular graphs, independent of the zig-zag product:
+1. **Regular graphs and adjacency matrices** — `RegularGraph` (rotation map representation), `adjMatrix`, symmetry proofs
+2. **Spectral gap** — `spectralGap` via `IsHermitian.eigenvalues₀`, `spectralGap_nonneg`, `spectralGap_le_one`, `expander_mixing_lemma`
+3. **Graph squaring** — `G.square`, `spectralGap_square`: λ(G²) = λ(G)²
+4. **Complete graph** — `completeGraph`, `spectralGap_complete`: λ(K_{n+1}) = 1/n
+
+### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
+Builds on `RegularGraph.lean` with the zig-zag product construction:
+1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
+2. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ 1 - (1-λ₂)²(1-λ₁)/2
+3. **Base case** — concrete small expander (axiomatized: `baseExpander`)
+4. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
+5. **Main result** — `explicit_expanders_exist_zigzag`
 
 ### Data flow
 ```
-ZigZag.lean: explicit_expanders_exist_zigzag
-    ↓ (provides expander families)
-AKS.lean: zigzag_implies_aks_network
-    ↑ (uses sorting network machinery)
-Basic.lean: AKS construction + correctness
+Fin.lean → RegularGraph.lean → ZigZag.lean
+                                    ↓ (provides expander families)
+                              AKS.lean: zigzag_implies_aks_network
+                                    ↑ (uses sorting network machinery)
+                              Basic.lean: AKS construction + correctness
 ```
 
 ## Style
@@ -77,7 +82,7 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here. The goal is to accumulate lessons so future proofs go faster.
 
-**Extract defs from `where` blocks before proving properties.** Proving involutions/identities inline in a `where` block produces goals with fully-unfolded terms — nested `G.1` instead of `G.rot`, `Fin` literals with opaque `isLt` proof terms, and destructuring `let` compiled to `match`. Instead: extract the function as a standalone `private def` using `.1`/`.2` projections (not `let ⟨a, b⟩ := ...`), prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` can unfold + rewrite in one pass. See `square_rot` / `square_rot_involution` in `ZigZag.lean`.
+**Extract defs from `where` blocks before proving properties.** Proving involutions/identities inline in a `where` block produces goals with fully-unfolded terms — nested `G.1` instead of `G.rot`, `Fin` literals with opaque `isLt` proof terms, and destructuring `let` compiled to `match`. Instead: extract the function as a standalone `private def` using `.1`/`.2` projections (not `let ⟨a, b⟩ := ...`), prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` can unfold + rewrite in one pass. See `square_rot` / `square_rot_involution` in `RegularGraph.lean`.
 
 **Generalize helper lemmas from the start.** Write `Fin` arithmetic helpers with the most general signature that makes sense (e.g., `Fin n × Fin d`, not `Fin d × Fin d`). The `square` helpers were initially specialized and had to be re-generalized for `zigzag`. General versions cost nothing extra and prevent rework.
 

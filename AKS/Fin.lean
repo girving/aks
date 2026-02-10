@@ -2,7 +2,7 @@
   # Fin Arithmetic Helpers
 
   Reusable `Fin` encode/decode lemmas for product-type indexing.
-  Used by graph constructions in `ZigZag.lean` that represent
+  Used by graph constructions in `RegularGraph.lean` and `ZigZag.lean` that represent
   `Fin n × Fin d` as `Fin (n * d)` via `j * d + i` encoding.
 -/
 
