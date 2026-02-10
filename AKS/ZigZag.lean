@@ -29,7 +29,7 @@
 -/
 
 import AKS.Fin
-import Mathlib.LinearAlgebra.Eigenspace.Matrix
+import Mathlib.Analysis.Matrix.Spectrum
 import Mathlib.LinearAlgebra.Matrix.NonsingularInverse
 import Mathlib.Analysis.InnerProductSpace.Basic
 import Mathlib.Analysis.Normed.Group.Basic
@@ -64,6 +64,20 @@ def RegularGraph.reversePort {n d : ℕ} (G : RegularGraph n d)
     (v : Fin n) (i : Fin d) : Fin d :=
   (G.rot (v, i)).2
 
+theorem RegularGraph.neighbor_reversePort {n d : ℕ} (G : RegularGraph n d)
+    (v : Fin n) (i : Fin d) :
+    G.neighbor (G.neighbor v i) (G.reversePort v i) = v := by
+  unfold RegularGraph.neighbor RegularGraph.reversePort
+  rw [Prod.mk.eta]
+  exact congr_arg Prod.fst (G.rot_involution (v, i))
+
+theorem RegularGraph.reversePort_reversePort {n d : ℕ} (G : RegularGraph n d)
+    (v : Fin n) (i : Fin d) :
+    G.reversePort (G.neighbor v i) (G.reversePort v i) = i := by
+  unfold RegularGraph.neighbor RegularGraph.reversePort
+  rw [Prod.mk.eta]
+  exact congr_arg Prod.snd (G.rot_involution (v, i))
+
 /-- The normalized adjacency matrix of a d-regular graph.
     M[u, v] = (number of edges from u to v) / d.
 
@@ -74,6 +88,36 @@ noncomputable def adjMatrix {n d : ℕ} (G : RegularGraph n d) :
     Matrix (Fin n) (Fin n) ℝ :=
   Matrix.of fun u v ↦
     ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ) / d
+
+@[simp]
+theorem adjMatrix_apply {n d : ℕ} (G : RegularGraph n d) (u v : Fin n) :
+    adjMatrix G u v =
+      ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ) / d :=
+  rfl
+
+theorem adjMatrix_isSymm {n d : ℕ} (G : RegularGraph n d) : (adjMatrix G).IsSymm := by
+  ext u v
+  simp only [Matrix.transpose_apply, adjMatrix_apply]
+  congr 1
+  exact_mod_cast Finset.card_nbij' (G.reversePort v ·) (G.reversePort u ·)
+    (fun i hi ↦ by
+      simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hi ⊢
+      rw [← hi]; exact G.neighbor_reversePort v i)
+    (fun j hj ↦ by
+      simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hj ⊢
+      rw [← hj]; exact G.neighbor_reversePort u j)
+    (fun i hi ↦ by
+      simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hi
+      rw [← hi]; exact G.reversePort_reversePort v i)
+    (fun j hj ↦ by
+      simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hj
+      rw [← hj]; exact G.reversePort_reversePort u j)
+
+theorem adjMatrix_isHermitian {n d : ℕ} (G : RegularGraph n d) :
+    (adjMatrix G).IsHermitian := by
+  show (adjMatrix G)ᴴ = adjMatrix G
+  rw [conjTranspose_eq_transpose_of_trivial]
+  exact adjMatrix_isSymm G
 
 
 /-! ## §2. Spectral Gap -/
@@ -89,14 +133,28 @@ noncomputable def adjMatrix {n d : ℕ} (G : RegularGraph n d) :
     We have 0 ≤ λ(G) ≤ 1, with λ(G) close to 0 meaning
     excellent expansion. -/
 noncomputable def spectralGap {n d : ℕ} (G : RegularGraph n d) : ℝ :=
-  -- Defined as the operator norm of M restricted to 𝟏⊥.
-  -- In Mathlib terms: the second-largest eigenvalue magnitude of adjMatrix G.
-  sorry
+  if h : n ≤ 1 then 0
+  else
+    let evs := (adjMatrix_isHermitian G).eigenvalues₀
+    max (evs ⟨1, by rw [Fintype.card_fin]; omega⟩)
+        (-(evs ⟨n - 1, by rw [Fintype.card_fin]; omega⟩))
 
 /-- Basic property: the spectral gap lies in [0, 1]. -/
 theorem spectralGap_nonneg {n d : ℕ} (G : RegularGraph n d) :
     0 ≤ spectralGap G := by
-  sorry
+  unfold spectralGap
+  split_ifs with h
+  · exact le_refl _
+  · push_neg at h
+    have hanti := (adjMatrix_isHermitian G).eigenvalues₀_antitone
+    have hle : (⟨1, by rw [Fintype.card_fin]; omega⟩ : Fin (Fintype.card (Fin n))) ≤
+               ⟨n - 1, by rw [Fintype.card_fin]; omega⟩ := by
+      simp only [Fin.le_iff_val_le_val]; omega
+    by_cases hev : 0 ≤ (adjMatrix_isHermitian G).eigenvalues₀
+        ⟨1, by rw [Fintype.card_fin]; omega⟩
+    · exact le_max_of_le_left hev
+    · push_neg at hev
+      exact le_max_of_le_right (by linarith [hanti hle])
 
 theorem spectralGap_le_one {n d : ℕ} (G : RegularGraph n d) :
     spectralGap G ≤ 1 := by
