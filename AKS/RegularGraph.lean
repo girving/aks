@@ -21,7 +21,7 @@ import Mathlib.Data.Matrix.Basic
 open Matrix BigOperators Finset
 
 
-/-! ## §1. Regular Graphs and Adjacency Matrices -/
+/-! **Regular Graphs and Adjacency Matrices** -/
 
 /-- A d-regular graph on n vertices, represented by a rotation map.
 
@@ -102,7 +102,7 @@ theorem adjMatrix_isHermitian {n d : ℕ} (G : RegularGraph n d) :
   exact adjMatrix_isSymm G
 
 
-/-! ## §2. Spectral Gap -/
+/-! **Spectral Gap** -/
 
 /-- The spectral gap λ(G): the second-largest singular value of the
     normalized adjacency matrix.
@@ -161,7 +161,7 @@ theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
   sorry
 
 
-/-! ## §3. Graph Squaring -/
+/-! **Graph Squaring** -/
 
 -- The square G² of a d-regular graph: take two steps.
 -- G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
@@ -205,7 +205,7 @@ theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
   sorry
 
 
-/-! ## §4. Complete Graph -/
+/-! **Complete Graph** -/
 
 /-- Rotation map for the complete graph K_{n+1}: the i-th neighbor of v is
     obtained by skipping v in the enumeration, using `Fin.succAbove`.

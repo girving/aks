@@ -15,7 +15,7 @@ import AKS.RegularGraph
 open Matrix BigOperators Finset
 
 
-/-! ## §1. The Zig-Zag Product -/
+/-! **The Zig-Zag Product** -/
 
 /-- **The zig-zag product** G₁ ⓩ G₂.
 
@@ -72,7 +72,7 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
   rot_involution := zigzag_rot_involution G₁ G₂
 
 
-/-! ## §2. The Spectral Composition Theorem -/
+/-! **The Spectral Composition Theorem** -/
 
 /-- **The Main Theorem (Reingold–Vadhan–Wigderson 2002):**
 
@@ -169,7 +169,7 @@ theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
   sorry
 
 
-/-! ## §3. The Base Case: A Concrete Small Expander -/
+/-! **The Base Case: A Concrete Small Expander** -/
 
 /- To bootstrap the construction, we need one explicit small expander.
 
@@ -196,7 +196,7 @@ axiom baseExpander : RegularGraph 4096 8
 axiom baseExpander_gap : spectralGap baseExpander ≤ 9/10
 
 
-/-! ## §4. The Iterated Construction -/
+/-! **The Iterated Construction** -/
 
 /- The RVW expander family, built by iterating:
 
@@ -266,7 +266,7 @@ theorem zigzagFamily_gap (k : ℕ) :
     sorry
 
 
-/-! ## §5. The Main Result -/
+/-! **The Main Result** -/
 
 /-- **Explicit expander families exist** (via zig-zag).
 
@@ -290,7 +290,7 @@ theorem explicit_expanders_exist_zigzag :
 -- references types from both AKS.Basic and AKS.ZigZag.
 
 
-/-! ## §6. Proof Difficulty Analysis
+/-! **Proof Difficulty Analysis**
 
 ## Formalization Difficulty Assessment
 
