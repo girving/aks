@@ -98,11 +98,35 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. Repeated `omega`/`simp` failures usually indicate the definitions need restructuring, not a cleverer tactic combination.
 
+**Triangle inequality for `|·|` via `dist_triangle`.** `abs_add` is hard to find. Instead, convert to the metric space API: `|μ| = ‖μ‖ = dist μ 0` (via `Real.norm_eq_abs`, `dist_zero_right` — no `Real.` prefix), then `dist_triangle μ c 0` gives `|μ| ≤ dist μ c + ‖c‖`. Use `Real.dist_eq` for `dist x y = |x - y|`.
+
+**`↑(Finset.univ)` ≠ `Set.univ` in `MapsTo` proofs.** `card_eq_sum_card_fiberwise` needs `(s : Set ι).MapsTo f ↑t`. The coercion `↑(Finset.univ)` is `Finset.univ.toSet`, not `Set.univ`. Use `Finset.mem_coe.mpr (Finset.mem_univ _)` to prove `x ∈ ↑univ`.
+
+**Connecting `eigenvalues₀` to `spectrum`.** To show `hA.eigenvalues₀ j ∈ spectrum ℝ A`: (1) `rw [hA.spectrum_real_eq_range_eigenvalues]`, (2) construct witness `⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) j, proof⟩`, (3) prove equality with `unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]`. Key insight: `eigenvalues i = eigenvalues₀ (equiv.symm i)`, so `eigenvalues (equiv j) = eigenvalues₀ j`.
+
+## Mathlib API Reference
+
+### Spectral Theorem
+- Import: `Mathlib.Analysis.Matrix.Spectrum` (transitively imports eigenspace)
+- `IsHermitian.eigenvalues₀ : Fin (Fintype.card n) → ℝ` — eigenvalues in decreasing order
+- `eigenvalues₀_antitone : Antitone hA.eigenvalues₀`
+- For real matrices: `conjTranspose_eq_transpose_of_trivial` converts `IsHermitian` ↔ `IsSymm`
+- `Fintype.card (Fin n)` is NOT definitionally `n`; use `rw [Fintype.card_fin]; omega` for index proofs
+
+### Gershgorin Circle Theorem
+- Import: `Mathlib.LinearAlgebra.Matrix.Gershgorin`
+- `eigenvalue_mem_ball`: needs `HasEigenvalue (toLin' A) μ`; gives `∃ k, μ ∈ closedBall (A k k) (∑ j ∈ univ.erase k, ‖A k j‖)`
+- Chain: `spectrum_toLin'` (bridge matrix ↔ linear map spectra) → `HasEigenvalue.of_mem_spectrum` → `eigenvalue_mem_ball`
+
+### Finset Counting
+- `Finset.card_nbij'` takes `Set.MapsTo`/`Set.LeftInvOn`/`Set.RightInvOn` args
+- `card_eq_sum_card_fiberwise` needs `Set.MapsTo` proof (see `↑univ` note above)
+
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`)
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`), `spectralGap_le_one` (via Gershgorin's circle theorem: `eigenvalue_mem_ball` → row norm sum ≤ 1 → `|λ| ≤ 1`)
 
-**Achievable (weeks):** `spectralGap_nonneg/le_one`, `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
+**Achievable (weeks):** `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
 

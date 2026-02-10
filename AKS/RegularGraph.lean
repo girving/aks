@@ -13,6 +13,7 @@
 import AKS.Fin
 import Mathlib.Analysis.Matrix.Spectrum
 import Mathlib.LinearAlgebra.Matrix.NonsingularInverse
+import Mathlib.LinearAlgebra.Matrix.Gershgorin
 import Mathlib.Analysis.InnerProductSpace.Basic
 import Mathlib.Analysis.Normed.Group.Basic
 import Mathlib.Combinatorics.SimpleGraph.Basic
@@ -138,9 +139,65 @@ theorem spectralGap_nonneg {n d : ℕ} (G : RegularGraph n d) :
     · push_neg at hev
       exact le_max_of_le_right (by linarith [hanti hle])
 
+private theorem adjMatrix_entry_nonneg {n d : ℕ} (G : RegularGraph n d) (u v : Fin n) :
+    0 ≤ adjMatrix G u v :=
+  div_nonneg (Nat.cast_nonneg _) (Nat.cast_nonneg _)
+
+private theorem adjMatrix_norm_row_sum_le {n d : ℕ} (G : RegularGraph n d) (u : Fin n) :
+    ∑ v, ‖adjMatrix G u v‖ ≤ 1 := by
+  simp_rw [Real.norm_of_nonneg (adjMatrix_entry_nonneg G u _), adjMatrix_apply, ← Finset.sum_div]
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · simp
+  · have h_nat : (Finset.univ : Finset (Fin d)).card =
+        ∑ v ∈ (Finset.univ : Finset (Fin n)),
+          (Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card :=
+      Finset.card_eq_sum_card_fiberwise (fun _ _ ↦ Finset.mem_coe.mpr (Finset.mem_univ _))
+    simp only [Finset.card_univ, Fintype.card_fin] at h_nat
+    have h_sum : (∑ v : Fin n,
+        ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ)) = d := by
+      exact_mod_cast h_nat.symm
+    rw [h_sum, div_self (Nat.cast_ne_zero.mpr (by omega))]
+
+private theorem adjMatrix_eigenvalue_abs_le_one {n d : ℕ} (G : RegularGraph n d)
+    {μ : ℝ} (hμ : μ ∈ spectrum ℝ (adjMatrix G)) : |μ| ≤ 1 := by
+  rw [← Matrix.spectrum_toLin'] at hμ
+  have hev : Module.End.HasEigenvalue (Matrix.toLin' (adjMatrix G)) μ :=
+    Module.End.HasEigenvalue.of_mem_spectrum hμ
+  obtain ⟨k, hk⟩ := eigenvalue_mem_ball hev
+  rw [Metric.mem_closedBall] at hk
+  have hnn := adjMatrix_entry_nonneg G k k
+  calc |μ| = ‖μ‖ := (Real.norm_eq_abs μ).symm
+    _ = dist μ 0 := (dist_zero_right μ).symm
+    _ ≤ dist μ (adjMatrix G k k) + dist (adjMatrix G k k) 0 := dist_triangle _ _ _
+    _ = dist μ (adjMatrix G k k) + ‖adjMatrix G k k‖ := by rw [dist_zero_right]
+    _ ≤ (∑ j ∈ Finset.univ.erase k, ‖adjMatrix G k j‖) + ‖adjMatrix G k k‖ := by
+        linarith
+    _ = ∑ j, ‖adjMatrix G k j‖ := Finset.sum_erase_add _ _ (Finset.mem_univ k)
+    _ ≤ 1 := adjMatrix_norm_row_sum_le G k
+
 theorem spectralGap_le_one {n d : ℕ} (G : RegularGraph n d) :
     spectralGap G ≤ 1 := by
-  sorry
+  unfold spectralGap
+  split_ifs with h
+  · linarith
+  · push_neg at h
+    set hA := adjMatrix_isHermitian G
+    apply max_le
+    · -- evs ⟨1, _⟩ ≤ 1
+      have hmem : hA.eigenvalues₀ ⟨1, by rw [Fintype.card_fin]; omega⟩ ∈
+          spectrum ℝ (adjMatrix G) := by
+        rw [hA.spectrum_real_eq_range_eigenvalues]
+        exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) ⟨1, by rw [Fintype.card_fin]; omega⟩,
+          by unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]⟩
+      exact le_of_abs_le (adjMatrix_eigenvalue_abs_le_one G hmem)
+    · -- -(evs ⟨n-1, _⟩) ≤ 1
+      have hmem : hA.eigenvalues₀ ⟨n - 1, by rw [Fintype.card_fin]; omega⟩ ∈
+          spectrum ℝ (adjMatrix G) := by
+        rw [hA.spectrum_real_eq_range_eigenvalues]
+        exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) ⟨n - 1, by rw [Fintype.card_fin]; omega⟩,
+          by unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]⟩
+      have := adjMatrix_eigenvalue_abs_le_one G hmem
+      linarith [abs_le.mp this]
 
 /-- The Expander Mixing Lemma: the spectral gap controls edge
     distribution. For any two vertex sets S, T ⊆ V:
