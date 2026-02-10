@@ -78,7 +78,13 @@ Fin.lean → RegularGraph.lean → ZigZag.lean
 
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
+**Recognize thrashing and ask the user.** If you attempt 3+ substantially different approaches to the same goal without progress (especially if you catch yourself thinking "I'm overcomplicating this"), stop and ask the user for guidance. They may see a cleaner mathematical reformulation or an alternative approach to the theory. A 2-minute conversation is cheaper than 30 minutes of failed build cycles. Signs of thrashing: repeated restructuring of the same proof, oscillating between approaches, or growing helper lemma counts without the main goal getting closer.
+
 **Keep proofs small and factored.** If a proof has more than ~3 intermediate `have` steps that later steps depend on, factor the intermediates into standalone lemmas. Long proofs with deep dependency chains cause churning: fixing one step breaks steps below it, and each build-test cycle is expensive. Each lemma should have a small, independently testable interface. Concretely: if you're building `C` from `B` from `A` all inside one proof, extract `A` and `B` as lemmas so you can iterate on each in isolation.
+
+**Prefer point-free (abstract) formulations over coordinate-based ones.** Proofs about linear algebra, spectral theory, or similar can be dramatically cleaner when stated in terms of operator identities (e.g., `(M-P)² = M²-P` from `MP = P`) rather than entry-wise coordinate calculations (e.g., sorted eigenvalue multiset matching). Before diving into a coordinate proof, ask whether there's an abstract reformulation — a projection, an operator norm, a functional calculus — that makes the key identity fall out algebraically. The payoff compounds: abstract identities compose cleanly, while coordinate proofs each require their own index bookkeeping. **Exception:** when there's a single canonical basis and the proof is naturally a finite computation (e.g., `adjMatrix_row_sum`), coordinates are fine.
+
+**When a user suggests an approach or lesson, rephrase it for CLAUDE.md** rather than copying verbatim. Lessons should be concise, actionable, and fit the existing style. This also applies to self-generated lessons: distill the insight before recording it.
 
 ## Proof Tactics
 
@@ -132,11 +138,33 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 - `Finset.card_nbij'` takes `Set.MapsTo`/`Set.LeftInvOn`/`Set.RightInvOn` args
 - `card_eq_sum_card_fiberwise` needs `Set.MapsTo` proof (see `↑univ` note above)
 
+### ContinuousLinearMap / C*-Algebra (for operator-norm spectral gap)
+- Import: `Mathlib.Analysis.CStarAlgebra.Matrix` (provides `Matrix.toEuclideanCLM`)
+- `Matrix.toEuclideanCLM (𝕜 := ℝ) (n := Fin n) : Matrix (Fin n) (Fin n) ℝ ≃⋆ₐ[ℝ] (EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))` — star algebra equivalence
+- As a `StarAlgEquiv`, it preserves `star`, `*`, `+`, `1`, and scalar multiplication: use `map_sub`, `map_smul`, `map_one`, `map_mul`, etc.
+- `star` on CLMs is the Hilbert adjoint; `star` on `Matrix n n ℝ` is `conjTranspose = transpose` (for reals)
+- `CStarRing (E →L[𝕜] E)` instance exists (from `Mathlib.Analysis.InnerProductSpace.Adjoint`): gives `CStarRing.norm_star_mul_self : ‖x⋆ * x‖ = ‖x‖ * ‖x‖`
+- `IsSelfAdjoint.norm_mul_self : ‖x * x‖ = ‖x‖ ^ 2` — for self-adjoint elements in a C*-ring
+- Combined with idempotency (`p * p = p`): `‖p‖ = ‖p‖²` → `‖p‖ ∈ {0, 1}`
+- Explicit type params needed: `(Matrix.toEuclideanCLM (𝕜 := ℝ) (n := Fin n))` — without them, coercion from `StarAlgEquiv` fails
+
+## Architectural Direction: CLM-First Definitions
+
+**Long-term goal:** define `spectralGap` (and eventually other graph operators) natively as CLMs on `EuclideanSpace`, not as matrices. The current code defines things matrix-first (`adjMatrix`, `uniformProj`) then converts via `toEuclideanCLM`. This works but creates a conversion tax: every proof step must bridge between the matrix world and the CLM world using `map_sub`, `map_mul`, etc.
+
+The better architecture is: `RegularGraph → walkCLM` directly (the rotation map already gives us the operator action), then derive `adjMatrix` from `walkCLM` if needed (not the other way around). This makes `spectralGap_square` trivial (`‖T²‖ = ‖T‖²` for self-adjoint T in a C*-ring) and `zigzag_spectral_bound` more natural (it's fundamentally an operator norm argument with orthogonal decomposition).
+
+**Current status:** We have the matrix-first bridge working (`walkCLM`, `meanCLM`, `spectralGap'`). Once `spectralGap_complete'` and `spectralGap_square'` are proved, consider refactoring to CLM-first definitions as a separate pass.
+
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`), `spectralGap_le_one` (via Gershgorin's circle theorem: `eigenvalue_mem_ball` → row norm sum ≤ 1 → `|λ| ≤ 1`), `adjMatrix_square_eq_sq` (adjacency matrix of G² = (adjacency matrix of G)²; via fiber decomposition + `Finset.card_nbij'` bijection using div/mod encoding), `spectralGap_complete` (λ(K_{n+1}) = 1/n; via eigenvector basis → eigenvalue dichotomy → trace counting → antitone pinning)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_complete` (eigenvalue-based)
 
-**Blocked on Mathlib:** `spectralGap_square` — `adjMatrix_square_eq_sq` is proved; remaining sorry is `eigenvalues₀_pow_sq` (eigenvalues of M² are squares of eigenvalues of M). Needs `ContinuousFunctionalCalculus` spectral mapping for `Matrix _ _ ℝ`, but Mathlib v4.27.0 lacks the required `CStarAlgebra` instance on real matrices. Alternatives: eigenvector basis argument via `apply_eigenvectorBasis` + uniqueness of eigenvalues, or upgrading to a Mathlib version with the CFC matrix instance.
+**In progress (operator-norm spectral gap):**
+- `spectralGap_complete'` — reduced to proving `‖1 - meanCLM (n+1)‖ = 1` (norm of orthogonal projection onto complement of constants). Strategy: show `T = 1 - meanCLM` is a nonzero self-adjoint idempotent in the C*-ring of CLMs, then `IsSelfAdjoint.norm_mul_self` + idempotency gives `‖T‖ ∈ {0,1}`, and `T ≠ 0` pins `‖T‖ = 1`. Requires: (a) `IsSelfAdjoint T` via `star (toEuclideanCLM M) = toEuclideanCLM (star M)` + `uniformProj` is Hermitian, (b) `T * T = T` via `uniformProj_sq` + algebra, (c) `T ≠ 0` by exhibiting a nonzero image.
+- `spectralGap_square'` — once `spectralGap_complete'` is done. Strategy: `(M-P)` is self-adjoint, so `‖(M-P)²‖ = ‖(M-P)‖²` by `IsSelfAdjoint.norm_mul_self`. Then `(M-P)² = M²-P` (proved as `sq_sub_uniformProj`) gives `spectralGap'(G²) = spectralGap'(G)²`.
+
+**Old eigenvalue-based `spectralGap_square`** is blocked on Mathlib (needs spectral mapping for real matrices). The CLM approach bypasses this entirely.
 
 **Achievable (weeks):** `halver_convergence`
 
