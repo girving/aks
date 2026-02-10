@@ -78,6 +78,8 @@ Fin.lean → RegularGraph.lean → ZigZag.lean
 
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
+**Keep proofs small and factored.** If a proof has more than ~3 intermediate `have` steps that later steps depend on, factor the intermediates into standalone lemmas. Long proofs with deep dependency chains cause churning: fixing one step breaks steps below it, and each build-test cycle is expensive. Each lemma should have a small, independently testable interface. Concretely: if you're building `C` from `B` from `A` all inside one proof, extract `A` and `B` as lemmas so you can iterate on each in isolation.
+
 ## Proof Tactics
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here (not in auto memory). This file is the single source of truth for accumulated lessons, so they persist across machines.
@@ -106,6 +108,12 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Connecting `eigenvalues₀` to `spectrum`.** To show `hA.eigenvalues₀ j ∈ spectrum ℝ A`: (1) `rw [hA.spectrum_real_eq_range_eigenvalues]`, (2) construct witness `⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) j, proof⟩`, (3) prove equality with `unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]`. Key insight: `eigenvalues i = eigenvalues₀ (equiv.symm i)`, so `eigenvalues (equiv j) = eigenvalues₀ j`.
 
+**Bridging `eigenvalues₀` ↔ `eigenvalues` dichotomies.** To lift a result about `eigenvalues j` (indexed by `Fin (n+1)`) to `eigenvalues₀ k` (indexed by `Fin (Fintype.card (Fin (n+1)))`): prove `eigenvalues₀ k ∈ Set.range eigenvalues` via the `spectrum` recipe above, then `obtain ⟨j, hj⟩` and substitute. Avoids constructing `Fintype.equivOfCardEq` explicitly. For sums: `change ∑ j, eigenvalues₀ (equiv.symm j) = _; exact Equiv.sum_comp _ _`.
+
+**`set` + external lemmas: use `rw [hA_def]`.** After `set hA := adjMatrix_isHermitian G with hA_def`, the goal uses `hA` but external lemmas produce `(adjMatrix_isHermitian G).eigenvalues₀`. Use `rw [hA_def]` to convert back before `exact`. Define derived hypotheses (dichotomy, sum) inside the proof with `intro k; rw [hA_def]; exact external_lemma k` so they match the `set` binding.
+
+**`linarith` can't handle division.** `1/↑n > 0` doesn't follow from `↑n > 0` in `linarith`'s linear fragment. Provide it as `have : (0:ℝ) < 1 / ↑n := by positivity`. Similarly, `(↑n + 1)/↑n = 1 + 1/↑n` needs `field_simp` to make `linarith`-accessible.
+
 ## Mathlib API Reference
 
 ### Spectral Theorem
@@ -126,11 +134,11 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`), `spectralGap_le_one` (via Gershgorin's circle theorem: `eigenvalue_mem_ball` → row norm sum ≤ 1 → `|λ| ≤ 1`), `adjMatrix_square_eq_sq` (adjacency matrix of G² = (adjacency matrix of G)²; via fiber decomposition + `Finset.card_nbij'` bijection using div/mod encoding)
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`), `spectralGap_le_one` (via Gershgorin's circle theorem: `eigenvalue_mem_ball` → row norm sum ≤ 1 → `|λ| ≤ 1`), `adjMatrix_square_eq_sq` (adjacency matrix of G² = (adjacency matrix of G)²; via fiber decomposition + `Finset.card_nbij'` bijection using div/mod encoding), `spectralGap_complete` (λ(K_{n+1}) = 1/n; via eigenvector basis → eigenvalue dichotomy → trace counting → antitone pinning)
 
 **Blocked on Mathlib:** `spectralGap_square` — `adjMatrix_square_eq_sq` is proved; remaining sorry is `eigenvalues₀_pow_sq` (eigenvalues of M² are squares of eigenvalues of M). Needs `ContinuousFunctionalCalculus` spectral mapping for `Matrix _ _ ℝ`, but Mathlib v4.27.0 lacks the required `CStarAlgebra` instance on real matrices. Alternatives: eigenvector basis argument via `apply_eigenvectorBasis` + uniqueness of eigenvalues, or upgrading to a Mathlib version with the CFC matrix instance.
 
-**Achievable (weeks):** `spectralGap_complete`, `halver_convergence`
+**Achievable (weeks):** `halver_convergence`
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
 
