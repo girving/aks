@@ -94,6 +94,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Avoid inline `⟨expr, by omega⟩` inside definitions.** Constructing `Fin` values with embedded proof terms inside a `def` creates opaque terms that `omega`/`simp` can't see through after unfolding (`omega` cannot reduce `(⟨a, h⟩ : Fin n).val` or `(x, y).1` after `split_ifs`). Instead use Mathlib helpers (see above) or named functions with `.val` simp lemmas. This turned `complete_rot_involution` from 8+ failed attempts into a 2-line `simp only` proof.
 
+**Prefer `apply` over `exact` when arguments are inferrable.** `exact G.foo v i` can be shortened to `apply G.foo` when `v` and `i` are determined by unification with the goal. This is common after `rw` rewrites that leave a goal matching the lemma's conclusion.
+
 **When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. Repeated `omega`/`simp` failures usually indicate the definitions need restructuring, not a cleverer tactic combination.
 
 ## Proof Status by Difficulty

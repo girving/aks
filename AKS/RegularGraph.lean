@@ -84,16 +84,16 @@ theorem adjMatrix_isSymm {n d : ℕ} (G : RegularGraph n d) : (adjMatrix G).IsSy
   exact_mod_cast Finset.card_nbij' (G.reversePort v ·) (G.reversePort u ·)
     (fun i hi ↦ by
       simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hi ⊢
-      rw [← hi]; exact G.neighbor_reversePort v i)
+      rw [← hi]; apply G.neighbor_reversePort)
     (fun j hj ↦ by
       simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hj ⊢
-      rw [← hj]; exact G.neighbor_reversePort u j)
+      rw [← hj]; apply G.neighbor_reversePort)
     (fun i hi ↦ by
       simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hi
-      rw [← hi]; exact G.reversePort_reversePort v i)
+      rw [← hi]; apply G.reversePort_reversePort)
     (fun j hj ↦ by
       simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hj
-      rw [← hj]; exact G.reversePort_reversePort u j)
+      rw [← hj]; apply G.reversePort_reversePort)
 
 theorem adjMatrix_isHermitian {n d : ℕ} (G : RegularGraph n d) :
     (adjMatrix G).IsHermitian := by
