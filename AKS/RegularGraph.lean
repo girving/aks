@@ -247,19 +247,94 @@ def RegularGraph.square {n d : ℕ} (G : RegularGraph n d) :
   rot := square_rot G
   rot_involution := square_rot_involution G
 
-/-- **Squaring squares the spectral gap.**
+private theorem square_neighbor_unfold {n d : ℕ} (G : RegularGraph n d)
+    (u : Fin n) (p : Fin (d * d)) (hd : 0 < d) :
+    G.square.neighbor u p =
+      G.neighbor (G.neighbor u ⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩)
+        ⟨p.val % d, Nat.mod_lt _ hd⟩ := rfl
 
-    λ(G²) = λ(G)²
+private theorem adjMatrix_square_eq_sq {n d : ℕ} (G : RegularGraph n d) :
+    adjMatrix G.square = (adjMatrix G) ^ 2 := by
+  ext u v
+  simp only [adjMatrix_apply, sq, Matrix.mul_apply, div_mul_div_comm]
+  rw [← Finset.sum_div, Nat.cast_mul]
+  congr 1
+  -- Need: ↑(filter card) = ∑ w, ↑card_uw * ↑card_wv  (as ℝ)
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · simp
+  · -- Prove the Nat-level identity and cast
+    have key : (univ.filter (fun p : Fin (d * d) ↦ G.square.neighbor u p = v)).card =
+        ∑ w : Fin n, (univ.filter (fun i : Fin d ↦ G.neighbor u i = w)).card *
+          (univ.filter (fun j : Fin d ↦ G.neighbor w j = v)).card := by
+      -- Partition by intermediate vertex
+      rw [Finset.card_eq_sum_card_fiberwise
+        (f := fun p ↦ G.neighbor u ⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩)
+        (fun _ _ ↦ Finset.mem_coe.mpr (Finset.mem_univ _))]
+      congr 1; ext w
+      -- Fiber card = card_uw * card_wv
+      rw [← Finset.card_product]
+      apply Finset.card_nbij'
+        -- forward: decode port p as (p/d, p%d)
+        (fun p ↦ (⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩,
+                   ⟨p.val % d, Nat.mod_lt _ hd⟩))
+        -- backward: encode (i, j) as i * d + j
+        (fun ij ↦ ⟨ij.1.val * d + ij.2.val, Fin.pair_lt ij.1 ij.2⟩)
+      -- forward MapsTo
+      · intro p hp
+        simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and,
+          Finset.mem_product] at hp ⊢
+        exact ⟨hp.2, by rw [← hp.2, ← square_neighbor_unfold G u p hd]; exact hp.1⟩
+      -- backward MapsTo
+      · intro ij hij
+        simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and,
+          Finset.mem_product] at hij ⊢
+        constructor
+        · -- G.square.neighbor u ⟨i*d+j, _⟩ = v
+          rw [square_neighbor_unfold G u _ hd, fin_encode_fst, fin_encode_snd]
+          rw [hij.1]; exact hij.2
+        · -- G.neighbor u ⟨(i*d+j)/d, _⟩ = w
+          have := fin_encode_fst ij.1 ij.2
+            ((Nat.div_lt_iff_lt_mul hd).mpr (Fin.pair_lt ij.1 ij.2))
+          simp only [this]; exact hij.1
+      -- LeftInvOn: backward ∘ forward = id
+      · intro p hp
+        exact fin_div_add_mod p _
+      -- RightInvOn: forward ∘ backward = id
+      · intro ij hij
+        refine Prod.ext ?_ ?_
+        · exact fin_encode_fst ij.1 ij.2
+            ((Nat.div_lt_iff_lt_mul hd).mpr (Fin.pair_lt ij.1 ij.2))
+        · exact fin_encode_snd ij.1 ij.2 (Nat.mod_lt _ hd)
+    exact_mod_cast key
 
-    This is immediate: the adjacency matrix of G² is M², and
-    if Mx = λx then M²x = λ²x. -/
+/-- Each eigenvalue of M² is a square of some eigenvalue of M.
+    The spectral theorem gives eigenbasis `{vᵢ}` with `Mvᵢ = λᵢvᵢ`,
+    so `M²vᵢ = λᵢ²vᵢ`. Since `{vᵢ}` is a complete basis, the
+    eigenvalues of M² are exactly `{λᵢ²}` as a multiset.
+    Formalizing this requires connecting the eigenvector bases of M and M²
+    (e.g., via `ContinuousFunctionalCalculus` spectral mapping, which
+    needs a `CStarAlgebra` instance not yet available for `Matrix _ _ ℝ`). -/
+private theorem eigenvalues₀_pow_sq {n : ℕ} (hn : 1 < n)
+    {M : Matrix (Fin n) (Fin n) ℝ} (hM : M.IsHermitian)
+    (i : Fin (Fintype.card (Fin n))) :
+    ∃ j, (hM.pow 2).eigenvalues₀ i = (hM.eigenvalues₀ j) ^ 2 := by
+  sorry
+
 theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
     spectralGap G.square = (spectralGap G) ^ 2 := by
-  -- The normalized adjacency matrix of G² is (adjMatrix G)².
-  -- Eigenvalues of M² are squares of eigenvalues of M.
-  -- The second-largest eigenvalue of M² is the square of the
-  -- second-largest eigenvalue of M.
-  sorry
+  unfold spectralGap
+  split_ifs with h
+  · simp
+  · push_neg at h
+    -- adjMatrix G.square = (adjMatrix G)^2
+    have heq := adjMatrix_square_eq_sq G
+    -- The eigenvalues₀ of adjMatrix G.square relate to those of adjMatrix G
+    -- via the spectral mapping theorem (eigenvalues₀_pow_sq).
+    -- Then: spectralGap(G²) = max(μ₁, -μ_{n-1}) where μᵢ are sorted eigenvalues
+    -- of M². Since μᵢ = λ_σ(i)² ≥ 0 for some permutation σ, we get -μ_{n-1} ≤ 0,
+    -- so spectralGap(G²) = μ₁ = max{λᵢ² : i≥1} = (max(λ₁, -λ_{n-1}))²
+    -- = (spectralGap G)².
+    sorry
 
 
 /-! **Complete Graph** -/

@@ -102,6 +102,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`↑(Finset.univ)` ≠ `Set.univ` in `MapsTo` proofs.** `card_eq_sum_card_fiberwise` needs `(s : Set ι).MapsTo f ↑t`. The coercion `↑(Finset.univ)` is `Finset.univ.toSet`, not `Set.univ`. Use `Finset.mem_coe.mpr (Finset.mem_univ _)` to prove `x ∈ ↑univ`.
 
+**Matrix product entries via fiber decomposition.** To prove `adjMatrix G.square = (adjMatrix G) ^ 2`, reduce entry-wise to a Nat equality: `#{two-step walks u→v} = ∑_w #{edges u→w} × #{edges w→v}`. Use `Finset.card_eq_sum_card_fiberwise` to partition the LHS by intermediate vertex, then `Finset.card_nbij'` with div/mod encoding to biject each fiber with a product of filters. The `fin_encode_fst`/`fin_encode_snd`/`fin_div_add_mod` lemmas from `Fin.lean` handle the round-trip proofs. For the ℝ-level: `simp only [adjMatrix_apply, sq, Matrix.mul_apply, div_mul_div_comm]` + `rw [← Finset.sum_div, Nat.cast_mul]` + `congr 1` reduces to the Nat identity, then `exact_mod_cast key`.
+
 **Connecting `eigenvalues₀` to `spectrum`.** To show `hA.eigenvalues₀ j ∈ spectrum ℝ A`: (1) `rw [hA.spectrum_real_eq_range_eigenvalues]`, (2) construct witness `⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) j, proof⟩`, (3) prove equality with `unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]`. Key insight: `eigenvalues i = eigenvalues₀ (equiv.symm i)`, so `eigenvalues (equiv j) = eigenvalues₀ j`.
 
 ## Mathlib API Reference
@@ -124,9 +126,11 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`), `spectralGap_le_one` (via Gershgorin's circle theorem: `eigenvalue_mem_ball` → row norm sum ≤ 1 → `|λ| ≤ 1`)
+**Done:** `zero_one_principle` (via `exec_comp_monotone` + threshold function contrapositive), `RegularGraph.square` and `RegularGraph.zigzag` (`Fin` encode/decode + `rot_involution` via extracted defs with projection-based simp lemmas), `completeGraph.rot_involution` (via Mathlib's `Fin.succAbove`/`Fin.predAbove` — reparameterized from `d, hd` to `n+1`), `spectralGap_le_one` (via Gershgorin's circle theorem: `eigenvalue_mem_ball` → row norm sum ≤ 1 → `|λ| ≤ 1`), `adjMatrix_square_eq_sq` (adjacency matrix of G² = (adjacency matrix of G)²; via fiber decomposition + `Finset.card_nbij'` bijection using div/mod encoding)
 
-**Achievable (weeks):** `spectralGap_complete`, `spectralGap_square`, `halver_convergence`
+**Blocked on Mathlib:** `spectralGap_square` — `adjMatrix_square_eq_sq` is proved; remaining sorry is `eigenvalues₀_pow_sq` (eigenvalues of M² are squares of eigenvalues of M). Needs `ContinuousFunctionalCalculus` spectral mapping for `Matrix _ _ ℝ`, but Mathlib v4.27.0 lacks the required `CStarAlgebra` instance on real matrices. Alternatives: eigenvector basis argument via `apply_eigenvectorBasis` + uniqueness of eigenvalues, or upgrading to a Mathlib version with the CFC matrix instance.
+
+**Achievable (weeks):** `spectralGap_complete`, `halver_convergence`
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
 
