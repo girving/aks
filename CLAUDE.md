@@ -91,14 +91,14 @@ Statement of the expander mixing lemma (sorry, future work).
 
 ### `AKS/Random.lean` — Base Expander for Zig-Zag Construction
 Axiomatized base expander (chosen by fair dice roll, guaranteed to be random):
-1. **`baseExpander`** — axiom: `D`-regular graph on `D⁴` vertices (currently `D = 8`, `n = 4096`)
-2. **`baseExpander_gap`** — axiom: spectral gap ≤ `β` (currently `β = 1/5`)
-3. **Certificate roadmap** — LDL^T or trace-based spectral gap certificate for replacing axioms
+1. **`baseExpander`** — axiom: 12-regular graph on 20736 = 12⁴ vertices
+2. **`baseExpander_gap`** — axiom: spectral gap ≤ 5/9 ≈ 0.556 (just above Alon–Boppana 2√11/12 ≈ 0.553)
+3. **Certificate analysis** — all O(n)-data approaches (SDD, edge PSD, Krylov) are infeasible; see file header
 
 ### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
 Builds on `Square.lean` and `Random.lean` with the zig-zag product construction:
 1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
-2. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ λ₁ + λ₂ + λ₂² (additive bound)
+2. **Spectral composition theorem** — `rvwBound`: precise RVW bound on λ(G₁ ⓩ G₂)
 3. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
 4. **Main result** — `explicit_expanders_exist_zigzag`
 
@@ -230,7 +230,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, and `ZigZag.lean` have no `#exit`. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
+`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, and `ZigZag.lean` have no `#exit`. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (precise RVW bound, Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
 
 ## Proof Status by Difficulty
 
@@ -240,4 +240,12 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
 
-**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph (see certificate analysis in `Random.lean` — no known efficient non-dense certificate for random expanders; algebraic construction via Cayley graphs would sidestep the problem), all-sizes interpolation in `explicit_expanders_exist_zigzag`
+**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
+
+### Base expander certificate: open approaches
+
+Replacing the `baseExpander` axioms requires certifying that a specific 12-regular graph on 20736 vertices has spectral gap ≤ 5/9. All known O(n)-data approaches are infeasible (see `Random.lean` header). Two ideas under investigation:
+
+1. **Parallel dense LDL^T via sharded subfiles.** The LDL^T certificate is O(n²) data, but verification can be chopped into thousands of independent subfiles generated during the build and verified in parallel with `decide +kernel`. Each subfile checks a few rows of the factorization. Need to estimate: total data size, per-shard verification time, and whether Lean's build system can handle ~10K generated files.
+
+2. **Eigenspace sparsity.** Random expanders might have high multiplicity in their second eigenvalue, allowing the eigenspace to be described with sparse data. If so, a certificate could consist of a few sparse eigenvectors + a spectral gap bound on the complement. Need numerical experiments on actual random 12-regular graphs to check eigenvalue multiplicities and eigenvector sparsity.

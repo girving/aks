@@ -75,31 +75,38 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
 
 /-! **The Spectral Composition Theorem** -/
 
+/-- The precise RVW bound on the spectral gap of a zig-zag product.
+
+    f(λ₁, λ₂) = (1 − λ₂²) · λ₁ / 2 + √((1 − λ₂²)² · λ₁² / 4 + λ₂²)
+
+    This is tight (achieved by tensor products of complete graphs).
+    Earlier versions of this file used the weaker additive bound
+    `λ₁ + λ₂ + λ₂²`, but the iteration only converges with the precise
+    bound (the additive bound requires β < 0.207, below Alon–Boppana
+    for all D ≥ 3). -/
+noncomputable def rvwBound (lam₁ lam₂ : ℝ) : ℝ :=
+  (1 - lam₂ ^ 2) * lam₁ / 2 + Real.sqrt ((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2)
+
 /-- **The Main Theorem (Reingold–Vadhan–Wigderson 2002):**
 
-    λ(G₁ ⓩ G₂) ≤ λ₁ + λ₂ + λ₂²
+    λ(G₁ ⓩ G₂) ≤ f(λ₁, λ₂)
 
-    This is the additive form of the RVW spectral composition theorem.
-    It follows from the precise bound f(λ₁, λ₂) = (1−λ₂²)λ₁/2 + √((1−λ₂²)²λ₁²/4 + λ₂²)
-    via √(a² + b²) ≤ a + b, giving f ≤ λ₁ + λ₂.
+    where f is the precise RVW bound `rvwBound`.
 
-    The additive bound is most useful when both spectral gaps are small
-    (e.g., after squaring), which is exactly the regime of the iterated
-    construction. -/
+    At the fixed point c = f(c², β), this simplifies to β² = c²/(1+c+c²),
+    which converges for β² < 1/3 (i.e., D ≥ 12 with Alon–Boppana). -/
 theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
     (lam₁ lam₂ : ℝ)
     (hG₁ : spectralGap G₁ ≤ lam₁)
     (hG₂ : spectralGap G₂ ≤ lam₂) :
-    spectralGap (G₁.zigzag G₂) ≤ lam₁ + lam₂ + lam₂ ^ 2 := by
+    spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂ := by
   -- Proof strategy:
-  -- 1. The precise RVW bound gives f(λ₁, λ₂) = (1−λ₂²)λ₁/2 + √((1−λ₂²)²λ₁²/4 + λ₂²)
-  -- 2. Show f is monotone in both arguments (to pass from spectralGap to lam₁/lam₂)
-  -- 3. Simplify: √(a² + b²) ≤ a + b gives f ≤ (1−λ₂²)λ₁ + λ₂ ≤ λ₁ + λ₂ ≤ λ₁ + λ₂ + λ₂²
-  --
-  -- The hard part is step 1: decompose ℝ^{n·d} into n blocks of size d,
-  -- project each block onto constants (hat) and orthogonal (tilde),
-  -- then analyze the zig-zag walk's effect on each component.
+  -- 1. Decompose ℝ^{n·d} into n blocks of size d,
+  --    project each block onto constants (hat) and orthogonal (tilde).
+  -- 2. The zig-zag walk operator acts on (hat, tilde) components as a
+  --    2×2 block matrix; bound its norm via the triangle inequality.
+  -- 3. Show f is monotone in both arguments (to pass from spectralGap to lam₁/lam₂).
   sorry
 
 
@@ -118,8 +125,8 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     • n_k = D^(4(k+1)) vertices (exponential growth)
     • λ(G_k) ≤ c < 1 (constant spectral gap, from `zigzagFamily_gap`)
 
-    For the concrete instantiation with `baseExpander` (D = 8):
-    D² = 64, D⁴ = 4096, `baseExpander_gap ≤ 1/5`, spectral gap ≤ 1/2.
+    For the concrete instantiation with `baseExpander` (D = 12):
+    D² = 144, D⁴ = 20736, `baseExpander_gap ≤ 5/9`, family spectral gap ≤ 93/100.
 
     The key point: the degree D² is a CONSTANT independent of n,
     which is what we need for the AKS sorting network. -/
@@ -137,12 +144,13 @@ noncomputable def zigzagFamily {D : ℕ} (H₀ : RegularGraph ((D * D) * (D * D)
     ⟨nₖ * ((D * D) * (D * D)), Gₖ.square.zigzag H₀⟩
 
 /-- The spectral gap stays bounded at every level of the iteration.
-    The hypotheses encode the fixed-point condition for the recurrence
-    λ_{k+1} ≤ λ_k² + β + β²: we need the base case `β² ≤ c` and the
-    inductive step `c² + β + β² ≤ c`. -/
+    The hypotheses encode the fixed-point condition for the precise RVW
+    recurrence: we need the base case `β² ≤ c` and the inductive step
+    `rvwBound (c²) β ≤ c` (i.e., c is a fixed point of x ↦ rvwBound(x², β)).
+    The fixed point exists when β² < 1/3, which holds for D ≥ 12. -/
 theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
     {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
-    (hiter : c ^ 2 + β + β ^ 2 ≤ c) (k : ℕ) :
+    (hiter : rvwBound (c ^ 2) β ≤ c) (k : ℕ) :
     spectralGap (zigzagFamily H₀ k).2 ≤ c := by
   induction k with
   | zero =>
@@ -171,7 +179,7 @@ theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
 theorem explicit_expanders_exist_zigzag {D : ℕ}
     {H₀ : RegularGraph ((D * D) * (D * D)) D}
     {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
-    (hiter : c ^ 2 + β + β ^ 2 ≤ c) :
+    (hiter : rvwBound (c ^ 2) β ≤ c) :
     ∀ (n : ℕ), n > 0 →
     ∃ (G : RegularGraph n (D * D)), spectralGap G ≤ c := by
   -- For each n, find k such that zigzagFamily H₀ k has ≥ n vertices,
