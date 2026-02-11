@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Check a Lean file via the persistent lean-daemon.
 
+The daemon auto-starts on first use; no need to run --start explicitly.
+
 Usage:
   scripts/lean-check AKS/RegularGraph.lean
-  scripts/lean-check --start     # Start the daemon
+  scripts/lean-check --start     # Start the daemon (optional, happens automatically)
   scripts/lean-check --stop      # Stop the daemon
   scripts/lean-check --ping      # Check if daemon is running
 
 Exit codes:
   0 = no errors (warnings are OK)
   1 = errors found
-  2 = daemon not running
+  2 = daemon not running / failed to start
 """
 
 import json
@@ -130,10 +132,10 @@ def format_diagnostic(d: dict) -> str:
 
 
 def check_file(filepath: str):
-    """Check a file and print results."""
+    """Check a file and print results. Auto-starts daemon if needed."""
     if not daemon_running():
-        print("Daemon not running. Start it with: scripts/lean-check --start")
-        sys.exit(2)
+        if not start_daemon():
+            sys.exit(2)
 
     t0 = time.time()
     result = send_command({"command": "check", "file": filepath})

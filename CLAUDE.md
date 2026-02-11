@@ -11,12 +11,11 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 ## Build Commands
 
 ```bash
-scripts/lean-check --start                  # Start daemon (once per session, ~5s)
 scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits near end)
-scripts/lean-check --stop                   # Stop daemon
+scripts/lean-check --stop                   # Stop daemon (when done)
 ```
 
-**Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates only from the change point forward. Since proof iteration typically happens at the end of a file, most checks are sub-second. Start the daemon once per session, then check files by name.
+**Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates only from the change point forward. Since proof iteration typically happens at the end of a file, most checks are sub-second. The daemon auto-starts on first use (~5s).
 
 There are no tests or linter configurations. Correctness is verified through Lean's type checker — if `lean-check` reports no errors, all type-checked proofs are valid.
 
