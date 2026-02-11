@@ -27,13 +27,6 @@ scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits ne
 scripts/lean-check --stop                   # Stop daemon
 ```
 
-**Measured speedups** (RegularGraph.lean, 667 lines):
-| Change location | `lean-check` | `lake build` |
-|---|---|---|
-| End of file | 0.2s | 20s |
-| Line 660/667 | 1.6s | 20s |
-| Line 320/667 | 17s | 20s |
-
 The daemon re-elaborates from the change point to the end. Since proof iteration typically happens at the end of a file, most checks are sub-second. Use `lake build` for final validation before committing (it also checks downstream files).
 
 ### Mathlib Searches
@@ -60,9 +53,9 @@ Track tool performance against these baselines. If a command exceeds its expecte
 
 ## Architecture
 
-**Entry point:** `AKS.lean` — imports both modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
+**Entry point:** `AKS.lean` — imports all modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
 
-**Four modules with a bottom-up dependency:**
+**Modules with bottom-up dependency:**
 
 ### `AKS/Fin.lean` — `Fin` Arithmetic Helpers
 Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product indexing: `Fin.pair_lt`, `fin_encode_fst`, `fin_encode_snd`, `fin_div_add_mod`.
@@ -77,16 +70,28 @@ Sections build on each other sequentially:
 6. **Complexity analysis** — `IsBigO` notation, O(n log n) size
 7. **Correctness** — `halver_composition` (geometric decrease), `AKS.sorts`
 
-### `AKS/RegularGraph.lean` — Regular Graph Theory
-General theory of d-regular graphs, independent of the zig-zag product:
+### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
+Core definitions and spectral gap, independent of specific constructions:
 1. **Regular graphs and adjacency matrices** — `RegularGraph` (rotation map representation), `adjMatrix`, symmetry proofs
 2. **Walk and mean operators** — `walkCLM` (CLM-first), `meanCLM`, `walkFun`/`walkLM`/`meanFun`/`meanLM` (three-layer pattern)
-3. **Spectral gap** — `spectralGap` := `‖walkCLM - meanCLM‖` (operator norm), `spectralGap_nonneg`, `spectralGap_le_one`, `expander_mixing_lemma`
-4. **Graph squaring** — `G.square`, `spectralGap_square`: λ(G²) = λ(G)²
-5. **Complete graph** — `completeGraph`, `spectralGap_complete`: λ(K_{n+1}) = 1/n
+3. **Spectral gap** — `spectralGap` := `‖walkCLM - meanCLM‖` (operator norm), `spectralGap_nonneg`, `spectralGap_le_one`
+
+### `AKS/Square.lean` — Graph Squaring (~225 lines)
+Graph squaring and the spectral gap squaring identity:
+1. **Graph squaring** — `G.square`, `adjMatrix_square_eq_sq`
+2. **CLM identities** — self-adjointness, idempotency, `WP = PW = P`
+3. **Spectral gap squaring** — `spectralGap_square`: λ(G²) = λ(G)²
+
+### `AKS/Complete.lean` — Complete Graph (~108 lines)
+The complete graph as a concrete example:
+1. **Complete graph** — `completeGraph` via `Fin.succAbove`/`Fin.predAbove`
+2. **Spectral gap** — `spectralGap_complete`: λ(K_{n+1}) = 1/n
+
+### `AKS/Mixing.lean` — Expander Mixing Lemma
+Statement of the expander mixing lemma (sorry, future work).
 
 ### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
-Builds on `RegularGraph.lean` with the zig-zag product construction:
+Builds on `Square.lean` with the zig-zag product construction:
 1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
 2. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ 1 - (1-λ₂)²(1-λ₁)/2
 3. **Base case** — concrete small expander (axiomatized: `baseExpander`)
@@ -95,11 +100,11 @@ Builds on `RegularGraph.lean` with the zig-zag product construction:
 
 ### Data flow
 ```
-Fin.lean → RegularGraph.lean → ZigZag.lean
-                                    ↓ (provides expander families)
-                              AKS.lean: zigzag_implies_aks_network
-                                    ↑ (uses sorting network machinery)
-                              Basic.lean: AKS construction + correctness
+Fin.lean → RegularGraph.lean → Square.lean → ZigZag.lean
+                              → Complete.lean       ↓
+                              → Mixing.lean    AKS.lean
+                                                    ↑
+                                              Basic.lean
 ```
 
 ## Style
@@ -217,9 +222,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-No `#exit` — all code in this file is type-checked. Old eigenvalue-based complete graph proofs have been deleted (superseded by CLM-native proofs).
-
-**Next steps:** the spectral gap infrastructure (`spectralGap_nonneg`, `spectralGap_le_one`, `spectralGap_square`, `spectralGap_complete`) is fully proved above `#exit`. The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
+`RegularGraph.lean`, `Square.lean`, and `Complete.lean` have no `#exit` and no `sorry`. The spectral gap infrastructure is fully proved. The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
 
 ## Proof Status by Difficulty
 

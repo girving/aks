@@ -10,7 +10,7 @@
   iterated construction that yields expanders at every size.
 -/
 
-import AKS.RegularGraph
+import AKS.Square
 
 #exit
 

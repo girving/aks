@@ -2,12 +2,10 @@
   # Regular Graphs and Spectral Theory
 
   Lean 4 formalization of `d`-regular graphs via rotation maps,
-  their normalized adjacency matrices, spectral gap, graph squaring,
-  and the complete graph as a concrete example.
+  their normalized adjacency matrices, and spectral gap (operator norm).
 
-  These definitions and lemmas are general graph theory, used by
-  `ZigZag.lean` for the zig-zag product construction and by
-  `Basic.lean` (transitively) for the AKS sorting network.
+  Graph squaring is in `Square.lean`; the complete graph is in
+  `Complete.lean`.
 -/
 
 import AKS.Fin
@@ -175,7 +173,7 @@ theorem meanCLM_apply (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) (v : Fin n) :
 /-! **Operator Norm Helpers** -/
 
 /-- The rotation map as an equivalence (since it's an involution). -/
-private def RegularGraph.rotEquiv {n d : ℕ} (G : RegularGraph n d) :
+def RegularGraph.rotEquiv {n d : ℕ} (G : RegularGraph n d) :
     Fin n × Fin d ≃ Fin n × Fin d where
   toFun := G.rot
   invFun := G.rot
@@ -184,7 +182,7 @@ private def RegularGraph.rotEquiv {n d : ℕ} (G : RegularGraph n d) :
 
 /-- Double-counting via the rotation bijection: summing g(neighbor(v,i))
     over all vertex-port pairs equals summing g(v) over all pairs. -/
-private theorem RegularGraph.sum_neighbor_eq {n d : ℕ} (G : RegularGraph n d)
+theorem RegularGraph.sum_neighbor_eq {n d : ℕ} (G : RegularGraph n d)
     (g : Fin n → ℝ) :
     ∑ v : Fin n, ∑ i : Fin d, g (G.neighbor v i) =
     ∑ v : Fin n, ∑ _i : Fin d, g v := by
@@ -272,7 +270,7 @@ private theorem meanCLM_apply_norm_le (n : ℕ) (f : EuclideanSpace ℝ (Fin n))
     linarith [mul_comm (↑n : ℝ) (∑ x : Fin n, f x ^ 2)]
 
 /-- Subtracting the mean doesn't increase the norm: ‖f - Pf‖ ≤ ‖f‖. -/
-private theorem norm_sub_meanCLM_le (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) :
+theorem norm_sub_meanCLM_le (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) :
     ‖f - meanCLM n f‖ ≤ ‖f‖ := by
   rw [← Real.sqrt_sq (norm_nonneg _), ← Real.sqrt_sq (norm_nonneg f)]
   apply Real.sqrt_le_sqrt
@@ -300,7 +298,7 @@ private theorem norm_sub_meanCLM_le (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) :
     linarith [div_nonneg (sq_nonneg S) hn_pos.le]
 
 /-- The walk operator preserves the mean projection: W(Pf) = Pf (when d > 0). -/
-private theorem walkCLM_comp_meanCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
+theorem walkCLM_comp_meanCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
     ∀ f : EuclideanSpace ℝ (Fin n), G.walkCLM (meanCLM n f) = meanCLM n f := by
   intro f; ext v
   simp only [RegularGraph.walkCLM_apply, meanCLM_apply]
@@ -331,337 +329,3 @@ theorem spectralGap_le_one {n d : ℕ} (G : RegularGraph n d) :
           apply mul_le_mul_of_nonneg_right G.walkCLM_norm_le_one (norm_nonneg _)
       _ = ‖f - meanCLM n f‖ := one_mul _
       _ ≤ ‖f‖ := norm_sub_meanCLM_le n f
-
-
-
-/-! **Graph Squaring** -/
-
--- The square G² of a d-regular graph: take two steps.
--- G² is d²-regular. Rot_{G²}(v, (i,j)) follows edge i from v,
--- then edge j from the result.
-
-/-- The rotation map for G²: decode port as (i,j), take step i then step j,
-    encode the reverse ports as j'*d + i'. Uses projections (not destructuring)
-    so that simp can work with it. -/
-private def square_rot {n d : ℕ} (G : RegularGraph n d)
-    (p : Fin n × Fin (d * d)) : Fin n × Fin (d * d) :=
-  have hd : 0 < d := Nat.pos_of_ne_zero (by rintro rfl; exact absurd p.2.isLt (by simp))
-  let i : Fin d := ⟨p.2.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.2.isLt⟩
-  let j : Fin d := ⟨p.2.val % d, Nat.mod_lt _ hd⟩
-  let step1 := G.rot (p.1, i)
-  let step2 := G.rot (step1.1, j)
-  (step2.1, ⟨step2.2.val * d + step1.2.val, Fin.pair_lt step2.2 step1.2⟩)
-
-private theorem square_rot_involution {n d : ℕ} (G : RegularGraph n d)
-    (p : Fin n × Fin (d * d)) : square_rot G (square_rot G p) = p := by
-  obtain ⟨v, ij⟩ := p
-  simp only [square_rot, fin_encode_fst, fin_encode_snd, Prod.mk.eta, G.rot_involution,
-    fin_div_add_mod]
-
-def RegularGraph.square {n d : ℕ} (G : RegularGraph n d) :
-    RegularGraph n (d * d) where
-  rot := square_rot G
-  rot_involution := square_rot_involution G
-
-private theorem square_neighbor_unfold {n d : ℕ} (G : RegularGraph n d)
-    (u : Fin n) (p : Fin (d * d)) (hd : 0 < d) :
-    G.square.neighbor u p =
-      G.neighbor (G.neighbor u ⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩)
-        ⟨p.val % d, Nat.mod_lt _ hd⟩ := rfl
-
-private theorem adjMatrix_square_eq_sq {n d : ℕ} (G : RegularGraph n d) :
-    adjMatrix G.square = (adjMatrix G) ^ 2 := by
-  ext u v
-  simp only [adjMatrix_apply, sq, Matrix.mul_apply, div_mul_div_comm]
-  rw [← Finset.sum_div, Nat.cast_mul]
-  congr 1
-  -- Need: ↑(filter card) = ∑ w, ↑card_uw * ↑card_wv  (as ℝ)
-  rcases Nat.eq_zero_or_pos d with rfl | hd
-  · simp
-  · -- Prove the Nat-level identity and cast
-    have key : (univ.filter (fun p : Fin (d * d) ↦ G.square.neighbor u p = v)).card =
-        ∑ w : Fin n, (univ.filter (fun i : Fin d ↦ G.neighbor u i = w)).card *
-          (univ.filter (fun j : Fin d ↦ G.neighbor w j = v)).card := by
-      -- Partition by intermediate vertex
-      rw [Finset.card_eq_sum_card_fiberwise
-        (f := fun p ↦ G.neighbor u ⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩)
-        (fun _ _ ↦ Finset.mem_coe.mpr (Finset.mem_univ _))]
-      congr 1; ext w
-      -- Fiber card = card_uw * card_wv
-      rw [← Finset.card_product]
-      apply Finset.card_nbij'
-        -- forward: decode port p as (p/d, p%d)
-        (fun p ↦ (⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩,
-                   ⟨p.val % d, Nat.mod_lt _ hd⟩))
-        -- backward: encode (i, j) as i * d + j
-        (fun ij ↦ ⟨ij.1.val * d + ij.2.val, Fin.pair_lt ij.1 ij.2⟩)
-      -- forward MapsTo
-      · intro p hp
-        simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and,
-          Finset.mem_product] at hp ⊢
-        exact ⟨hp.2, by rw [← hp.2, ← square_neighbor_unfold G u p hd]; exact hp.1⟩
-      -- backward MapsTo
-      · intro ij hij
-        simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and,
-          Finset.mem_product] at hij ⊢
-        constructor
-        · -- G.square.neighbor u ⟨i*d+j, _⟩ = v
-          rw [square_neighbor_unfold G u _ hd, fin_encode_fst, fin_encode_snd]
-          rw [hij.1]; exact hij.2
-        · -- G.neighbor u ⟨(i*d+j)/d, _⟩ = w
-          have := fin_encode_fst ij.1 ij.2
-            ((Nat.div_lt_iff_lt_mul hd).mpr (Fin.pair_lt ij.1 ij.2))
-          simp only [this]; exact hij.1
-      -- LeftInvOn: backward ∘ forward = id
-      · intro p hp
-        exact fin_div_add_mod p _
-      -- RightInvOn: forward ∘ backward = id
-      · intro ij hij
-        refine Prod.ext ?_ ?_
-        · exact fin_encode_fst ij.1 ij.2
-            ((Nat.div_lt_iff_lt_mul hd).mpr (Fin.pair_lt ij.1 ij.2))
-        · exact fin_encode_snd ij.1 ij.2 (Nat.mod_lt _ hd)
-    exact_mod_cast key
-
-
-/-! **CLM Algebraic Identities for Spectral Gap Squaring** -/
-
-/-- Rotation bijection swaps function arguments in a product sum:
-    ∑_{v,i} f(neighbor(v,i))·g(v) = ∑_{v,i} f(v)·g(neighbor(v,i)). -/
-private theorem RegularGraph.sum_neighbor_swap {n d : ℕ} (G : RegularGraph n d)
-    (f g : Fin n → ℝ) :
-    ∑ v : Fin n, ∑ i : Fin d, f (G.neighbor v i) * g v =
-    ∑ v : Fin n, ∑ i : Fin d, f v * g (G.neighbor v i) := by
-  simp_rw [← Fintype.sum_prod_type', RegularGraph.neighbor]
-  -- Reindex by rot (a bijection): ∑ p, h(rot p) = ∑ p, h(p)
-  have h := G.rotEquiv.sum_comp (fun q ↦ f q.1 * g (G.rot q).1)
-  simp only [show ∀ p, (G.rotEquiv p : Fin n × Fin d) = G.rot p from fun _ ↦ rfl,
-    G.rot_involution] at h
-  exact h
-
-/-- The walk operator is self-adjoint: ⟪Wf, g⟫ = ⟪f, Wg⟫. -/
-private theorem walkCLM_isSelfAdjoint {n d : ℕ} (G : RegularGraph n d) :
-    IsSelfAdjoint G.walkCLM := by
-  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
-  intro f g
-  change @inner ℝ _ _ (G.walkCLM f) g = @inner ℝ _ _ f (G.walkCLM g)
-  -- inner on EuclideanSpace: ⟪x, y⟫ = ∑ v, y v * x v (via RCLike.inner_apply)
-  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial,
-    RegularGraph.walkCLM_apply]
-  -- Goal: ∑ v, g v * ((∑ i, f(nbr v i))/d) = ∑ v, ((∑ i, g(nbr v i))/d) * f v
-  rcases Nat.eq_zero_or_pos d with rfl | hd
-  · simp
-  · simp_rw [mul_div_assoc', div_mul_eq_mul_div, ← Finset.sum_div]
-    congr 1
-    simp_rw [Finset.mul_sum, Finset.sum_mul]
-    exact (G.sum_neighbor_swap (fun v ↦ g v) (fun v ↦ f v)).symm
-
-/-- The mean projection is self-adjoint: ⟪Pf, g⟫ = ⟪f, Pg⟫. -/
-private theorem meanCLM_isSelfAdjoint (n : ℕ) :
-    IsSelfAdjoint (meanCLM n) := by
-  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
-  intro f g
-  change @inner ℝ _ _ (meanCLM n f) g = @inner ℝ _ _ f (meanCLM n g)
-  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, meanCLM_apply]
-  -- ∑ v, g v * ((∑ i, f i)/n) = ∑ v, ((∑ i, g i)/n) * f v
-  simp_rw [mul_div_assoc', div_mul_eq_mul_div, ← Finset.sum_div]
-  congr 1
-  simp_rw [Finset.mul_sum, Finset.sum_mul]
-  conv_rhs => rw [Finset.sum_comm]
-
-/-- The mean projection is idempotent: P(Pf) = Pf. -/
-private theorem meanCLM_idempotent (n : ℕ) :
-    meanCLM n * meanCLM n = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
-  ext f v
-  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, Finset.sum_const,
-    Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  rcases n.eq_zero_or_pos with rfl | hn
-  · simp
-  · exact mul_div_cancel_left₀ _ (by positivity)
-
-/-- The mean projection absorbs the walk operator: P ∘ W = P (for d > 0). -/
-private theorem meanCLM_comp_walkCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
-    meanCLM n * G.walkCLM = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
-  ext f v
-  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, RegularGraph.walkCLM_apply]
-  -- Goal: (∑ u, (∑ i, f(nbr u i)) / d) / n = (∑ u, f u) / n
-  congr 1
-  -- Pull /d out of the sum
-  rw [← Finset.sum_div]
-  -- Now: (∑ u, ∑ i, f(nbr u i)) / d = ∑ u, f u
-  rw [G.sum_neighbor_eq (fun v ↦ f v)]
-  -- (∑ u, ∑ _i, f u) / d = ∑ u, f u
-  simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  rw [← Finset.mul_sum, mul_div_cancel_left₀ _ (by positivity : (d : ℝ) ≠ 0)]
-
-/-- Equivalence between Fin d × Fin d and Fin (d * d) via the
-    encode/decode pair (i * d + j) ↔ (i, j). -/
-private def finPairEquiv {d : ℕ} (hd : 0 < d) : Fin d × Fin d ≃ Fin (d * d) where
-  toFun ij := ⟨ij.1.val * d + ij.2.val, Fin.pair_lt ij.1 ij.2⟩
-  invFun p := (⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩,
-               ⟨p.val % d, Nat.mod_lt _ hd⟩)
-  left_inv ij := Prod.ext
-    (fin_encode_fst ij.1 ij.2 ((Nat.div_lt_iff_lt_mul hd).mpr (Fin.pair_lt ij.1 ij.2)))
-    (fin_encode_snd ij.1 ij.2 (Nat.mod_lt _ hd))
-  right_inv p := fin_div_add_mod p (Fin.pair_lt
-    ⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩
-    ⟨p.val % d, Nat.mod_lt _ hd⟩)
-
-/-- The walk operator of G² equals the square of G's walk operator:
-    W_{G²} = W_G ∘ W_G. -/
-private theorem walkCLM_sq {n d : ℕ} (G : RegularGraph n d) :
-    G.square.walkCLM = G.walkCLM * G.walkCLM := by
-  ext f v
-  simp only [ContinuousLinearMap.mul_apply, RegularGraph.walkCLM_apply]
-  rcases Nat.eq_zero_or_pos d with rfl | hd
-  · simp
-  · -- Transform RHS: (∑ i, (∑ j, ...)/d) / d → (∑ i, ∑ j, ...) / (d*d)
-    rw [← Finset.sum_div, div_div,
-      show (↑(d * d) : ℝ) = ↑d * ↑d from by push_cast; ring]
-    -- Both sides: (sum) / (d * d). Show numerators equal.
-    congr 1
-    -- LHS: ∑ p : Fin(d*d), f(sq.nbr v p) = ∑ (i,j) : Fin d × Fin d, f(nbr(nbr v i) j)
-    rw [← Fintype.sum_prod_type']
-    exact Fintype.sum_equiv (finPairEquiv hd).symm _ _ (fun _ ↦ rfl)
-
-theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
-    spectralGap G.square = (spectralGap G) ^ 2 := by
-  unfold spectralGap
-  rcases Nat.eq_zero_or_pos d with rfl | hd
-  · -- d = 0: both walkCLMs are 0, spectralGap = ‖meanCLM‖
-    have hW : G.walkCLM = 0 := by
-      ext f v; simp [RegularGraph.walkCLM_apply]
-    have hW2 : G.square.walkCLM = 0 := by
-      ext f v; simp [RegularGraph.walkCLM_apply]
-    simp only [hW, hW2, zero_sub, norm_neg]
-    -- ‖P‖ = ‖P‖² since P is self-adjoint idempotent
-    have hidp := meanCLM_idempotent n
-    have hsa := meanCLM_isSelfAdjoint n
-    rw [← hsa.norm_mul_self, hidp]
-  · -- d > 0: algebraic identity (W - P)² = W² - P
-    -- Use abbreviations W and P (let, not set, to keep transparent)
-    let W := G.walkCLM
-    let P : EuclideanSpace ℝ (Fin n) →L[ℝ] _ := meanCLM n
-    have hWP : W * P = P := by
-      refine ContinuousLinearMap.ext (fun f ↦ ?_)
-      exact walkCLM_comp_meanCLM G hd f
-    have hPW : P * W = P := meanCLM_comp_walkCLM G hd
-    have hPP : P * P = P := meanCLM_idempotent n
-    have hsq : (W - P) * (W - P) = W * W - P := by
-      have : (W - P) * (W - P) = W * W - W * P - P * W + P * P := by
-        simp only [mul_sub, sub_mul]; abel
-      rw [this, hWP, hPW, hPP]; abel
-    rw [walkCLM_sq G, ← hsq]
-    have hsa : IsSelfAdjoint (W - P) := by
-      rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric, ContinuousLinearMap.coe_sub]
-      exact ((ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp
-        (walkCLM_isSelfAdjoint G)).sub
-        (ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp (meanCLM_isSelfAdjoint n)))
-    rw [← hsa.norm_mul_self]
-
-
-/-! **Complete Graph** -/
-
-/-- Rotation map for the complete graph K_{n+1}: the i-th neighbor of v is
-    obtained by skipping v in the enumeration, using `Fin.succAbove`.
-    The reverse port is `Fin.predAbove`. -/
-private def complete_rot {n : ℕ}
-    (p : Fin (n + 1) × Fin n) : Fin (n + 1) × Fin n :=
-  (p.1.succAbove p.2, p.2.predAbove p.1)
-
-private theorem complete_rot_involution {n : ℕ}
-    (p : Fin (n + 1) × Fin n) :
-    complete_rot (complete_rot p) = p := by
-  simp only [complete_rot, Fin.succAbove_succAbove_predAbove,
-    Fin.predAbove_predAbove_succAbove, Prod.mk.eta]
-
-/-- The complete graph on `n + 1` vertices as a regular graph.
-    K_{n+1} is n-regular. λ(K_{n+1}) = 1/n. -/
-def completeGraph (n : ℕ) : RegularGraph (n + 1) n where
-  rot := complete_rot
-  rot_involution := complete_rot_involution
-
-/-- The neighbor function of the complete graph is `succAbove`. -/
-private theorem completeGraph_neighbor {n : ℕ} (v : Fin (n + 1)) (i : Fin n) :
-    (completeGraph n).neighbor v i = v.succAbove i := rfl
-
-/-- For the complete graph, the walk operator gives the average over all
-    *other* vertices: `(Wf)(v) = ((∑ f) - f v) / n`. -/
-private theorem walkCLM_completeGraph_apply {n : ℕ}
-    (f : EuclideanSpace ℝ (Fin (n + 1))) (v : Fin (n + 1)) :
-    (completeGraph n).walkCLM f v = ((∑ j, f j) - f v) / ↑n := by
-  simp only [RegularGraph.walkCLM_apply, completeGraph_neighbor]
-  congr 1
-  have := Fin.sum_univ_succAbove (fun j ↦ f j) v
-  linarith
-
-/-- The CLM operator identity for the complete graph:
-    `W - P = -(1/n) • (1 - P)` where W = walkCLM, P = meanCLM. -/
-private theorem walkCLM_sub_meanCLM_completeGraph {n : ℕ} (hn : n ≥ 1) :
-    (completeGraph n).walkCLM - meanCLM (n + 1) =
-    (-(1 / (n : ℝ))) • (ContinuousLinearMap.id ℝ _ - meanCLM (n + 1)) := by
-  refine ContinuousLinearMap.ext (fun f ↦ ?_)
-  apply PiLp.ext; intro v
-  show (completeGraph n).walkCLM f v - meanCLM (n + 1) f v =
-    -(1 / (↑n : ℝ)) * (f v - meanCLM (n + 1) f v)
-  rw [walkCLM_completeGraph_apply, meanCLM_apply]
-  have hn' : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (by omega)
-  have hn1 : (↑n : ℝ) + 1 ≠ 0 := by positivity
-  field_simp
-  push_cast
-  ring
-
-/-- The norm of the orthogonal complement projection `1 - meanCLM` is 1
-    (for n ≥ 2 vertices, i.e., non-constant functions exist). -/
-private theorem norm_id_sub_meanCLM {n : ℕ} (hn : n ≥ 2) :
-    ‖ContinuousLinearMap.id ℝ (EuclideanSpace ℝ (Fin n)) - meanCLM n‖ = 1 := by
-  set T := ContinuousLinearMap.id ℝ (EuclideanSpace ℝ (Fin n)) - meanCLM n
-  apply le_antisymm
-  · -- Upper bound: ‖Tf‖ ≤ ‖f‖ (1 - P is a contraction)
-    apply ContinuousLinearMap.opNorm_le_bound _ zero_le_one
-    intro f; rw [one_mul]
-    show ‖f - meanCLM n f‖ ≤ ‖f‖
-    exact norm_sub_meanCLM_le n f
-  · -- Lower bound: exhibit f with Pf = 0, f ≠ 0, so ‖Tf‖ = ‖f‖
-    -- Build test vector: 1 at index 0, -1 at index 1, 0 elsewhere
-    set v0 : Fin n := ⟨0, by omega⟩
-    set v1 : Fin n := ⟨1, by omega⟩
-    let g : Fin n → ℝ := fun i ↦ if i = v0 then 1 else if i = v1 then -1 else 0
-    let f : EuclideanSpace ℝ (Fin n) := (WithLp.equiv 2 _).symm g
-    have hfv : ∀ i, f i = g i := fun _ ↦ rfl
-    have hgsum : ∑ i, g i = 0 := by
-      have hne : v0 ≠ v1 := by simp [Fin.ext_iff, v0, v1]
-      have hsplit : ∀ i : Fin n, g i = (if i = v0 then (1:ℝ) else 0) +
-                                        (if i = v1 then (-1:ℝ) else 0) := by
-        intro i; simp only [g]; split_ifs with h1 h2
-        · exact absurd (h1.symm.trans h2) hne
-        · ring
-        · ring
-        · ring
-      simp_rw [hsplit, Finset.sum_add_distrib, Finset.sum_ite_eq', Finset.mem_univ,
-        ite_true, add_neg_cancel]
-    have hfsum : ∑ i, f i = 0 := by simp_rw [hfv]; exact hgsum
-    have hf_ne : f ≠ 0 := by
-      intro h
-      have : g v0 = 0 := by
-        calc g v0 = f v0 := (hfv v0).symm
-          _ = (0 : EuclideanSpace ℝ (Fin n)) v0 := by rw [h]
-          _ = 0 := rfl
-      simp [g] at this
-    -- T f = f since Pf = 0
-    have hTf : T f = f := by
-      apply PiLp.ext; intro v
-      show f v - meanCLM n f v = f v
-      rw [meanCLM_apply, hfsum, zero_div, sub_zero]
-    -- From ‖Tf‖ = ‖f‖ and T.le_opNorm: ‖f‖ ≤ ‖T‖ * ‖f‖
-    have h_le := T.le_opNorm f
-    rw [hTf] at h_le
-    exact le_of_mul_le_mul_right (by rw [one_mul]; exact h_le) (norm_pos_iff.mpr hf_ne)
-
-/-- The spectral gap of the complete graph: λ(K_{n+1}) = 1/n. -/
-theorem spectralGap_complete (n : ℕ) (hn : n ≥ 1) :
-    spectralGap (completeGraph n) = 1 / (n : ℝ) := by
-  unfold spectralGap
-  rw [walkCLM_sub_meanCLM_completeGraph hn, norm_smul, Real.norm_eq_abs, abs_neg,
-    abs_div, abs_one, Nat.abs_cast,
-    norm_id_sub_meanCLM (show n + 1 ≥ 2 by omega), mul_one]
