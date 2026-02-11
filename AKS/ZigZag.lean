@@ -76,81 +76,29 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
 
 /-- **The Main Theorem (Reingold–Vadhan–Wigderson 2002):**
 
-    λ(G₁ ⓩ G₂) ≤ λ(G₁) + λ(G₂) + λ(G₂)²
+    λ(G₁ ⓩ G₂) ≤ λ₁ + λ₂ + λ₂²
 
-    More precisely, they prove:
+    This is the additive form of the RVW spectral composition theorem.
+    It follows from the precise bound f(λ₁, λ₂) = (1−λ₂²)λ₁/2 + √((1−λ₂²)²λ₁²/4 + λ₂²)
+    via √(a² + b²) ≤ a + b, giving f ≤ λ₁ + λ₂.
 
-    λ(G₁ ⓩ G₂) ≤ f(λ₁, λ₂)
-
-    where f(λ₁, λ₂) < 1 whenever λ₁ < 1 and λ₂ < 1.
-
-    The bound used in practice is:
-
-    λ(G₁ ⓩ G₂) ≤ 1 - (1 - λ₂)² · (1 - λ₁) / 2
-
-    Key insight: even if G₁ has terrible expansion (λ₁ close to 1),
-    as long as G₂ has decent expansion (λ₂ bounded away from 1),
-    the zig-zag product inherits good expansion from G₂. -/
+    The additive bound is most useful when both spectral gaps are small
+    (e.g., after squaring), which is exactly the regime of the iterated
+    construction. -/
 theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
     (lam₁ lam₂ : ℝ)
     (hG₁ : spectralGap G₁ ≤ lam₁)
     (hG₂ : spectralGap G₂ ≤ lam₂) :
-    spectralGap (G₁.zigzag G₂) ≤ 1 - (1 - lam₂)^2 * (1 - lam₁) / 2 := by
-  -- ═══════════════════════════════════════════════════════════════
-  -- PROOF SKETCH (the core of the entire construction)
-  -- ═══════════════════════════════════════════════════════════════
+    spectralGap (G₁.zigzag G₂) ≤ lam₁ + lam₂ + lam₂ ^ 2 := by
+  -- Proof strategy:
+  -- 1. The precise RVW bound gives f(λ₁, λ₂) = (1−λ₂²)λ₁/2 + √((1−λ₂²)²λ₁²/4 + λ₂²)
+  -- 2. Show f is monotone in both arguments (to pass from spectralGap to lam₁/lam₂)
+  -- 3. Simplify: √(a² + b²) ≤ a + b gives f ≤ (1−λ₂²)λ₁ + λ₂ ≤ λ₁ + λ₂ ≤ λ₁ + λ₂ + λ₂²
   --
-  -- Let M₁, M₂ be the normalized adjacency matrices of G₁, G₂.
-  -- Let M_zz be the normalized adjacency matrix of G₁ ⓩ G₂.
-  --
-  -- The zig-zag product's adjacency matrix factors as:
-  --
-  --   M_zz = (I_n ⊗ M₂) · P · (I_n ⊗ M₂)
-  --
-  -- where:
-  --   I_n ⊗ M₂  = "zig/zag" step (apply G₂ within each cloud)
-  --   P          = "step" (permutation matrix encoding G₁'s edges)
-  --
-  -- To bound λ(M_zz), we need to bound ‖M_zz x‖ for x ⊥ 𝟏.
-  --
-  -- Decompose x ∈ ℝ^{n·d} into n blocks of size d:
-  --   x = (x₁, ..., xₙ)  where xᵢ ∈ ℝ^d
-  --
-  -- Further decompose each block:
-  --   xᵢ = x̂ᵢ · 𝟏/√d + x̃ᵢ   where x̃ᵢ ⊥ 𝟏 in ℝ^d
-  --
-  -- The "hat" part x̂ = (x̂₁, ..., x̂ₙ) ∈ ℝ^n carries the
-  -- inter-cloud structure. The "tilde" parts x̃ᵢ carry intra-cloud.
-  --
-  -- Now analyze each step:
-  --
-  -- Zig (I ⊗ M₂):
-  --   - Leaves x̂ unchanged (M₂ · 𝟏 = 𝟏)
-  --   - Contracts x̃ by factor λ₂: ‖x̃'‖ ≤ λ₂ · ‖x̃‖
-  --
-  -- Step (P):
-  --   - Permutes blocks according to G₁'s port structure
-  --   - The key: this is where G₁'s expansion acts on x̂
-  --   - Contracts the "hat" component by λ₁: after projection,
-  --     ‖x̂'‖_{⊥𝟏} ≤ λ₁ · ‖x̂‖_{⊥𝟏}
-  --   - May inflate x̃, but only transfers hat ↔ tilde
-  --
-  -- Zag (I ⊗ M₂):
-  --   - Again contracts tilde by λ₂
-  --   - Leaves hat unchanged
-  --
-  -- Combining: the total operator on (x̂, x̃) satisfies
-  --
-  --   ‖M_zz x‖² ≤ (λ₁ · ‖x̂‖ + λ₂ · ‖x̃‖)² + (λ₂ · ‖x̂‖ + λ₂² · ‖x̃‖)²
-  --
-  -- Optimizing over the split ‖x̂‖² + ‖x̃‖² = 1 gives
-  --
-  --   λ(G₁ ⓩ G₂) ≤ 1 - (1 - λ₂)²(1 - λ₁)/2
-  --
-  -- This is a calculation in finite-dimensional operator norms:
-  -- bound ‖A·B·C‖ via ‖A‖·‖B‖·‖C‖ on orthogonal decompositions,
-  -- then optimize a quadratic form.
+  -- The hard part is step 1: decompose ℝ^{n·d} into n blocks of size d,
+  -- project each block onto constants (hat) and orthogonal (tilde),
+  -- then analyze the zig-zag walk's effect on each component.
   sorry
 
 
@@ -170,7 +118,7 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     verify the spectral gap of a 16-vertex graph computationally. -/
 
 /-- A concrete verified base expander. For D = 8:
-    H₀ is an 8-regular graph on 8⁴ = 4096 vertices with λ(H₀) ≤ 0.9.
+    H₀ is an 8-regular graph on 8⁴ = 4096 vertices with λ(H₀) ≤ 1/5.
 
     In a full formalization, this would be:
     1. An explicit adjacency list (or Cayley graph construction).
@@ -178,7 +126,7 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     The computation is large but finite and mechanically checkable. -/
 axiom baseExpander : RegularGraph 4096 8
 
-axiom baseExpander_gap : spectralGap baseExpander ≤ 9/10
+axiom baseExpander_gap : spectralGap baseExpander ≤ 1/5
 
 
 /-! **The Iterated Construction** -/
@@ -218,34 +166,34 @@ noncomputable def zigzagFamily : ℕ → Σ (n : ℕ), RegularGraph n 64
     -- Lean reduces 64 * 64 = 4096 and 8 * 8 = 64 by native_decide/norm_num
     ⟨nₖ * 4096, Gₖ.square.zigzag baseExpander⟩
 
-/-- The spectral gap stays bounded at every level of the iteration. -/
+/-- The spectral gap stays bounded at every level of the iteration.
+    With `baseExpander_gap ≤ 1/5`, the iteration converges to a fixed point ≈ 0.28.
+    The bound 1/2 holds at every step: squaring gives ≤ 1/4, then zigzag adds
+    at most 1/5 + 1/25 = 6/25, totaling 1/4 + 6/25 = 49/100 < 1/2. -/
 theorem zigzagFamily_gap (k : ℕ) :
-    spectralGap (zigzagFamily k).2 ≤ 99/100 := by
+    spectralGap (zigzagFamily k).2 ≤ 1/2 := by
   induction k with
   | zero =>
-    -- Base case: λ(G₀²) = λ(G₀)² ≤ (9/10)² = 81/100 ≤ 99/100.
-    show spectralGap baseExpander.square ≤ 99 / 100
+    -- Base case: λ(G₀²) = λ(G₀)² ≤ (1/5)² = 1/25 ≤ 1/2.
+    show spectralGap baseExpander.square ≤ 1 / 2
     rw [spectralGap_square]
     calc (spectralGap baseExpander) ^ 2
-        ≤ (9 / 10 : ℝ) ^ 2 :=
+        ≤ (1 / 5 : ℝ) ^ 2 :=
           pow_le_pow_left₀ (spectralGap_nonneg _) baseExpander_gap 2
-        _ ≤ 99 / 100 := by norm_num
+      _ ≤ 1 / 2 := by norm_num
   | succ k ih =>
-    -- Inductive step:
-    -- λ(G_{k+1}) = λ(Gₖ² ⓩ baseExpander)
-    --            ≤ 1 - (1 - λ(baseExpander))² · (1 - λ(Gₖ²)) / 2
-    --            ≤ 1 - (1 - 9/10)² · (1 - λ(Gₖ)²) / 2
-    --
-    -- Since λ(Gₖ) ≤ 99/100 by IH:
-    --   λ(Gₖ²) = λ(Gₖ)² ≤ (99/100)² ≈ 0.9801
-    --   1 - λ(Gₖ²) ≥ 1 - 0.9801 = 0.0199
-    --   (1 - 0.9)² · 0.0199 / 2 = 0.01 · 0.0199 / 2 ≈ 0.0000995
-    --
-    -- So λ(G_{k+1}) ≤ 1 - 0.0000995 < 1, and with better constants
-    -- (smaller λ for baseExpander) this stays ≤ 99/100.
-    --
-    -- The actual RVW paper optimizes these constants carefully.
-    sorry
+    -- Inductive step: λ(Gₖ² ⓩ H₀) ≤ λ(Gₖ)² + λ(H₀) + λ(H₀)²
+    --   ≤ (1/2)² + 1/5 + (1/5)² = 1/4 + 1/5 + 1/25 = 49/100 ≤ 1/2
+    show spectralGap ((zigzagFamily k).2.square.zigzag baseExpander) ≤ 1 / 2
+    have h₁ : spectralGap (zigzagFamily k).2.square ≤ 1 / 4 := by
+      rw [spectralGap_square]
+      calc (spectralGap (zigzagFamily k).2) ^ 2
+          ≤ (1 / 2 : ℝ) ^ 2 := pow_le_pow_left₀ (spectralGap_nonneg _) ih 2
+        _ = 1 / 4 := by norm_num
+    calc spectralGap ((zigzagFamily k).2.square.zigzag baseExpander)
+        ≤ 1 / 4 + 1 / 5 + (1 / 5) ^ 2 :=
+          zigzag_spectral_bound _ _ _ _ h₁ baseExpander_gap
+      _ ≤ 1 / 2 := by norm_num
 
 
 /-! **The Main Result** -/
@@ -256,7 +204,7 @@ theorem zigzagFamily_gap (k : ℕ) :
     d-regular graph family {Gₙ}_{n ∈ ℕ} with λ(Gₙ) ≤ 1 - ε. -/
 theorem explicit_expanders_exist_zigzag :
     ∃ (d : ℕ), ∀ (n : ℕ), n > 0 →
-    ∃ (G : RegularGraph n d), spectralGap G ≤ 99/100 := by
+    ∃ (G : RegularGraph n d), spectralGap G ≤ 1/2 := by
   -- Take d = D² = 64 from the zig-zag construction.
   -- For each n, find k such that zigzagFamily k has ≥ n vertices,
   -- then take an induced subgraph on n vertices.

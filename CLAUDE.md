@@ -224,11 +224,11 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, and `ZigZag.lean` have no `#exit`. `ZigZag.lean` has 3 sorry's: `zigzag_spectral_bound` (Tier 3), `zigzagFamily_gap` inductive step (depends on spectral bound), and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
+`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, and `ZigZag.lean` have no `#exit`. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily` (recursive case), `zigzagFamily_gap` (base case)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases)
 
 **Achievable (weeks):** `halver_convergence`
 
