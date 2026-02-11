@@ -12,6 +12,8 @@
 
 import AKS.RegularGraph
 
+#exit
+
 open Matrix BigOperators Finset
 
 

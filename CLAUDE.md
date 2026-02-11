@@ -106,6 +106,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. Repeated `omega`/`simp` failures usually indicate the definitions need restructuring, not a cleverer tactic combination.
 
+**Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Define the function on plain vectors (`Fin n → ℝ`) as a standalone `def`, so proofs can `simp`/`unfold` it without fighting type wrappers. (2) Wrap it as a `→ₗ[ℝ]` on `EuclideanSpace`, using `WithLp.toLp 2` / `WithLp.ofLp` to bridge: `toFun f := WithLp.toLp 2 (myFun (WithLp.ofLp f))`. Prove `map_add'` and `map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap` (free in finite dimension). Finally, prove an `@[simp]` lemma `myCLM_apply` unpacking the CLM to the standalone function — this is typically `rfl` because `ofLp_toLp` is `rfl`. See `walkFun` / `walkLM` / `walkCLM` / `walkCLM_apply` in `RegularGraph.lean`.
+
 **Triangle inequality for `|·|` via `dist_triangle`.** `abs_add` is hard to find. Instead, convert to the metric space API: `|μ| = ‖μ‖ = dist μ 0` (via `Real.norm_eq_abs`, `dist_zero_right` — no `Real.` prefix), then `dist_triangle μ c 0` gives `|μ| ≤ dist μ c + ‖c‖`. Use `Real.dist_eq` for `dist x y = |x - y|`.
 
 **`↑(Finset.univ)` ≠ `Set.univ` in `MapsTo` proofs.** `card_eq_sum_card_fiberwise` needs `(s : Set ι).MapsTo f ↑t`. The coercion `↑(Finset.univ)` is `Finset.univ.toSet`, not `Set.univ`. Use `Finset.mem_coe.mpr (Finset.mem_univ _)` to prove `x ∈ ↑univ`.

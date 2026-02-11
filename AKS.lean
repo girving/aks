@@ -1,6 +1,8 @@
 import AKS.Basic
 import AKS.ZigZag
 
+#exit
+
 /-- **Connection to AKS:** This result plugs directly into the
     AKS sorting network construction.
 

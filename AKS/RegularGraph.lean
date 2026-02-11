@@ -105,6 +105,41 @@ theorem adjMatrix_isHermitian {n d : ℕ} (G : RegularGraph n d) :
   exact adjMatrix_isSymm G
 
 
+/-! **Walk Operator (CLM-first)** -/
+
+/-- The walk function on plain vectors: averages f over the d neighbors of
+    each vertex.  `(walkFun G f)(v) = (1/d) ∑ᵢ f(G.neighbor v i)`. -/
+noncomputable def RegularGraph.walkFun {n d : ℕ} (G : RegularGraph n d)
+    (f : Fin n → ℝ) : Fin n → ℝ :=
+  fun v ↦ (∑ i : Fin d, f (G.neighbor v i)) / d
+
+/-- The walk operator as a linear map on `EuclideanSpace`. -/
+noncomputable def RegularGraph.walkLM {n d : ℕ} (G : RegularGraph n d) :
+    EuclideanSpace ℝ (Fin n) →ₗ[ℝ] EuclideanSpace ℝ (Fin n) where
+  toFun f := WithLp.toLp 2 (G.walkFun (WithLp.ofLp f))
+  map_add' f g := by
+    apply PiLp.ext; intro v
+    simp [RegularGraph.walkFun, Finset.sum_add_distrib, add_div]
+  map_smul' r f := by
+    apply PiLp.ext; intro v
+    simp only [WithLp.ofLp_smul, Pi.smul_apply, smul_eq_mul,
+      RingHom.id_apply, RegularGraph.walkFun, ← Finset.mul_sum, mul_div_assoc]
+
+/-- The random walk operator of a d-regular graph, as a continuous linear map
+    on `EuclideanSpace`. Maps f to the function averaging f over neighbors:
+    `(Wf)(v) = (1/d) ∑ᵢ f(G.neighbor v i)`. -/
+noncomputable def RegularGraph.walkCLM {n d : ℕ} (G : RegularGraph n d) :
+    EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n) :=
+  G.walkLM.toContinuousLinearMap
+
+@[simp]
+theorem RegularGraph.walkCLM_apply {n d : ℕ} (G : RegularGraph n d)
+    (f : EuclideanSpace ℝ (Fin n)) (v : Fin n) :
+    G.walkCLM f v = (∑ i : Fin d, f (G.neighbor v i)) / d :=
+  rfl
+
+#exit
+
 /-! **Spectral Gap** -/
 
 /-- The spectral gap λ(G): the second-largest singular value of the
