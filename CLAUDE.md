@@ -89,20 +89,25 @@ The complete graph as a concrete example:
 ### `AKS/Mixing.lean` — Expander Mixing Lemma
 Statement of the expander mixing lemma (sorry, future work).
 
+### `AKS/Base.lean` — Base Expander Axioms
+Axiomatized base expander for the zig-zag construction:
+1. **`baseExpander`** — axiom: 8-regular graph on 4096 vertices
+2. **`baseExpander_gap`** — axiom: spectral gap ≤ 1/5
+3. **Roadmap** — for replacing axioms with a concrete verified graph (random graph + spectral certificate)
+
 ### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
-Builds on `Square.lean` with the zig-zag product construction:
+Builds on `Square.lean` and `Base.lean` with the zig-zag product construction:
 1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
 2. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ λ₁ + λ₂ + λ₂² (additive bound)
-3. **Base case** — concrete small expander (axiomatized: `baseExpander`)
-4. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
-5. **Main result** — `explicit_expanders_exist_zigzag`
+3. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
+4. **Main result** — `explicit_expanders_exist_zigzag`
 
 ### Data flow
 ```
-Fin.lean → RegularGraph.lean → Square.lean → ZigZag.lean
-                              → CompleteGraph.lean   ↓
-                              → Mixing.lean    AKS.lean
-                                                    ↑
+Fin.lean → RegularGraph.lean → Square.lean ──→ ZigZag.lean
+                              → CompleteGraph.lean    ↓
+                              → Mixing.lean     AKS.lean
+             Base.lean ─────────────────────↗      ↑
                                               Basic.lean
 ```
 

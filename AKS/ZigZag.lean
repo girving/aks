@@ -11,6 +11,7 @@
 -/
 
 import AKS.Square
+import AKS.Base
 
 open Matrix BigOperators Finset
 
@@ -100,33 +101,6 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
   -- project each block onto constants (hat) and orthogonal (tilde),
   -- then analyze the zig-zag walk's effect on each component.
   sorry
-
-
-/-! **The Base Case: A Concrete Small Expander** -/
-
-/- To bootstrap the construction, we need one explicit small expander.
-
-    We use the complete graph K_d on d vertices (minus self-loops,
-    made into a rotation map). This has:
-
-      λ(K_d) = 1/(d-1)
-
-    which is < 1 for d ≥ 3.
-
-    For the actual AKS construction, we need a specific (D⁴, D)-regular
-    graph where D is a chosen constant. We can take D = 16 and
-    verify the spectral gap of a 16-vertex graph computationally. -/
-
-/-- A concrete verified base expander. For D = 8:
-    H₀ is an 8-regular graph on 8⁴ = 4096 vertices with λ(H₀) ≤ 1/5.
-
-    In a full formalization, this would be:
-    1. An explicit adjacency list (or Cayley graph construction).
-    2. A verified eigenvalue computation using interval arithmetic.
-    The computation is large but finite and mechanically checkable. -/
-axiom baseExpander : RegularGraph 4096 8
-
-axiom baseExpander_gap : spectralGap baseExpander ≤ 1/5
 
 
 /-! **The Iterated Construction** -/
