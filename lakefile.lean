@@ -3,7 +3,8 @@ open Lake DSL
 
 package «aks» where
   leanOptions := #[
-    ⟨`autoImplicit, false⟩
+    ⟨`autoImplicit, false⟩,
+    ⟨`linter.style.multiGoal, true⟩
   ]
 
 require "leanprover-community" / "mathlib" @ git "v4.27.0"
