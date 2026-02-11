@@ -138,6 +138,38 @@ theorem RegularGraph.walkCLM_apply {n d : ℕ} (G : RegularGraph n d)
     G.walkCLM f v = (∑ i : Fin d, f (G.neighbor v i)) / d :=
   rfl
 
+
+/-! **Mean Projection (CLM-first)** -/
+
+/-- The mean function on plain vectors: maps f to the constant function
+    with value `(1/n) ∑ᵢ f(i)`. -/
+noncomputable def meanFun (n : ℕ)
+    (f : Fin n → ℝ) : Fin n → ℝ :=
+  fun _ ↦ (∑ i, f i) / n
+
+/-- The mean projection as a linear map on `EuclideanSpace`. -/
+noncomputable def meanLM (n : ℕ) :
+    EuclideanSpace ℝ (Fin n) →ₗ[ℝ] EuclideanSpace ℝ (Fin n) where
+  toFun f := WithLp.toLp 2 (meanFun n (WithLp.ofLp f))
+  map_add' f g := by
+    apply PiLp.ext; intro v
+    simp [meanFun, Finset.sum_add_distrib, add_div]
+  map_smul' r f := by
+    apply PiLp.ext; intro v
+    simp only [WithLp.ofLp_smul, Pi.smul_apply, smul_eq_mul,
+      RingHom.id_apply, meanFun, ← Finset.mul_sum, mul_div_assoc]
+
+/-- The mean projection: maps f to the constant function with value mean(f).
+    `(Pf)(v) = (1/n) ∑ᵢ f(i)`. -/
+noncomputable def meanCLM (n : ℕ) :
+    EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n) :=
+  (meanLM n).toContinuousLinearMap
+
+@[simp]
+theorem meanCLM_apply (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) (v : Fin n) :
+    meanCLM n f v = (∑ i, f i) / n :=
+  rfl
+
 #exit
 
 /-! **Spectral Gap** -/
