@@ -11,8 +11,8 @@
   More precisely: a random D-regular graph on D⁴ vertices was generated
   via the configuration model (`scripts/random-graph`), its spectral gap
   was verified numerically, and it was exported as an explicit rotation map.
-  The spectral gap bound is certified via an LDL^T decomposition of
-  `β²D²·I - A²` (see § Certificate below).
+  The spectral gap bound is currently axiomatized (see § Certificate below
+  for why verified certificates are impractical for random graphs).
 
   ## Certificate for Spectral Gap Verification
 
@@ -28,6 +28,15 @@
   - Eigenvector certificate: n rational eigenvectors × n entries each = O(n²).
   - Gram matrix: G^T G = C requires O(n²) entries in G.
 
+  **Scaled diagonal dominance (SDD):** Find D such that DMD is diagonally
+  dominant, proving M = αI - A ≽ 0. Fails because the diagonal dominance
+  constraint sums to α ≥ D over all vertices (double-counting in D-regular
+  graphs), but we need α = 7 < D = 12.
+
+  **Edge-decomposable PSD:** Write M = Σ (2×2 PSD blocks on edges) + diag(u).
+  Fails because AM-GM gives each edge cost ≥ 2 (from a_{ij}·a_{ji} ≥ 1),
+  total ≥ 2|E| = nD, but the budget from the diagonal is only nα < nD.
+
   **Trace method (O(1) data, but infeasible verification):**
   - Certificate: `tr(A^{2k})` for k ≈ 91 (to get (n-1)^{1/(2k)} · max|λ| ≤ βD).
   - Verification requires computing tr(A^{2k}), which is O(n² · k) — infeasible in
@@ -35,6 +44,15 @@
   - For small k (e.g., k = 2, walks of length 4), verification is ~n·D⁴ ≈ 4·10⁸
     comparisons (borderline feasible), but the bound is far too loose
     (gives max|λ| ≤ 40 instead of the needed ≤ 7).
+
+  **Krylov / Lanczos (O(n) data, but exact arithmetic infeasible):**
+  Full Lanczos (k = n-1 steps) from a starting vector produces a tridiagonal
+  matrix T whose eigenvalues equal those of A|_{1⊥}. Certificate would be
+  q₁ + tridiagonal T + LDL^T of βD·I ± T. Size O(n), no fill-in.
+  Problem: exact integer Lanczos has exponential coefficient growth (~D^k bits
+  at step k). Experimentally on n=24: integers reach 1.4M bits by step 12,
+  with each step ~3.7× larger. Extrapolating to n=20736: infeasible.
+  (See `scripts/krylov-cert` for experiments.)
 
   **Current approach: axioms.**
   Standard in formalization projects. The axioms are justified by numerical

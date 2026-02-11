@@ -1,0 +1,416 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["numpy", "scipy"]
+# ///
+"""Experiment: Krylov (Lanczos) certificates for spectral gap bounds.
+
+Tests whether a Lanczos-based certificate is practical for certifying
+spectral gap of random D-regular graphs.
+
+RESULT: Infeasible for exact arithmetic. Integer growth is exponential
+(~D^k bits at step k). On a tiny n=24 graph, step 12 already has 1.4M-bit
+integers and takes 18s. Full Lanczos (k = n-1 = 20735 for the target graph)
+would require integers with millions of bits. Floating-point Lanczos
+converges beautifully but is not suitable for formal verification.
+
+Certificate structure (if exact arithmetic were feasible):
+  - Starting vector q₁ ∈ ℤⁿ with Σq₁[i] = 0 (in 1⊥)
+  - Tridiagonal T_{k×k} with entries (α₁,...,αₖ, β₁,...,β_{k-1})
+  - LDL^T of (βD)I - T and (βD)I + T (tridiagonal → no fill-in)
+  - Size O(n) numbers, verification O(n²D) ops
+"""
+
+import argparse
+import math
+import sys
+import time
+
+import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import eigsh
+
+# Import graph generation from random-graph
+sys.path.insert(0, "scripts")
+
+
+# ---------------------------------------------------------------------------
+# Graph generation (duplicated essentials from random-graph)
+# ---------------------------------------------------------------------------
+
+def _config_model_raw(n, d, rng):
+    nd = n * d
+    perm = rng.permutation(nd)
+    matching = np.empty(nd, dtype=np.int64)
+    for k in range(0, nd, 2):
+        a, b = int(perm[k]), int(perm[k + 1])
+        matching[a] = b
+        matching[b] = a
+    return matching
+
+
+def _find_defect_indices(matching, n, d):
+    nd = n * d
+    defects = []
+    seen_edges = {}
+    for k in range(nd):
+        partner = int(matching[k])
+        if partner <= k:
+            continue
+        v, w = k // d, partner // d
+        if v == w:
+            defects.extend([k, partner])
+        else:
+            edge = (min(v, w), max(v, w))
+            if edge in seen_edges:
+                if seen_edges[edge] is not None:
+                    defects.extend(seen_edges[edge])
+                    seen_edges[edge] = None
+                defects.extend([k, partner])
+            else:
+                seen_edges[edge] = [k, partner]
+    return defects
+
+
+def _switch_defects(matching, n, d, rng, max_iters=200000):
+    nd = n * d
+    for _ in range(max_iters):
+        defects = _find_defect_indices(matching, n, d)
+        if not defects:
+            return True
+        bad = defects[rng.integers(len(defects))]
+        bad_partner = int(matching[bad])
+        for _ in range(50):
+            good = int(rng.integers(nd))
+            if good == bad or good == bad_partner:
+                continue
+            good_partner = int(matching[good])
+            if good_partner == bad or good_partner == bad_partner:
+                continue
+            v_bad, v_gp = bad // d, good_partner // d
+            v_good, v_bp = good // d, bad_partner // d
+            if v_bad == v_gp or v_good == v_bp:
+                continue
+            matching[bad] = good_partner
+            matching[good_partner] = bad
+            matching[good] = bad_partner
+            matching[bad_partner] = good
+            break
+    return len(_find_defect_indices(matching, n, d)) == 0
+
+
+def make_graph(n, d, seed):
+    """Generate a simple D-regular graph, return sparse adjacency."""
+    rng = np.random.default_rng(seed)
+    assert n * d % 2 == 0
+    matching = _config_model_raw(n, d, rng)
+    ok = _switch_defects(matching, n, d, rng)
+    if not ok:
+        return None
+    rows, cols = [], []
+    for k in range(n * d):
+        partner = int(matching[k])
+        if partner > k:
+            v, w = k // d, partner // d
+            rows.extend([v, w])
+            cols.extend([w, v])
+    data = np.ones(len(rows), dtype=np.float64)
+    return csr_matrix((data, (rows, cols)), shape=(n, n))
+
+
+# ---------------------------------------------------------------------------
+# Raw Lanczos (no restart, no reorthogonalization)
+# ---------------------------------------------------------------------------
+
+def lanczos_raw(A, q1, k_max):
+    """Run raw Lanczos on sparse matrix A starting from q1.
+
+    Returns (alphas, betas, Q) where:
+      alphas[j] = q_j^T A q_j  (j = 0, ..., k-1)
+      betas[j] = ||r_j||       (j = 0, ..., k-2)
+      Q[:, j] = q_j            (orthonormal Lanczos vectors)
+    """
+    n = A.shape[0]
+    k = min(k_max, n)
+
+    alphas = np.zeros(k)
+    betas = np.zeros(k)  # betas[j] = beta_j (coupling j → j+1)
+    Q = np.zeros((n, k))
+
+    Q[:, 0] = q1 / np.linalg.norm(q1)
+
+    for j in range(k):
+        w = A @ Q[:, j]
+        alphas[j] = Q[:, j] @ w
+
+        if j == 0:
+            r = w - alphas[j] * Q[:, j]
+        else:
+            r = w - alphas[j] * Q[:, j] - betas[j - 1] * Q[:, j - 1]
+
+        betas[j] = np.linalg.norm(r)
+
+        if j < k - 1:
+            if betas[j] < 1e-14:
+                # Krylov space closed early
+                return alphas[:j + 1], betas[:j], Q[:, :j + 1]
+            Q[:, j + 1] = r / betas[j]
+
+    return alphas, betas[:-1], Q
+
+
+def lanczos_with_reorth(A, q1, k_max):
+    """Lanczos with full reorthogonalization + projection onto 1⊥.
+
+    Projects onto 1⊥ at each step to prevent the trivial eigenvalue
+    (λ = D for D-regular graphs) from leaking in via round-off.
+    """
+    n = A.shape[0]
+    k = min(k_max, n)
+    ones = np.ones(n) / math.sqrt(n)  # unit vector in direction of 1
+
+    alphas = np.zeros(k)
+    betas = np.zeros(k)
+    Q = np.zeros((n, k))
+
+    q = q1 - (q1 @ ones) * ones  # project onto 1⊥
+    Q[:, 0] = q / np.linalg.norm(q)
+
+    for j in range(k):
+        w = A @ Q[:, j]
+        # Project onto 1⊥
+        w -= (w @ ones) * ones
+        alphas[j] = Q[:, j] @ w
+
+        if j == 0:
+            r = w - alphas[j] * Q[:, j]
+        else:
+            r = w - alphas[j] * Q[:, j] - betas[j - 1] * Q[:, j - 1]
+
+        # Full reorthogonalization
+        for i in range(j + 1):
+            r -= (Q[:, i] @ r) * Q[:, i]
+        # Re-project onto 1⊥ (belt and suspenders)
+        r -= (r @ ones) * ones
+
+        betas[j] = np.linalg.norm(r)
+
+        if j < k - 1:
+            if betas[j] < 1e-14:
+                return alphas[:j + 1], betas[:j], Q[:, :j + 1]
+            Q[:, j + 1] = r / betas[j]
+
+    return alphas, betas[:-1], Q
+
+
+def tridiag_eigenvalues(alphas, betas):
+    """Compute eigenvalues of symmetric tridiagonal matrix."""
+    from scipy.linalg import eigh_tridiagonal
+    return eigh_tridiagonal(alphas, betas, eigvals_only=True)
+
+
+def tridiag_ldlt_check(alphas, betas, bound):
+    """Check if bound*I - T is PSD via tridiagonal LDL^T.
+
+    For tridiagonal T with diagonal alphas and off-diagonal betas,
+    checks bound*I - T ≥ 0 by computing LDL^T with no fill-in.
+
+    Returns (is_psd, min_d) where min_d is the smallest diagonal entry.
+    """
+    n = len(alphas)
+    d = np.zeros(n)
+    d[0] = bound - alphas[0]
+    for i in range(1, n):
+        if d[i - 1] <= 0:
+            return False, d[i - 1]
+        l = -betas[i - 1] / d[i - 1]
+        d[i] = (bound - alphas[i]) - l * (-betas[i - 1])
+    return all(d >= -1e-12), np.min(d)
+
+
+# ---------------------------------------------------------------------------
+# Chebyshev amplification analysis
+# ---------------------------------------------------------------------------
+
+def chebyshev_amplification(k, ratio):
+    """Compute T_k(ratio) where T_k is the Chebyshev polynomial.
+
+    For ratio > 1, this amplifies exponentially: T_k(r) ≈ cosh(k·acosh(r)).
+    """
+    if ratio <= 1:
+        return math.cos(k * math.acos(ratio))
+    return math.cosh(k * math.acosh(ratio))
+
+
+# ---------------------------------------------------------------------------
+# Main experiment
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Krylov certificate experiments for spectral gap')
+    parser.add_argument('-d', type=int, default=12, help='Degree')
+    parser.add_argument('-n', type=int, default=None, help='Vertices (default: d⁴)')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--bound', type=float, default=None,
+                        help='Spectral gap bound βD (default: ceil(AB*D))')
+    parser.add_argument('--max-k', type=int, default=500,
+                        help='Max Lanczos iterations')
+    parser.add_argument('--full', action='store_true',
+                        help='Run full Lanczos (k = n-1)')
+    args = parser.parse_args()
+
+    d = args.d
+    n = args.n if args.n else d ** 4
+
+    print(f"D = {d}, n = {n:,}")
+
+    # Alon-Boppana bound
+    ab = 2 * math.sqrt(d - 1) / d
+    ab_abs = 2 * math.sqrt(d - 1)
+    bound = args.bound if args.bound else math.ceil(ab_abs)
+    beta = bound / d
+
+    print(f"Alon-Boppana: β ≥ {ab:.6f}, |λ| ≥ {ab_abs:.4f}")
+    print(f"Certificate bound: |λ| ≤ {bound} (β = {beta:.4f})")
+    print()
+
+    # --- Generate graph ---
+    print(f"Generating {d}-regular simple graph on {n} vertices (seed={args.seed})...")
+    t0 = time.time()
+    A = make_graph(n, d, args.seed)
+    if A is None:
+        print("Failed to generate simple graph!")
+        sys.exit(1)
+    print(f"  Generated in {time.time() - t0:.1f}s")
+    print(f"  nnz(A) = {A.nnz:,}")
+    print()
+
+    # --- True eigenvalues (sparse) ---
+    print("Computing extreme eigenvalues (scipy eigsh)...")
+    t0 = time.time()
+    nev = min(20, n - 2)
+    top = eigsh(A, k=nev, which='LM', return_eigenvectors=False)
+    bot = eigsh(A, k=nev, which='SA', return_eigenvectors=False)
+    top_sorted = np.sort(top)[::-1]
+    bot_sorted = np.sort(bot)
+    elapsed = time.time() - t0
+
+    lam_max = top_sorted[1]  # second-largest (first is D)
+    lam_min = bot_sorted[0]  # most negative
+    spectral_gap = max(abs(lam_max), abs(lam_min)) / d
+
+    print(f"  Time: {elapsed:.1f}s")
+    print(f"  Trivial eigenvalue: {top_sorted[0]:.4f} (should be {d})")
+    print(f"  λ₂ = {lam_max:.6f}")
+    print(f"  λₙ = {lam_min:.6f}")
+    print(f"  max|λ non-trivial| = {max(abs(lam_max), abs(lam_min)):.6f}")
+    print(f"  Spectral gap β = {spectral_gap:.6f}")
+    print(f"  Gap to bound: {bound} - {max(abs(lam_max), abs(lam_min)):.4f}"
+          f" = {bound - max(abs(lam_max), abs(lam_min)):.4f}")
+    print()
+
+    # --- Lanczos convergence experiment ---
+    # Starting vector: e_0 - e_1 (in 1⊥)
+    q1 = np.zeros(n)
+    q1[0] = 1.0
+    q1[1] = -1.0
+    # Project onto 1⊥ (should already be, since sum = 0)
+    q1 -= q1.mean()
+
+    k_max = n - 1 if args.full else args.max_k
+    print(f"Running Lanczos with reorthogonalization (k_max = {k_max})...")
+    t0 = time.time()
+    alphas, betas, Q = lanczos_with_reorth(A, q1, k_max)
+    lanczos_time = time.time() - t0
+    k_actual = len(alphas)
+    print(f"  Completed {k_actual} steps in {lanczos_time:.1f}s")
+    print(f"  Final β_{k_actual-1} = {betas[-1] if len(betas) > 0 else 'N/A':.6e}")
+    print()
+
+    # --- Convergence analysis ---
+    print("Lanczos convergence (max |Ritz value| vs k):")
+    print(f"{'k':>6}  {'max|θ|':>12}  {'gap to bound':>12}  {'β_k':>12}  "
+          f"{'cert ok?':>8}  {'time (ms)':>10}")
+    print("=" * 75)
+
+    checkpoints = sorted(set(
+        [10, 20, 30, 50, 75, 100, 150, 200, 300, 500, 750, 1000,
+         2000, 5000, 10000, k_actual]
+    ))
+
+    for k in checkpoints:
+        if k > k_actual:
+            break
+
+        t0 = time.time()
+        # Eigenvalues of the k×k tridiagonal
+        ritz = tridiag_eigenvalues(alphas[:k], betas[:k - 1])
+        max_ritz = np.max(np.abs(ritz))
+        gap = bound - max_ritz
+
+        # Check LDL^T certificate for bound*I ± T
+        pos_ok, pos_min_d = tridiag_ldlt_check(alphas[:k], betas[:k - 1], bound)
+        neg_ok, neg_min_d = tridiag_ldlt_check(-alphas[:k], betas[:k - 1], bound)
+        cert_ok = pos_ok and neg_ok
+
+        beta_k = betas[k - 1] if k - 1 < len(betas) else 0.0
+        elapsed_ms = (time.time() - t0) * 1000
+
+        status = "YES" if cert_ok else "no"
+        print(f"{k:>6}  {max_ritz:>12.6f}  {gap:>12.6f}  {beta_k:>12.4e}  "
+              f"{status:>8}  {elapsed_ms:>10.1f}")
+
+    print()
+
+    # --- Chebyshev amplification analysis ---
+    actual_max = max(abs(lam_max), abs(lam_min))
+    ratio = bound / actual_max if actual_max > 0 else float('inf')
+    print(f"Chebyshev amplification analysis (ratio = {bound}/{actual_max:.4f} = {ratio:.4f}):")
+    print(f"  acosh({ratio:.4f}) = {math.acosh(ratio):.6f}")
+    print(f"  For detection of outlier eigenvalue (need T_k(ratio)² ≥ n = {n}):")
+    for k in [10, 20, 30, 50, 100, 200]:
+        amp = chebyshev_amplification(k, ratio)
+        signal = amp ** 2 / n
+        print(f"    k={k:>4}: T_k = {amp:.2e}, signal/noise = {signal:.2e}"
+              f" {'(detectable)' if signal > 10 else ''}")
+    print()
+
+    # --- Certificate size analysis ---
+    print("Certificate data sizes:")
+    print(f"  Rotation map: {n * d * 2:,} integers ({n * d * 2 * 4 / 1e6:.1f} MB as int32)")
+    print(f"  Starting vector q₁: {n:,} integers")
+    print(f"  Tridiagonal T (full, k={n-1}): {2*(n-1)-1:,} rationals")
+    print(f"  Tridiagonal T (k={min(500, k_actual)}): {2*min(500,k_actual)-1:,} rationals")
+    print(f"  LDL^T certificates: 2 × {n-1:,} rationals (tridiag → no fill-in)")
+    print(f"  Total (full Lanczos): ~{4*n:,} numbers ≈ {4*n*8/1e6:.1f} MB")
+    print()
+
+    # --- Verification cost analysis ---
+    print("Verification cost estimates:")
+    full_ops = (n - 1) * (n * d + n)
+    print(f"  Full Lanczos reconstruction (k={n-1}): {full_ops:.2e} ops")
+    print(f"    At 1M ops/s (Lean kernel): {full_ops/1e6:.0f}s = {full_ops/1e6/60:.0f} min")
+    print(f"    At 10M ops/s (decide +kernel): {full_ops/1e7:.0f}s = {full_ops/1e7/60:.0f} min")
+    print(f"    At 1G ops/s (native/compiled): {full_ops/1e9:.1f}s")
+
+    for kk in [100, 200, 500]:
+        if kk > k_actual:
+            continue
+        trunc_ops = kk * (n * d + n)
+        print(f"  Truncated Lanczos (k={kk}): {trunc_ops:.2e} ops")
+        print(f"    At 10M ops/s: {trunc_ops/1e7:.1f}s")
+    print()
+
+    # --- Orthogonality check ---
+    print("Orthogonality quality (Q^T Q - I):")
+    for k in [100, 200, min(500, k_actual)]:
+        if k > k_actual:
+            break
+        Qk = Q[:, :k]
+        orth_err = np.linalg.norm(Qk.T @ Qk - np.eye(k))
+        print(f"  k={k}: ||Q^T Q - I|| = {orth_err:.2e}")
+
+
+if __name__ == '__main__':
+    main()
