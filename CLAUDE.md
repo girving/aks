@@ -12,11 +12,51 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 
 ```bash
 lake build          # Build the project (first build downloads mathlib, takes a long time)
-lake env printPaths # Show build paths
 lake clean          # Clean build artifacts
 ```
 
 There are no tests or linter configurations. Correctness is verified through Lean's type checker — if `lake build` succeeds, all type-checked proofs are valid.
+
+### Fast Incremental Checking
+
+For iterative proof development, use the persistent Lean language server daemon instead of `lake build`. It keeps Mathlib imports in memory and re-elaborates only from the change point forward.
+
+```bash
+scripts/lean-check --start                  # Start daemon (once per session, ~5s)
+scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits near end)
+scripts/lean-check --stop                   # Stop daemon
+```
+
+**Measured speedups** (RegularGraph.lean, 667 lines):
+| Change location | `lean-check` | `lake build` |
+|---|---|---|
+| End of file | 0.2s | 20s |
+| Line 660/667 | 1.6s | 20s |
+| Line 320/667 | 17s | 20s |
+
+The daemon re-elaborates from the change point to the end. Since proof iteration typically happens at the end of a file, most checks are sub-second. Use `lake build` for final validation before committing (it also checks downstream files).
+
+### Mathlib Searches
+
+`rg` (ripgrep) through `.lake/packages/mathlib/Mathlib/` takes ~0.2s for any pattern. This is already fast. Example:
+```bash
+rg 'IsSelfAdjoint.norm_mul_self' .lake/packages/mathlib/Mathlib/
+```
+
+### Tool Speed Expectations
+
+Track tool performance against these baselines. If a command exceeds its expected time by 2x+, investigate and record in `scripts/SLOW_COMMANDS.md`.
+
+| Operation | Expected time | If slower, check |
+|---|---|---|
+| `rg` through Mathlib | ~0.2s | Disk I/O, cold cache |
+| `lean-check` (warm, edit near end) | 0.2-2s | Daemon crashed? Restart |
+| `lean-check` (cold, first open) | 20-30s | Normal for large files |
+| `lake build` (all cached) | ~1.6s | Nothing changed? |
+| `lake build` (one file changed) | ~20s | Normal; use `lean-check` instead |
+| `git` operations | <1s | Large repo / network |
+
+**Timeout protocol:** When any tool call times out, record it in `scripts/SLOW_COMMANDS.md` with context (what file, what operation, wall time). Then investigate root cause.
 
 ## Architecture
 

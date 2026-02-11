@@ -2,3 +2,4 @@
 lake-packages/
 build/
 lake-manifest.json
+/tmp/lean-daemon.*
