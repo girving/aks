@@ -82,7 +82,7 @@ Graph squaring and the spectral gap squaring identity:
 2. **CLM identities** — self-adjointness, idempotency, `WP = PW = P`
 3. **Spectral gap squaring** — `spectralGap_square`: λ(G²) = λ(G)²
 
-### `AKS/Complete.lean` — Complete Graph (~108 lines)
+### `AKS/CompleteGraph.lean` — Complete Graph (~108 lines)
 The complete graph as a concrete example:
 1. **Complete graph** — `completeGraph` via `Fin.succAbove`/`Fin.predAbove`
 2. **Spectral gap** — `spectralGap_complete`: λ(K_{n+1}) = 1/n
@@ -101,7 +101,7 @@ Builds on `Square.lean` with the zig-zag product construction:
 ### Data flow
 ```
 Fin.lean → RegularGraph.lean → Square.lean → ZigZag.lean
-                              → Complete.lean       ↓
+                              → CompleteGraph.lean   ↓
                               → Mixing.lean    AKS.lean
                                                     ↑
                                               Basic.lean
@@ -113,6 +113,7 @@ Fin.lean → RegularGraph.lean → Square.lean → ZigZag.lean
 - In markdown/comments, backtick-quote Lean identifiers and filenames: `` `Fin` ``, not `Fin`; `` `ZigZag.lean` ``, not `ZigZag.lean`
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
 - Keep mathematically high-level files (e.g., `ZigZag.lean`) clean by moving reusable helpers (e.g., `Fin` arithmetic lemmas) into their own files (e.g., `AKS/Fin.lean`). Iterate with helpers in the same file during development, then extract as a final pass before committing.
+- Split files that grow beyond ~300 lines. Smaller files mean faster incremental checking (the Lean server re-elaborates from the change point, but only within the current file — imports are precompiled). The optimal split point for tooling-assisted development is smaller than for human-authored files.
 
 ## Key Lean/Mathlib Conventions
 
@@ -222,7 +223,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-`RegularGraph.lean`, `Square.lean`, and `Complete.lean` have no `#exit` and no `sorry`. The spectral gap infrastructure is fully proved. The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
+`RegularGraph.lean`, `Square.lean`, and `CompleteGraph.lean` have no `#exit` and no `sorry`. The spectral gap infrastructure is fully proved. The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
 
 ## Proof Status by Difficulty
 

@@ -1,5 +1,5 @@
 import AKS.Basic
-import AKS.Complete
+import AKS.CompleteGraph
 import AKS.Mixing
 import AKS.ZigZag
 
