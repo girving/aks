@@ -20,6 +20,7 @@ import Mathlib.Analysis.Normed.Group.Basic
 import Mathlib.Combinatorics.SimpleGraph.Basic
 import Mathlib.Data.Matrix.Basic
 import Mathlib.Analysis.CStarAlgebra.Matrix
+import Mathlib.Algebra.Order.Chebyshev
 
 open Matrix BigOperators Finset
 
@@ -170,121 +171,167 @@ theorem meanCLM_apply (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) (v : Fin n) :
     meanCLM n f v = (∑ i, f i) / n :=
   rfl
 
-#exit
+
+/-! **Operator Norm Helpers** -/
+
+/-- The rotation map as an equivalence (since it's an involution). -/
+private def RegularGraph.rotEquiv {n d : ℕ} (G : RegularGraph n d) :
+    Fin n × Fin d ≃ Fin n × Fin d where
+  toFun := G.rot
+  invFun := G.rot
+  left_inv := G.rot_involution
+  right_inv := G.rot_involution
+
+/-- Double-counting via the rotation bijection: summing g(neighbor(v,i))
+    over all vertex-port pairs equals summing g(v) over all pairs. -/
+private theorem RegularGraph.sum_neighbor_eq {n d : ℕ} (G : RegularGraph n d)
+    (g : Fin n → ℝ) :
+    ∑ v : Fin n, ∑ i : Fin d, g (G.neighbor v i) =
+    ∑ v : Fin n, ∑ _i : Fin d, g v := by
+  simp_rw [← Fintype.sum_prod_type']
+  exact G.rotEquiv.sum_comp (fun p ↦ g p.1)
+
+
+/-- The walk operator is a contraction: ‖W‖ ≤ 1. -/
+theorem RegularGraph.walkCLM_norm_le_one {n d : ℕ} (G : RegularGraph n d) :
+    ‖G.walkCLM‖ ≤ 1 := by
+  apply ContinuousLinearMap.opNorm_le_bound _ zero_le_one
+  intro f; rw [one_mul]
+  -- Reduce to squared norms via sqrt
+  rw [← Real.sqrt_sq (norm_nonneg (G.walkCLM f)), ← Real.sqrt_sq (norm_nonneg f)]
+  apply Real.sqrt_le_sqrt
+  simp_rw [EuclideanSpace.norm_sq_eq, Real.norm_eq_abs, sq_abs, walkCLM_apply]
+  -- Goal: ∑ v, ((∑ i, f(nbr v i)) / d)² ≤ ∑ v, (f v)²
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · simp; exact Finset.sum_nonneg (fun _ _ ↦ sq_nonneg _)
+  · have hd_pos : (0 : ℝ) < d := Nat.cast_pos.mpr hd
+    have hd_ne : (d : ℝ) ≠ 0 := ne_of_gt hd_pos
+    -- Jensen: ((∑ x_i) / d)² ≤ (∑ x_i²) / d
+    have jensen : ∀ v : Fin n, ((∑ i : Fin d, f (G.neighbor v i)) / ↑d) ^ 2 ≤
+        (∑ i : Fin d, f (G.neighbor v i) ^ 2) / ↑d := by
+      intro v
+      have cs := @sq_sum_le_card_mul_sum_sq (Fin d) ℝ _ _ _ _
+        Finset.univ (fun i ↦ f (G.neighbor v i))
+      simp only [Finset.card_univ, Fintype.card_fin] at cs
+      rw [div_pow, sq (d : ℝ), ← div_div]
+      apply div_le_div_of_nonneg_right _ hd_pos.le
+      rw [div_le_iff₀ hd_pos, mul_comm]
+      exact cs
+    -- Sum Jensen, then double-count, then simplify
+    calc ∑ v, ((∑ i : Fin d, f (G.neighbor v i)) / ↑d) ^ 2
+        ≤ ∑ v, (∑ i : Fin d, f (G.neighbor v i) ^ 2) / ↑d :=
+          Finset.sum_le_sum (fun v _ ↦ jensen v)
+      _ = (∑ v, ∑ i, f (G.neighbor v i) ^ 2) / ↑d := by
+          rw [Finset.sum_div]
+      _ = (∑ v, ∑ _i : Fin d, f v ^ 2) / ↑d := by
+          rw [G.sum_neighbor_eq (fun v ↦ f v ^ 2)]
+      _ = (∑ v, ↑d * (f v ^ 2)) / ↑d := by
+          congr 1; apply Finset.sum_congr rfl; intro v _
+          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+      _ = ∑ v, f v ^ 2 := by
+          rw [← Finset.mul_sum, mul_div_cancel_left₀ _ hd_ne]
 
 /-! **Spectral Gap** -/
 
-/-- The spectral gap λ(G): the second-largest singular value of the
-    normalized adjacency matrix.
+/-- The spectral gap λ(G): the operator norm of the walk operator
+    restricted to the subspace orthogonal to the constant functions.
 
-    Equivalently, the operator norm of M restricted to the subspace
-    orthogonal to the all-ones vector:
+      λ(G) = ‖W - P‖
 
-      λ(G) = max { |⟨Mx, x⟩| / ⟨x, x⟩ : x ⊥ 𝟏 }
-
+    where W is the random walk operator and P is the mean projection.
     We have 0 ≤ λ(G) ≤ 1, with λ(G) close to 0 meaning
     excellent expansion. -/
 noncomputable def spectralGap {n d : ℕ} (G : RegularGraph n d) : ℝ :=
-  if h : n ≤ 1 then 0
-  else
-    let evs := (adjMatrix_isHermitian G).eigenvalues₀
-    max (evs ⟨1, by rw [Fintype.card_fin]; omega⟩)
-        (-(evs ⟨n - 1, by rw [Fintype.card_fin]; omega⟩))
+  ‖G.walkCLM - meanCLM n‖
 
-/-- Basic property: the spectral gap lies in [0, 1]. -/
+/-- The spectral gap is nonneg. -/
 theorem spectralGap_nonneg {n d : ℕ} (G : RegularGraph n d) :
-    0 ≤ spectralGap G := by
-  unfold spectralGap
-  split_ifs with h
-  · exact le_refl _
-  · push_neg at h
-    have hanti := (adjMatrix_isHermitian G).eigenvalues₀_antitone
-    have hle : (⟨1, by rw [Fintype.card_fin]; omega⟩ : Fin (Fintype.card (Fin n))) ≤
-               ⟨n - 1, by rw [Fintype.card_fin]; omega⟩ := by
-      simp only [Fin.le_iff_val_le_val]; omega
-    by_cases hev : 0 ≤ (adjMatrix_isHermitian G).eigenvalues₀
-        ⟨1, by rw [Fintype.card_fin]; omega⟩
-    · exact le_max_of_le_left hev
-    · push_neg at hev
-      exact le_max_of_le_right (by linarith [hanti hle])
+    0 ≤ spectralGap G :=
+  norm_nonneg _
 
-private theorem adjMatrix_entry_nonneg {n d : ℕ} (G : RegularGraph n d) (u v : Fin n) :
-    0 ≤ adjMatrix G u v :=
-  div_nonneg (Nat.cast_nonneg _) (Nat.cast_nonneg _)
-
-private theorem adjMatrix_norm_row_sum_le {n d : ℕ} (G : RegularGraph n d) (u : Fin n) :
-    ∑ v, ‖adjMatrix G u v‖ ≤ 1 := by
-  simp_rw [Real.norm_of_nonneg (adjMatrix_entry_nonneg G u _), adjMatrix_apply, ← Finset.sum_div]
-  rcases Nat.eq_zero_or_pos d with rfl | hd
+/-- The mean projection doesn't increase the norm: ‖Pf‖ ≤ ‖f‖. -/
+private theorem meanCLM_apply_norm_le (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) :
+    ‖meanCLM n f‖ ≤ ‖f‖ := by
+  rw [← Real.sqrt_sq (norm_nonneg _), ← Real.sqrt_sq (norm_nonneg f)]
+  apply Real.sqrt_le_sqrt
+  rw [EuclideanSpace.norm_sq_eq, EuclideanSpace.norm_sq_eq]
+  simp_rw [Real.norm_eq_abs, sq_abs, meanCLM_apply]
+  -- Goal: ∑ v, ((∑ i, f i) / n)² ≤ ∑ v, (f v)²
+  rcases n.eq_zero_or_pos with rfl | hn
   · simp
-  · have h_nat : (Finset.univ : Finset (Fin d)).card =
-        ∑ v ∈ (Finset.univ : Finset (Fin n)),
-          (Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card :=
-      Finset.card_eq_sum_card_fiberwise (fun _ _ ↦ Finset.mem_coe.mpr (Finset.mem_univ _))
-    simp only [Finset.card_univ, Fintype.card_fin] at h_nat
-    have h_sum : (∑ v : Fin n,
-        ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ)) = d := by
-      exact_mod_cast h_nat.symm
-    rw [h_sum, div_self (Nat.cast_ne_zero.mpr (by omega))]
+  · have hn_pos : (0 : ℝ) < n := Nat.cast_pos.mpr hn
+    have cs := @sq_sum_le_card_mul_sum_sq (Fin n) ℝ _ _ _ _
+      Finset.univ (fun i ↦ f i)
+    simp only [Finset.card_univ, Fintype.card_fin] at cs
+    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, div_pow]
+    -- Goal: n * (∑ f)² / n² ≤ ∑ f²
+    have h_simp : ↑n * ((∑ i : Fin n, f i) ^ 2 / (↑n) ^ 2) =
+        (∑ i : Fin n, f i) ^ 2 / ↑n := by
+      field_simp
+    rw [h_simp, div_le_iff₀ hn_pos]
+    linarith [mul_comm (↑n : ℝ) (∑ x : Fin n, f x ^ 2)]
 
-private theorem adjMatrix_eigenvalue_abs_le_one {n d : ℕ} (G : RegularGraph n d)
-    {μ : ℝ} (hμ : μ ∈ spectrum ℝ (adjMatrix G)) : |μ| ≤ 1 := by
-  rw [← Matrix.spectrum_toLin'] at hμ
-  have hev : Module.End.HasEigenvalue (Matrix.toLin' (adjMatrix G)) μ :=
-    Module.End.HasEigenvalue.of_mem_spectrum hμ
-  obtain ⟨k, hk⟩ := eigenvalue_mem_ball hev
-  rw [Metric.mem_closedBall] at hk
-  have hnn := adjMatrix_entry_nonneg G k k
-  calc |μ| = ‖μ‖ := (Real.norm_eq_abs μ).symm
-    _ = dist μ 0 := (dist_zero_right μ).symm
-    _ ≤ dist μ (adjMatrix G k k) + dist (adjMatrix G k k) 0 := dist_triangle _ _ _
-    _ = dist μ (adjMatrix G k k) + ‖adjMatrix G k k‖ := by rw [dist_zero_right]
-    _ ≤ (∑ j ∈ Finset.univ.erase k, ‖adjMatrix G k j‖) + ‖adjMatrix G k k‖ := by
-        linarith
-    _ = ∑ j, ‖adjMatrix G k j‖ := Finset.sum_erase_add _ _ (Finset.mem_univ k)
-    _ ≤ 1 := adjMatrix_norm_row_sum_le G k
+/-- Subtracting the mean doesn't increase the norm: ‖f - Pf‖ ≤ ‖f‖. -/
+private theorem norm_sub_meanCLM_le (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) :
+    ‖f - meanCLM n f‖ ≤ ‖f‖ := by
+  rw [← Real.sqrt_sq (norm_nonneg _), ← Real.sqrt_sq (norm_nonneg f)]
+  apply Real.sqrt_le_sqrt
+  rw [EuclideanSpace.norm_sq_eq, EuclideanSpace.norm_sq_eq]
+  simp_rw [Real.norm_eq_abs, sq_abs]
+  have hfv : ∀ v : Fin n, (f - meanCLM n f) v = f v - (∑ i, f i) / ↑n := by
+    intro v; simp [meanCLM_apply]
+  simp_rw [hfv]
+  -- Goal: ∑ v, (f v - (∑ i, f i) / n)² ≤ ∑ v, (f v)²
+  -- ∑(f v - μ)² = ∑ f v² - (∑ f)²/n ≤ ∑ f v²  (by CS: (∑ f)²/n ≥ 0)
+  set S := ∑ i : Fin n, f i
+  have expand : ∀ v : Fin n, (f v - S / ↑n) ^ 2 =
+      f v ^ 2 - 2 * (S / ↑n) * f v + (S / ↑n) ^ 2 := fun v ↦ by ring
+  simp_rw [expand, Finset.sum_add_distrib, Finset.sum_sub_distrib,
+    ← Finset.mul_sum, Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  -- Need: ∑ f v² - 2(S/n)·S + n·(S/n)² ≤ ∑ f v²
+  -- i.e., n·(S/n)² ≤ 2(S/n)·S
+  rcases n.eq_zero_or_pos with rfl | hn
+  · simp
+  · have hn_pos : (0 : ℝ) < n := Nat.cast_pos.mpr hn
+    have hn_ne := ne_of_gt hn_pos
+    -- 2(S/n)·S - n·(S/n)² = S²/n ≥ 0
+    have key : 2 * (S / ↑n) * S - ↑n * (S / ↑n) ^ 2 = S ^ 2 / ↑n := by
+      field_simp; ring
+    linarith [div_nonneg (sq_nonneg S) hn_pos.le]
+
+/-- The walk operator preserves the mean projection: W(Pf) = Pf (when d > 0). -/
+private theorem walkCLM_comp_meanCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
+    ∀ f : EuclideanSpace ℝ (Fin n), G.walkCLM (meanCLM n f) = meanCLM n f := by
+  intro f; ext v
+  simp only [RegularGraph.walkCLM_apply, meanCLM_apply]
+  -- Goal: (∑ i : Fin d, (∑ j, f j) / n) / d = (∑ j, f j) / n
+  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  exact mul_div_cancel_left₀ _ (by positivity)
 
 theorem spectralGap_le_one {n d : ℕ} (G : RegularGraph n d) :
     spectralGap G ≤ 1 := by
   unfold spectralGap
-  split_ifs with h
-  · linarith
-  · push_neg at h
-    set hA := adjMatrix_isHermitian G
-    apply max_le
-    · -- evs ⟨1, _⟩ ≤ 1
-      have hmem : hA.eigenvalues₀ ⟨1, by rw [Fintype.card_fin]; omega⟩ ∈
-          spectrum ℝ (adjMatrix G) := by
-        rw [hA.spectrum_real_eq_range_eigenvalues]
-        exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) ⟨1, by rw [Fintype.card_fin]; omega⟩,
-          by unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]⟩
-      exact le_of_abs_le (adjMatrix_eigenvalue_abs_le_one G hmem)
-    · -- -(evs ⟨n-1, _⟩) ≤ 1
-      have hmem : hA.eigenvalues₀ ⟨n - 1, by rw [Fintype.card_fin]; omega⟩ ∈
-          spectrum ℝ (adjMatrix G) := by
-        rw [hA.spectrum_real_eq_range_eigenvalues]
-        exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) ⟨n - 1, by rw [Fintype.card_fin]; omega⟩,
-          by unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]⟩
-      have := adjMatrix_eigenvalue_abs_le_one G hmem
-      linarith [abs_le.mp this]
+  apply ContinuousLinearMap.opNorm_le_bound _ zero_le_one
+  intro f; rw [one_mul]
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · -- d = 0: walkCLM sends everything to 0
+    have hW : G.walkCLM f = 0 := by
+      ext v; simp [RegularGraph.walkCLM_apply]
+    simp only [ContinuousLinearMap.sub_apply, hW, zero_sub, norm_neg]
+    exact meanCLM_apply_norm_le n f
+  · -- d > 0: factor as W(f - Pf) using WP = P
+    have hWP := walkCLM_comp_meanCLM G hd f
+    calc ‖(G.walkCLM - meanCLM n) f‖
+        = ‖G.walkCLM f - meanCLM n f‖ := by
+          simp [ContinuousLinearMap.sub_apply]
+      _ = ‖G.walkCLM f - G.walkCLM (meanCLM n f)‖ := by rw [hWP]
+      _ = ‖G.walkCLM (f - meanCLM n f)‖ := by rw [map_sub]
+      _ ≤ ‖G.walkCLM‖ * ‖f - meanCLM n f‖ := G.walkCLM.le_opNorm _
+      _ ≤ 1 * ‖f - meanCLM n f‖ := by
+          apply mul_le_mul_of_nonneg_right G.walkCLM_norm_le_one (norm_nonneg _)
+      _ = ‖f - meanCLM n f‖ := one_mul _
+      _ ≤ ‖f‖ := norm_sub_meanCLM_le n f
 
-/-- The Expander Mixing Lemma: the spectral gap controls edge
-    distribution. For any two vertex sets S, T ⊆ V:
-
-      |e(S,T)/d - |S|·|T|/n| ≤ λ(G) · √(|S|·|T|)
-
-    This is the link between spectral and combinatorial expansion. -/
-theorem expander_mixing_lemma {n d : ℕ} (G : RegularGraph n d)
-    (S T : Finset (Fin n)) :
-    |((Finset.sum S fun v ↦ (T.filter (fun u ↦
-        ∃ i : Fin d, G.neighbor v i = u)).card) : ℝ) / d
-      - S.card * T.card / n|
-    ≤ spectralGap G * Real.sqrt (S.card * T.card) := by
-  -- Standard proof via Cauchy–Schwarz on the adjacency matrix
-  -- restricted to 𝟏⊥. The key step is decomposing indicator
-  -- vectors 1_S and 1_T into their projections onto 𝟏 and 𝟏⊥,
-  -- then bounding the cross term using the spectral gap.
-  sorry
 
 
 /-! **Graph Squaring** -/
@@ -376,334 +423,143 @@ private theorem adjMatrix_square_eq_sq {n d : ℕ} (G : RegularGraph n d) :
         · exact fin_encode_snd ij.1 ij.2 (Nat.mod_lt _ hd)
     exact_mod_cast key
 
-/-- Each eigenvalue of M² is a square of some eigenvalue of M.
-    The spectral theorem gives eigenbasis `{vᵢ}` with `Mvᵢ = λᵢvᵢ`,
-    so `M²vᵢ = λᵢ²vᵢ`. Since `{vᵢ}` is a complete basis, the
-    eigenvalues of M² are exactly `{λᵢ²}` as a multiset.
-    Formalizing this requires connecting the eigenvector bases of M and M²
-    (e.g., via `ContinuousFunctionalCalculus` spectral mapping, which
-    needs a `CStarAlgebra` instance not yet available for `Matrix _ _ ℝ`). -/
-private theorem eigenvalues₀_pow_sq {n : ℕ} (_hn : 1 < n)
-    {M : Matrix (Fin n) (Fin n) ℝ} (hM : M.IsHermitian)
-    (i : Fin (Fintype.card (Fin n))) :
-    ∃ j, (hM.pow 2).eigenvalues₀ i = (hM.eigenvalues₀ j) ^ 2 := by
-  open Polynomial in
-  -- charpoly of M^2 factors over squared eigenvalues via CFC
-  have hcp : (M ^ 2).charpoly = ∏ j, (Polynomial.X - Polynomial.C ((hM.eigenvalues j) ^ 2)) := by
-    conv_lhs => rw [← cfc_pow_id (R := ℝ) M 2 hM.isSelfAdjoint]
-    exact hM.charpoly_cfc_eq (· ^ 2)
-  -- eigenvalues₀ i is in the spectrum of M^2
-  have hmem : (hM.pow 2).eigenvalues₀ i ∈ spectrum ℝ (M ^ 2) := by
-    rw [(hM.pow 2).spectrum_real_eq_range_eigenvalues]
-    exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) i, by
-      unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]⟩
-  -- convert to root of charpoly, use product factorization
-  rw [Matrix.mem_spectrum_iff_isRoot_charpoly, hcp, Polynomial.isRoot_prod] at hmem
-  obtain ⟨j, -, hj⟩ := hmem
-  rw [Polynomial.root_X_sub_C] at hj
-  -- lift from eigenvalues j to eigenvalues₀
-  refine ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)).symm j, ?_⟩
-  rw [← hj]
-  unfold Matrix.IsHermitian.eigenvalues; simp
 
-/-- Reverse direction: each squared eigenvalue of M appears among eigenvalues of M². -/
-private theorem eigenvalue_sq_mem_eigenvalues₀_sq {n : ℕ} (_hn : 1 < n)
-    {M : Matrix (Fin n) (Fin n) ℝ} (hM : M.IsHermitian)
-    (j : Fin (Fintype.card (Fin n))) :
-    ∃ i, (hM.pow 2).eigenvalues₀ i = (hM.eigenvalues₀ j) ^ 2 := by
-  open Polynomial in
-  -- charpoly of M^2 factors over squared eigenvalues
-  have hcp : (M ^ 2).charpoly = ∏ k, (Polynomial.X - Polynomial.C ((hM.eigenvalues k) ^ 2)) := by
-    conv_lhs => rw [← cfc_pow_id (R := ℝ) M 2 hM.isSelfAdjoint]
-    exact hM.charpoly_cfc_eq (· ^ 2)
-  -- hM.eigenvalues₀ j ^ 2 is a root of (M^2).charpoly
-  have hroot : (M ^ 2).charpoly.IsRoot (hM.eigenvalues₀ j ^ 2) := by
-    rw [hcp, isRoot_prod]
-    refine ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) j, Finset.mem_univ _, ?_⟩
-    rw [root_X_sub_C]
-    unfold Matrix.IsHermitian.eigenvalues; simp
-  -- so it's in the spectrum
-  have hmem : hM.eigenvalues₀ j ^ 2 ∈ spectrum ℝ (M ^ 2) :=
-    Matrix.mem_spectrum_iff_isRoot_charpoly.mpr hroot
-  -- spectrum = range of eigenvalues
-  rw [(hM.pow 2).spectrum_real_eq_range_eigenvalues] at hmem
-  obtain ⟨k, hk⟩ := hmem
-  exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)).symm k, by
-    rw [← hk]; unfold Matrix.IsHermitian.eigenvalues; simp⟩
+/-! **CLM Algebraic Identities for Spectral Gap Squaring** -/
 
-/-- Row sums of the adjacency matrix equal 1 when d ≥ 1. -/
-private theorem adjMatrix_row_sum {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d)
-    (u : Fin n) : ∑ v, adjMatrix G u v = 1 := by
-  simp_rw [adjMatrix_apply, ← Finset.sum_div]
-  have h_nat : (Finset.univ : Finset (Fin d)).card =
-      ∑ v ∈ (Finset.univ : Finset (Fin n)),
-        (Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card :=
-    Finset.card_eq_sum_card_fiberwise (fun _ _ ↦ Finset.mem_coe.mpr (Finset.mem_univ _))
-  simp only [Finset.card_univ, Fintype.card_fin] at h_nat
-  have h_sum : (∑ v : Fin n,
-      ((Finset.univ.filter (fun i : Fin d ↦ G.neighbor u i = v)).card : ℝ)) = d := by
-    exact_mod_cast h_nat.symm
-  rw [h_sum, div_self (Nat.cast_ne_zero.mpr (by omega))]
+/-- Rotation bijection swaps function arguments in a product sum:
+    ∑_{v,i} f(neighbor(v,i))·g(v) = ∑_{v,i} f(v)·g(neighbor(v,i)). -/
+private theorem RegularGraph.sum_neighbor_swap {n d : ℕ} (G : RegularGraph n d)
+    (f g : Fin n → ℝ) :
+    ∑ v : Fin n, ∑ i : Fin d, f (G.neighbor v i) * g v =
+    ∑ v : Fin n, ∑ i : Fin d, f v * g (G.neighbor v i) := by
+  simp_rw [← Fintype.sum_prod_type', RegularGraph.neighbor]
+  -- Reindex by rot (a bijection): ∑ p, h(rot p) = ∑ p, h(p)
+  have h := G.rotEquiv.sum_comp (fun q ↦ f q.1 * g (G.rot q).1)
+  simp only [show ∀ p, (G.rotEquiv p : Fin n × Fin d) = G.rot p from fun _ ↦ rfl,
+    G.rot_involution] at h
+  exact h
 
-/-- 1 is in the spectrum of any regular graph's adjacency matrix (when d ≥ 1). -/
-private theorem one_mem_spectrum_adjMatrix {n d : ℕ} (G : RegularGraph n d)
-    (hn : 1 < n) (hd : 0 < d) : (1 : ℝ) ∈ spectrum ℝ (adjMatrix G) := by
-  rw [Matrix.mem_spectrum_iff_isRoot_charpoly, Polynomial.IsRoot, Matrix.eval_charpoly]
-  -- The all-ones vector is an eigenvector with eigenvalue 1
-  have hmv : adjMatrix G *ᵥ (fun _ ↦ 1 : Fin n → ℝ) = fun _ ↦ 1 := by
-    ext u; simp only [Matrix.mulVec, dotProduct, mul_one]
-    exact adjMatrix_row_sum G hd u
-  have hne : (fun _ : Fin n ↦ (1 : ℝ)) ≠ 0 := by
-    intro h; have := congr_fun h ⟨0, by omega⟩; simp at this
-  exact Matrix.exists_mulVec_eq_zero_iff.mp ⟨fun _ ↦ 1, hne, by
-    ext u; simp [Matrix.sub_mulVec, hmv, Matrix.scalar]⟩
+/-- The walk operator is self-adjoint: ⟪Wf, g⟫ = ⟪f, Wg⟫. -/
+private theorem walkCLM_isSelfAdjoint {n d : ℕ} (G : RegularGraph n d) :
+    IsSelfAdjoint G.walkCLM := by
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
+  intro f g
+  change @inner ℝ _ _ (G.walkCLM f) g = @inner ℝ _ _ f (G.walkCLM g)
+  -- inner on EuclideanSpace: ⟪x, y⟫ = ∑ v, y v * x v (via RCLike.inner_apply)
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial,
+    RegularGraph.walkCLM_apply]
+  -- Goal: ∑ v, g v * ((∑ i, f(nbr v i))/d) = ∑ v, ((∑ i, g(nbr v i))/d) * f v
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · simp
+  · simp_rw [mul_div_assoc', div_mul_eq_mul_div, ← Finset.sum_div]
+    congr 1
+    simp_rw [Finset.mul_sum, Finset.sum_mul]
+    exact (G.sum_neighbor_swap (fun v ↦ g v) (fun v ↦ f v)).symm
 
-/-- The top eigenvalue of a regular graph's adjacency matrix is 1 (when d ≥ 1). -/
-private theorem adjMatrix_top_eigenvalue {n d : ℕ} (G : RegularGraph n d) (hn : 1 < n)
-    (hd : 0 < d) :
-    (adjMatrix_isHermitian G).eigenvalues₀ ⟨0, by rw [Fintype.card_fin]; omega⟩ = 1 := by
-  set hA := adjMatrix_isHermitian G
-  set i0 : Fin (Fintype.card (Fin n)) := ⟨0, by rw [Fintype.card_fin]; omega⟩
-  apply le_antisymm
-  · -- ≤ 1: from |eigenvalue| ≤ 1
-    have hmem : hA.eigenvalues₀ i0 ∈ spectrum ℝ (adjMatrix G) := by
-      rw [hA.spectrum_real_eq_range_eigenvalues]
-      exact ⟨(Fintype.equivOfCardEq (Fintype.card_fin _)) i0, by
-        unfold Matrix.IsHermitian.eigenvalues; simp [Equiv.symm_apply_apply]⟩
-    exact le_of_abs_le (adjMatrix_eigenvalue_abs_le_one G hmem)
-  · -- ≥ 1: eigenvalues₀ ⟨0, _⟩ is the max, and 1 is an eigenvalue
-    have h1 := one_mem_spectrum_adjMatrix G hn hd
-    rw [hA.spectrum_real_eq_range_eigenvalues] at h1
-    obtain ⟨j, hj⟩ := h1
-    have : hA.eigenvalues₀ ((Fintype.equivOfCardEq (Fintype.card_fin _)).symm j) = 1 := by
-      rw [← hj]; unfold Matrix.IsHermitian.eigenvalues; simp
-    rw [← this]
-    haveI : NeZero (Fintype.card (Fin n)) := ⟨by rw [Fintype.card_fin]; omega⟩
-    exact hA.eigenvalues₀_antitone (Fin.zero_le _)
-
-/-- For a ≥ x ≥ c, we have x² ≤ max(a², c²). -/
-private theorem sq_le_max_sq {a x c : ℝ} (hax : a ≥ x) (hxc : x ≥ c) :
-    x ^ 2 ≤ max (a ^ 2) (c ^ 2) := by
-  by_cases hx : x ≤ 0
-  · exact le_max_of_le_right (by nlinarith)
-  · exact le_max_of_le_left (by nlinarith)
-
-/-- Transport: eigenvalues₀ are the same for equal matrices. -/
-private theorem eigenvalues₀_congr {n : ℕ} {A B : Matrix (Fin n) (Fin n) ℝ}
-    (h : A = B) (hA : A.IsHermitian) (hB : B.IsHermitian)
-    (i : Fin (Fintype.card (Fin n))) :
-    hA.eigenvalues₀ i = hB.eigenvalues₀ i := by
-  subst h; rfl
-
-/-- The eigenvalue multisets of M² and {λ_j²} agree (via charpoly root equality). -/
-private theorem eigenvalue_multiset_sq {n : ℕ}
-    {M : Matrix (Fin n) (Fin n) ℝ} (hM : M.IsHermitian) :
-    Finset.univ.val.map (fun j ↦ (hM.pow 2).eigenvalues j) =
-    Finset.univ.val.map (fun j ↦ hM.eigenvalues j ^ 2) := by
-  open Polynomial in
-  have hcp1 : (M ^ 2).charpoly = ∏ j, (X - C ((hM.pow 2).eigenvalues j : ℝ)) :=
-    (hM.pow 2).charpoly_eq
-  have hcp2 : (M ^ 2).charpoly = ∏ j, (X - C ((hM.eigenvalues j) ^ 2)) := by
-    conv_lhs => rw [← cfc_pow_id (R := ℝ) M 2 hM.isSelfAdjoint]
-    exact hM.charpoly_cfc_eq (· ^ 2)
-  -- Both factorizations give the same polynomial, so their root multisets agree
-  have heq : ∏ j : Fin n, (X - C ((hM.pow 2).eigenvalues j : ℝ)) =
-             ∏ j : Fin n, (X - C ((hM.eigenvalues j) ^ 2)) := by
-    rw [← hcp1, ← hcp2]
-  -- Use roots_multiset_prod_X_sub_C to extract multisets
-  have hr1 := roots_multiset_prod_X_sub_C (R := ℝ)
-    (Finset.univ.val.map (fun j : Fin n ↦ ((hM.pow 2).eigenvalues j : ℝ)))
-  have hr2 := roots_multiset_prod_X_sub_C (R := ℝ)
-    (Finset.univ.val.map (fun j : Fin n ↦ (hM.eigenvalues j ^ 2 : ℝ)))
-  simp only [Multiset.map_map, Function.comp] at hr1 hr2
-  -- Equal polynomials have equal roots
-  rw [← hr1, ← hr2]
+/-- The mean projection is self-adjoint: ⟪Pf, g⟫ = ⟪f, Pg⟫. -/
+private theorem meanCLM_isSelfAdjoint (n : ℕ) :
+    IsSelfAdjoint (meanCLM n) := by
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
+  intro f g
+  change @inner ℝ _ _ (meanCLM n f) g = @inner ℝ _ _ f (meanCLM n g)
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, meanCLM_apply]
+  -- ∑ v, g v * ((∑ i, f i)/n) = ∑ v, ((∑ i, g i)/n) * f v
+  simp_rw [mul_div_assoc', div_mul_eq_mul_div, ← Finset.sum_div]
   congr 1
+  simp_rw [Finset.mul_sum, Finset.sum_mul]
+  conv_rhs => rw [Finset.sum_comm]
 
-/-! **Projection and Spectral Gap Recharacterization** -/
+/-- The mean projection is idempotent: P(Pf) = Pf. -/
+private theorem meanCLM_idempotent (n : ℕ) :
+    meanCLM n * meanCLM n = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
+  ext f v
+  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, Finset.sum_const,
+    Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  rcases n.eq_zero_or_pos with rfl | hn
+  · simp
+  · exact mul_div_cancel_left₀ _ (by positivity)
 
-/-- The uniform projection matrix: all entries equal 1/n. -/
-private noncomputable def uniformProj (n : ℕ) : Matrix (Fin n) (Fin n) ℝ :=
-  Matrix.of (fun _ _ ↦ (1 : ℝ) / n)
+/-- The mean projection absorbs the walk operator: P ∘ W = P (for d > 0). -/
+private theorem meanCLM_comp_walkCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
+    meanCLM n * G.walkCLM = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
+  ext f v
+  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, RegularGraph.walkCLM_apply]
+  -- Goal: (∑ u, (∑ i, f(nbr u i)) / d) / n = (∑ u, f u) / n
+  congr 1
+  -- Pull /d out of the sum
+  rw [← Finset.sum_div]
+  -- Now: (∑ u, ∑ i, f(nbr u i)) / d = ∑ u, f u
+  rw [G.sum_neighbor_eq (fun v ↦ f v)]
+  -- (∑ u, ∑ _i, f u) / d = ∑ u, f u
+  simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  rw [← Finset.mul_sum, mul_div_cancel_left₀ _ (by positivity : (d : ℝ) ≠ 0)]
 
-@[simp] private theorem uniformProj_apply {n : ℕ} (u v : Fin n) :
-    uniformProj n u v = 1 / n := rfl
+/-- Equivalence between Fin d × Fin d and Fin (d * d) via the
+    encode/decode pair (i * d + j) ↔ (i, j). -/
+private def finPairEquiv {d : ℕ} (hd : 0 < d) : Fin d × Fin d ≃ Fin (d * d) where
+  toFun ij := ⟨ij.1.val * d + ij.2.val, Fin.pair_lt ij.1 ij.2⟩
+  invFun p := (⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩,
+               ⟨p.val % d, Nat.mod_lt _ hd⟩)
+  left_inv ij := Prod.ext
+    (fin_encode_fst ij.1 ij.2 ((Nat.div_lt_iff_lt_mul hd).mpr (Fin.pair_lt ij.1 ij.2)))
+    (fin_encode_snd ij.1 ij.2 (Nat.mod_lt _ hd))
+  right_inv p := fin_div_add_mod p (Fin.pair_lt
+    ⟨p.val / d, (Nat.div_lt_iff_lt_mul hd).mpr p.isLt⟩
+    ⟨p.val % d, Nat.mod_lt _ hd⟩)
 
-private theorem uniformProj_isSymm {n : ℕ} : (uniformProj n).IsSymm := by
-  ext u v; simp
-
-private theorem uniformProj_isHermitian {n : ℕ} : (uniformProj n).IsHermitian := by
-  show (uniformProj n)ᴴ = uniformProj n
-  rw [conjTranspose_eq_transpose_of_trivial]
-  exact uniformProj_isSymm.eq
-
-private theorem adjMatrix_mul_uniformProj {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
-    adjMatrix G * uniformProj n = uniformProj n := by
-  ext u v
-  simp only [Matrix.mul_apply, uniformProj_apply, mul_one_div, ← Finset.sum_div,
-    adjMatrix_row_sum G hd u]
-
-private theorem uniformProj_mul_adjMatrix {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
-    uniformProj n * adjMatrix G = uniformProj n := by
-  have h := adjMatrix_mul_uniformProj G hd
-  calc uniformProj n * adjMatrix G
-      = ((uniformProj n * adjMatrix G)ᵀ)ᵀ := (Matrix.transpose_transpose _).symm
-    _ = ((adjMatrix G)ᵀ * (uniformProj n)ᵀ)ᵀ := by rw [Matrix.transpose_mul]
-    _ = (adjMatrix G * uniformProj n)ᵀ := by
-        rw [(adjMatrix_isSymm G).eq, uniformProj_isSymm.eq]
-    _ = (uniformProj n)ᵀ := by rw [h]
-    _ = uniformProj n := uniformProj_isSymm.eq
-
-private theorem uniformProj_sq {n : ℕ} (hn : 0 < n) :
-    uniformProj n * uniformProj n = uniformProj n := by
-  ext u v
-  simp only [Matrix.mul_apply, uniformProj_apply, Finset.sum_const, Finset.card_univ,
-    Fintype.card_fin, nsmul_eq_mul]
-  have hn' : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (by omega)
-  field_simp
-
-private theorem sub_uniformProj_isHermitian {n d : ℕ} (G : RegularGraph n d) :
-    (adjMatrix G - uniformProj n).IsHermitian := by
-  show (adjMatrix G - uniformProj n)ᴴ = adjMatrix G - uniformProj n
-  rw [conjTranspose_sub, adjMatrix_isHermitian G, uniformProj_isHermitian]
-
-/-- Key identity: (M - P)² = M² - P, from MP = PM = P and P² = P. -/
-private theorem sq_sub_uniformProj {n d : ℕ} (G : RegularGraph n d)
-    (hd : 0 < d) (hn : 0 < n) :
-    (adjMatrix G - uniformProj n) ^ 2 = (adjMatrix G) ^ 2 - uniformProj n := by
-  rw [sq, sq, sub_mul, mul_sub, mul_sub,
-    adjMatrix_mul_uniformProj G hd, uniformProj_mul_adjMatrix G hd,
-    uniformProj_sq hn, sub_self, sub_zero]
-
-/-- Helper: the sum ∑ i, v i = 0 for an eigenvector of M with eigenvalue μ₀ ≠ 1. -/
-private theorem eigenvec_sum_eq_zero {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d)
-    {μ₀ : ℝ} {v : Fin n → ℝ} (hv : adjMatrix G *ᵥ v = μ₀ • v) (hmu1 : μ₀ ≠ 1) :
-    ∑ i, v i = 0 := by
-  have h1 : ∑ u, (adjMatrix G *ᵥ v) u = ∑ u, v u := by
-    simp only [Matrix.mulVec, dotProduct]
-    rw [Finset.sum_comm]; congr 1; ext j
-    simp_rw [show ∀ i, adjMatrix G i j = adjMatrix G j i from
-      fun i ↦ ((adjMatrix_isSymm G).apply i j).symm]
-    rw [← Finset.sum_mul, adjMatrix_row_sum G hd j, one_mul]
-  have h2 : ∑ u, (adjMatrix G *ᵥ v) u = μ₀ * ∑ u, v u := by
-    simp only [hv, Pi.smul_apply, smul_eq_mul, Finset.mul_sum]
-  have h0 : (1 - μ₀) * ∑ u, v u = 0 := by linarith [h1.symm.trans h2]
-  exact (mul_eq_zero.mp h0).resolve_left (sub_ne_zero.mpr (Ne.symm hmu1))
-
-/-- Helper: P *ᵥ v = 0 when ∑ v = 0. -/
-private theorem uniformProj_mulVec_eq_zero {n : ℕ}
-    {v : Fin n → ℝ} (h_sum : ∑ i, v i = 0) :
-    uniformProj n *ᵥ v = 0 := by
-  ext i; simp only [Matrix.mulVec, dotProduct, uniformProj_apply, Pi.zero_apply]
-  rw [← Finset.mul_sum, h_sum, mul_zero]
-
-/-- Eigenvectors of M with eigenvalue ≠ 1 are also eigenvectors of M - P. -/
-private theorem eigenvalue_sub_uniformProj_of_ne_one {n d : ℕ} (G : RegularGraph n d)
-    (hd : 0 < d) {μ₀ : ℝ} (hmu : μ₀ ∈ spectrum ℝ (adjMatrix G)) (hmu1 : μ₀ ≠ 1) :
-    μ₀ ∈ spectrum ℝ (adjMatrix G - uniformProj n) := by
-  -- Get eigenvector v with Mv = μ₀ • v, v ≠ 0
-  rw [← Matrix.spectrum_toLin'] at hmu
-  obtain ⟨v, hv⟩ := (Module.End.HasEigenvalue.of_mem_spectrum hmu).exists_hasEigenvector
-  have hv_eq : adjMatrix G *ᵥ v = μ₀ • v := by
-    have := hv.apply_eq_smul; rwa [Matrix.toLin'_apply] at this
-  have h_sum := eigenvec_sum_eq_zero G hd hv_eq hmu1
-  have hPv := uniformProj_mulVec_eq_zero h_sum
-  -- (M - P) *ᵥ v = μ₀ • v
-  have hMPv : (adjMatrix G - uniformProj n) *ᵥ v = μ₀ • v := by
-    rw [Matrix.sub_mulVec, hv_eq, hPv, sub_zero]
-  -- Conclude via charpoly (matching one_mem_spectrum_adjMatrix pattern)
-  rw [Matrix.mem_spectrum_iff_isRoot_charpoly, Polynomial.IsRoot, Matrix.eval_charpoly]
-  exact Matrix.exists_mulVec_eq_zero_iff.mp ⟨v, hv.2, by
-    rw [Matrix.sub_mulVec]
-    have hsv : Matrix.scalar (Fin n) μ₀ *ᵥ v = μ₀ • v := by
-      rw [show Matrix.scalar (Fin n) μ₀ = μ₀ • (1 : Matrix _ _ ℝ) from
-        Algebra.algebraMap_eq_smul_one μ₀, Matrix.smul_mulVec, Matrix.one_mulVec]
-    rw [hsv, hMPv, sub_self]⟩
-
-/-- Non-zero eigenvalues of M - P are eigenvalues of M (with eigenvectors ⊥ 1). -/
-private theorem eigenvalue_of_sub_uniformProj {n d : ℕ} (G : RegularGraph n d)
-    (hd : 0 < d) {μ₀ : ℝ} (hmu : μ₀ ∈ spectrum ℝ (adjMatrix G - uniformProj n))
-    (hmu0 : μ₀ ≠ 0) : μ₀ ∈ spectrum ℝ (adjMatrix G) := by
-  -- Get eigenvector v with (M-P)v = μ₀ • v, v ≠ 0
-  rw [← Matrix.spectrum_toLin'] at hmu
-  obtain ⟨v, hv⟩ := (Module.End.HasEigenvalue.of_mem_spectrum hmu).exists_hasEigenvector
-  have hv_eq : (adjMatrix G - uniformProj n) *ᵥ v = μ₀ • v := by
-    have := hv.apply_eq_smul; rwa [Matrix.toLin'_apply] at this
-  -- n > 0 since v ≠ 0 lives in Fin n → ℝ
-  have hn : 0 < n := by
-    rcases Nat.eq_zero_or_pos n with rfl | h
-    · exact absurd (funext (Fin.elim0 ·) : v = 0) hv.2
-    · exact h
-  -- ∑ v = 0 because row sums of M - P are 0 and μ₀ ≠ 0
-  have h_sum : ∑ i, v i = 0 := by
-    have h_zero : ∑ u, ((adjMatrix G - uniformProj n) *ᵥ v) u = 0 := by
-      simp only [Matrix.sub_mulVec, Pi.sub_apply, Finset.sum_sub_distrib]
-      have hMsum : ∑ u, (adjMatrix G *ᵥ v) u = ∑ u, v u := by
-        simp only [Matrix.mulVec, dotProduct]
-        rw [Finset.sum_comm]; congr 1; ext j
-        simp_rw [show ∀ i, adjMatrix G i j = adjMatrix G j i from
-          fun i ↦ ((adjMatrix_isSymm G).apply i j).symm]
-        rw [← Finset.sum_mul, adjMatrix_row_sum G hd j, one_mul]
-      have hPsum : ∑ u, (uniformProj n *ᵥ v) u = ∑ u, v u := by
-        simp only [Matrix.mulVec, dotProduct, uniformProj_apply]
-        simp_rw [← Finset.mul_sum]
-        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-        have hn' : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (by omega)
-        field_simp
-      linarith
-    have h_eq : ∑ u, ((adjMatrix G - uniformProj n) *ᵥ v) u = μ₀ * ∑ u, v u := by
-      simp_rw [hv_eq, Pi.smul_apply, smul_eq_mul, Finset.mul_sum]
-    exact (mul_eq_zero.mp (by linarith : μ₀ * ∑ u, v u = 0)).resolve_left hmu0
-  have hPv := uniformProj_mulVec_eq_zero h_sum
-  -- Mv = (M-P)v + Pv = μ₀v + 0 = μ₀v
-  have hMv : adjMatrix G *ᵥ v = μ₀ • v := by
-    have : adjMatrix G *ᵥ v = (adjMatrix G - uniformProj n) *ᵥ v + uniformProj n *ᵥ v := by
-      rw [← Matrix.add_mulVec, sub_add_cancel]
-    rw [this, hv_eq, hPv, add_zero]
-  rw [Matrix.mem_spectrum_iff_isRoot_charpoly, Polynomial.IsRoot, Matrix.eval_charpoly]
-  exact Matrix.exists_mulVec_eq_zero_iff.mp ⟨v, hv.2, by
-    rw [Matrix.sub_mulVec]
-    have hsv : Matrix.scalar (Fin n) μ₀ *ᵥ v = μ₀ • v := by
-      rw [show Matrix.scalar (Fin n) μ₀ = μ₀ • (1 : Matrix _ _ ℝ) from
-        Algebra.algebraMap_eq_smul_one μ₀, Matrix.smul_mulVec, Matrix.one_mulVec]
-    rw [hsv, hMv, sub_self]⟩
+/-- The walk operator of G² equals the square of G's walk operator:
+    W_{G²} = W_G ∘ W_G. -/
+private theorem walkCLM_sq {n d : ℕ} (G : RegularGraph n d) :
+    G.square.walkCLM = G.walkCLM * G.walkCLM := by
+  ext f v
+  simp only [ContinuousLinearMap.mul_apply, RegularGraph.walkCLM_apply]
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · simp
+  · -- Transform RHS: (∑ i, (∑ j, ...)/d) / d → (∑ i, ∑ j, ...) / (d*d)
+    rw [← Finset.sum_div, div_div,
+      show (↑(d * d) : ℝ) = ↑d * ↑d from by push_cast; ring]
+    -- Both sides: (sum) / (d * d). Show numerators equal.
+    congr 1
+    -- LHS: ∑ p : Fin(d*d), f(sq.nbr v p) = ∑ (i,j) : Fin d × Fin d, f(nbr(nbr v i) j)
+    rw [← Fintype.sum_prod_type']
+    exact Fintype.sum_equiv (finPairEquiv hd).symm _ _ (fun _ ↦ rfl)
 
 theorem spectralGap_square {n d : ℕ} (G : RegularGraph n d) :
     spectralGap G.square = (spectralGap G) ^ 2 := by
-  sorry
+  unfold spectralGap
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · -- d = 0: both walkCLMs are 0, spectralGap = ‖meanCLM‖
+    have hW : G.walkCLM = 0 := by
+      ext f v; simp [RegularGraph.walkCLM_apply]
+    have hW2 : G.square.walkCLM = 0 := by
+      ext f v; simp [RegularGraph.walkCLM_apply]
+    simp only [hW, hW2, zero_sub, norm_neg]
+    -- ‖P‖ = ‖P‖² since P is self-adjoint idempotent
+    have hidp := meanCLM_idempotent n
+    have hsa := meanCLM_isSelfAdjoint n
+    rw [← hsa.norm_mul_self, hidp]
+  · -- d > 0: algebraic identity (W - P)² = W² - P
+    -- Use abbreviations W and P (let, not set, to keep transparent)
+    let W := G.walkCLM
+    let P : EuclideanSpace ℝ (Fin n) →L[ℝ] _ := meanCLM n
+    have hWP : W * P = P := by
+      refine ContinuousLinearMap.ext (fun f ↦ ?_)
+      exact walkCLM_comp_meanCLM G hd f
+    have hPW : P * W = P := meanCLM_comp_walkCLM G hd
+    have hPP : P * P = P := meanCLM_idempotent n
+    have hsq : (W - P) * (W - P) = W * W - P := by
+      have : (W - P) * (W - P) = W * W - W * P - P * W + P * P := by
+        simp only [mul_sub, sub_mul]; abel
+      rw [this, hWP, hPW, hPP]; abel
+    rw [walkCLM_sq G, ← hsq]
+    have hsa : IsSelfAdjoint (W - P) := by
+      rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric, ContinuousLinearMap.coe_sub]
+      exact ((ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp
+        (walkCLM_isSelfAdjoint G)).sub
+        (ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp (meanCLM_isSelfAdjoint n)))
+    rw [← hsa.norm_mul_self]
 
-
-/-! **Operator-Norm Spectral Gap** -/
-
-/-- The random walk operator of a d-regular graph, as a continuous linear map
-    on `EuclideanSpace`. Maps f to the function averaging f over neighbors:
-    `(Wf)(v) = (1/d) ∑ᵢ f(G.neighbor v i)`. -/
-noncomputable def RegularGraph.walkCLM {n d : ℕ} (G : RegularGraph n d) :
-    EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n) :=
-  (Matrix.toEuclideanCLM (𝕜 := ℝ) (n := Fin n)) (adjMatrix G)
-
-/-- The mean projection: maps f to the constant function with value mean(f).
-    `(Pf)(v) = (1/n) ∑ᵢ f(i)`. -/
-noncomputable def meanCLM (n : ℕ) :
-    EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n) :=
-  (Matrix.toEuclideanCLM (𝕜 := ℝ) (n := Fin n)) (uniformProj n)
-
-/-- The spectral gap as the operator norm of the walk restricted to the
-    orthogonal complement of the constant functions. -/
-noncomputable def spectralGap' {n d : ℕ} (G : RegularGraph n d) : ℝ :=
-  ‖G.walkCLM - meanCLM n‖
-
-theorem spectralGap_nonneg' {n d : ℕ} (G : RegularGraph n d) :
-    0 ≤ spectralGap' G :=
-  norm_nonneg _
-
-private theorem walkCLM_sub_meanCLM_eq {n d : ℕ} (G : RegularGraph n d) :
-    G.walkCLM - meanCLM n =
-    (Matrix.toEuclideanCLM (𝕜 := ℝ) (n := Fin n)) (adjMatrix G - uniformProj n) := by
-  show (Matrix.toEuclideanCLM (𝕜 := ℝ)) (adjMatrix G) -
-    (Matrix.toEuclideanCLM (𝕜 := ℝ)) (uniformProj n) =
-    (Matrix.toEuclideanCLM (𝕜 := ℝ)) (adjMatrix G - uniformProj n)
-  rw [map_sub]
+#exit
 
 /-! **Complete Graph** -/
 

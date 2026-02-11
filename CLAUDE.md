@@ -40,9 +40,10 @@ Sections build on each other sequentially:
 ### `AKS/RegularGraph.lean` — Regular Graph Theory
 General theory of d-regular graphs, independent of the zig-zag product:
 1. **Regular graphs and adjacency matrices** — `RegularGraph` (rotation map representation), `adjMatrix`, symmetry proofs
-2. **Spectral gap** — `spectralGap` via `IsHermitian.eigenvalues₀`, `spectralGap_nonneg`, `spectralGap_le_one`, `expander_mixing_lemma`
-3. **Graph squaring** — `G.square`, `spectralGap_square`: λ(G²) = λ(G)²
-4. **Complete graph** — `completeGraph`, `spectralGap_complete`: λ(K_{n+1}) = 1/n
+2. **Walk and mean operators** — `walkCLM` (CLM-first), `meanCLM`, `walkFun`/`walkLM`/`meanFun`/`meanLM` (three-layer pattern)
+3. **Spectral gap** — `spectralGap` := `‖walkCLM - meanCLM‖` (operator norm), `spectralGap_nonneg`, `spectralGap_le_one`, `expander_mixing_lemma`
+4. **Graph squaring** — `G.square`, `spectralGap_square`: λ(G²) = λ(G)²
+5. **Complete graph** — `completeGraph`, `spectralGap_complete`: λ(K_{n+1}) = 1/n
 
 ### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
 Builds on `RegularGraph.lean` with the zig-zag product construction:
@@ -120,7 +121,17 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`set` + external lemmas: use `rw [hA_def]`.** After `set hA := adjMatrix_isHermitian G with hA_def`, the goal uses `hA` but external lemmas produce `(adjMatrix_isHermitian G).eigenvalues₀`. Use `rw [hA_def]` to convert back before `exact`. Define derived hypotheses (dichotomy, sum) inside the proof with `intro k; rw [hA_def]; exact external_lemma k` so they match the `set` binding.
 
+**Star instance diamond on CLMs.** `IsSelfAdjoint` for CLMs uses `ContinuousLinearMap.instStarId`, but `IsSelfAdjoint.sub` and `IsSelfAdjoint.norm_mul_self` expect `StarAddMonoid.toInvolutiveStar.toStar` (from `[StarRing E]`). These are propositionally but not definitionally equal. **Workaround for `.sub`:** go through `LinearMap.IsSymmetric.sub` — convert to `IsSymmetric` via `isSelfAdjoint_iff_isSymmetric`, use `ContinuousLinearMap.coe_sub` to decompose the coercion, apply `IsSymmetric.sub`. **Workaround for `.norm_mul_self`:** use `rw [← hsa.norm_mul_self]` (rewrite) instead of `exact hsa.norm_mul_self.symm` — `rw` is more lenient about instance matching than `exact`. More broadly, when typeclass diamonds cause `exact` to fail, try `rw` — it performs less strict instance checking.
+
+**`Finset.sum_comm` loops in `simp_rw`.** `simp_rw` applies under binders, so `simp_rw [Finset.sum_comm]` endlessly rewrites nested sums. Use `conv_rhs => rw [Finset.sum_comm]` (or `conv_lhs`) to apply it exactly once at the desired position.
+
+**CLM self-adjointness via inner products.** To prove `IsSelfAdjoint A` for a CLM on `EuclideanSpace ℝ (Fin n)`: (1) `rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]; intro f g; change @inner ℝ _ _ (A f) g = @inner ℝ _ _ f (A g)` (2) decompose with `simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, myCLM_apply]` (3) rearrange sums. Handle d=0 separately. For `IsSelfAdjoint (A - B)` from `IsSelfAdjoint A` and `IsSelfAdjoint B`: use the Star diamond workaround above (`IsSymmetric.sub`).
+
+**`Equiv.sum_comp` for rotation-bijection sum swaps.** To show `∑ v ∑ i, f(nbr v i) · g v = ∑ v ∑ i, f v · g(nbr v i)`: reindex via `G.rotEquiv.sum_comp (fun q ↦ f q.1 * g (G.rot q).1)`, then `simp only [show ∀ p, (G.rotEquiv p : _) = G.rot p from fun _ ↦ rfl, G.rot_involution]`. The `show` lemma bridges the `Equiv` coercion with the raw `rot` function. Don't use `Equiv.sum_comp` inside `calc` — it fails to unify when the coercion differs.
+
 **`linarith` can't handle division.** `1/↑n > 0` doesn't follow from `↑n > 0` in `linarith`'s linear fragment. Provide it as `have : (0:ℝ) < 1 / ↑n := by positivity`. Similarly, `(↑n + 1)/↑n = 1 + 1/↑n` needs `field_simp` to make `linarith`-accessible.
+
+**`spectralGap_le_one` proof pattern: contraction + WP = P.** To show `‖W - P‖ ≤ 1` for walk operator W and mean projection P: (1) prove `‖W‖ ≤ 1` via `opNorm_le_bound` + Cauchy-Schwarz (`sq_sum_le_card_mul_sum_sq` from `Mathlib.Algebra.Order.Chebyshev`) + double-counting via `rotEquiv.sum_comp`; (2) prove `WP = P` (walk of a constant = same constant); (3) prove `‖f - Pf‖ ≤ ‖f‖` via `field_simp` + `nlinarith`; (4) factor `(W-P)f = W(f - Pf)` and chain inequalities. Handle d = 0 separately with `‖Pf‖ ≤ ‖f‖` (Cauchy-Schwarz). Key Lean pitfall: `Nat.cast_ne_zero.mpr` often has type-class mismatch issues; use `by positivity` instead.
 
 ## Mathlib API Reference
 
@@ -140,7 +151,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 - `Finset.card_nbij'` takes `Set.MapsTo`/`Set.LeftInvOn`/`Set.RightInvOn` args
 - `card_eq_sum_card_fiberwise` needs `Set.MapsTo` proof (see `↑univ` note above)
 
-### ContinuousLinearMap / C*-Algebra (for operator-norm spectral gap)
+### ContinuousLinearMap / C*-Algebra (spectral gap infrastructure)
 - Import: `Mathlib.Analysis.CStarAlgebra.Matrix` (provides `Matrix.toEuclideanCLM`)
 - `Matrix.toEuclideanCLM (𝕜 := ℝ) (n := Fin n) : Matrix (Fin n) (Fin n) ℝ ≃⋆ₐ[ℝ] (EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))` — star algebra equivalence
 - As a `StarAlgEquiv`, it preserves `star`, `*`, `+`, `1`, and scalar multiplication: use `map_sub`, `map_smul`, `map_one`, `map_mul`, etc.
@@ -152,21 +163,20 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 ## Architectural Direction: CLM-First Definitions
 
-**Long-term goal:** define `spectralGap` (and eventually other graph operators) natively as CLMs on `EuclideanSpace`, not as matrices. The current code defines things matrix-first (`adjMatrix`, `uniformProj`) then converts via `toEuclideanCLM`. This works but creates a conversion tax: every proof step must bridge between the matrix world and the CLM world using `map_sub`, `map_mul`, etc.
+**Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-The better architecture is: `RegularGraph → walkCLM` directly (the rotation map already gives us the operator action), then derive `adjMatrix` from `walkCLM` if needed (not the other way around). This makes `spectralGap_square` trivial (`‖T²‖ = ‖T‖²` for self-adjoint T in a C*-ring) and `zigzag_spectral_bound` more natural (it's fundamentally an operator norm argument with orthogonal decomposition).
+Below `#exit`: complete graph eigenvalue analysis and the old eigenvalue-based `spectralGap_complete` proof (for reference). The old eigenvalue-based square lemmas and operator-norm definitions have been deleted (superseded by CLM-native proofs above `#exit`).
 
-**Current status:** We have the matrix-first bridge working (`walkCLM`, `meanCLM`, `spectralGap'`). Once `spectralGap_complete'` and `spectralGap_square'` are proved, consider refactoring to CLM-first definitions as a separate pass.
+**Next steps:** prove `spectralGap_le_one` and `spectralGap_complete` for the CLM-based definition. The `spectralGap_complete` strategy: for `completeGraph n`, `W - P = -(1/n) • (1 - P)`, so `‖W - P‖ = (1/n) · ‖1 - P‖`. Then `T = 1 - P` is a nonzero self-adjoint idempotent, giving `‖T‖ = 1`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_complete` (eigenvalue-based)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`
 
-**In progress (operator-norm spectral gap):**
-- `spectralGap_complete'` — reduced to proving `‖1 - meanCLM (n+1)‖ = 1` (norm of orthogonal projection onto complement of constants). Strategy: show `T = 1 - meanCLM` is a nonzero self-adjoint idempotent in the C*-ring of CLMs, then `IsSelfAdjoint.norm_mul_self` + idempotency gives `‖T‖ ∈ {0,1}`, and `T ≠ 0` pins `‖T‖ = 1`. Requires: (a) `IsSelfAdjoint T` via `star (toEuclideanCLM M) = toEuclideanCLM (star M)` + `uniformProj` is Hermitian, (b) `T * T = T` via `uniformProj_sq` + algebra, (c) `T ≠ 0` by exhibiting a nonzero image.
-- `spectralGap_square'` — once `spectralGap_complete'` is done. Strategy: `(M-P)` is self-adjoint, so `‖(M-P)²‖ = ‖(M-P)‖²` by `IsSelfAdjoint.norm_mul_self`. Then `(M-P)² = M²-P` (proved as `sq_sub_uniformProj`) gives `spectralGap'(G²) = spectralGap'(G)²`.
+**Done (below `#exit`, proved for old eigenvalue-based `spectralGap`):** `spectralGap_complete`
 
-**Old eigenvalue-based `spectralGap_square`** is blocked on Mathlib (needs spectral mapping for real matrices). The CLM approach bypasses this entirely.
+**In progress (CLM-based `spectralGap`):**
+- `spectralGap_complete` — for `completeGraph n`, show `‖walkCLM - meanCLM‖ = 1/n`. Strategy: `W - P = -(1/n) • (1 - P)`, so `‖W - P‖ = (1/n) · ‖1 - P‖`. Then `T = 1 - P` is a nonzero self-adjoint idempotent, so `IsSelfAdjoint.norm_mul_self` + idempotency gives `‖T‖ ∈ {0,1}`, and `T ≠ 0` pins `‖T‖ = 1`.
 
 **Achievable (weeks):** `halver_convergence`
 
