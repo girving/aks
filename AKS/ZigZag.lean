@@ -135,84 +135,77 @@ axiom baseExpander_gap : spectralGap baseExpander ≤ 1/5
 
       G_{k+1} := (G_k)² ⓩ H₀
 
-    where H₀ = baseExpander (D⁴ = 4096 vertices, D = 8 regular).
+    where H₀ is a D-regular base expander on D⁴ vertices.
 
-    Properties at each step (D = 8):
-    • G_k is D²-regular (= 64-regular, constant degree!)
-    • G_k² is D⁴-regular (= 4096-regular)
+    Properties at each step:
+    • G_k is D²-regular (constant degree!)
+    • G_k² is D⁴-regular
     • Zig-zag with H₀ (D⁴ vertices, D-regular) restores D²-regularity
     • n_k = D^(4(k+1)) vertices (exponential growth)
-    • λ(G_k) ≤ λ_max < 1 (constant spectral gap)
+    • λ(G_k) ≤ c < 1 (constant spectral gap, from `zigzagFamily_gap`)
 
-    To get expanders at EVERY size n (not just n = D^(4(k+1))):
-    • For arbitrary n, pick k such that n_k ≥ n.
-    • Take an n-vertex subgraph or use the Friedman–Wigderson
-      derandomized squaring to interpolate sizes.
-    • Alternatively, the zig-zag construction can be modified to
-      handle arbitrary sizes (see RVW §5).
+    For the concrete instantiation with `baseExpander` (D = 8):
+    D² = 64, D⁴ = 4096, `baseExpander_gap ≤ 1/5`, spectral gap ≤ 1/2.
 
     The key point: the degree D² is a CONSTANT independent of n,
     which is what we need for the AKS sorting network. -/
 
 /-- Build the k-th graph in the zig-zag iteration.
-    Returns a graph with degree 64 = 8² at each level. -/
-noncomputable def zigzagFamily : ℕ → Σ (n : ℕ), RegularGraph n 64
-  | 0 => ⟨4096, baseExpander.square⟩  -- G₀² is 64-regular on 4096 vertices
+    Given a D-regular base expander `H₀` on D⁴ vertices,
+    returns D²-regular graphs with exponentially growing vertex count. -/
+noncomputable def zigzagFamily {D : ℕ} (H₀ : RegularGraph ((D * D) * (D * D)) D) :
+    ℕ → Σ (n : ℕ), RegularGraph n (D * D)
+  | 0 => ⟨(D * D) * (D * D), H₀.square⟩
   | k + 1 =>
-    let ⟨nₖ, Gₖ⟩ := zigzagFamily k
-    -- Gₖ² : RegularGraph nₖ (64 * 64), i.e. 4096-regular
-    -- baseExpander : RegularGraph 4096 8
-    -- Gₖ².zigzag baseExpander : RegularGraph (nₖ * 4096) (8 * 8), i.e. 64-regular
-    -- Lean reduces 64 * 64 = 4096 and 8 * 8 = 64 by native_decide/norm_num
-    ⟨nₖ * 4096, Gₖ.square.zigzag baseExpander⟩
+    let ⟨nₖ, Gₖ⟩ := zigzagFamily H₀ k
+    -- Gₖ.square : RegularGraph nₖ ((D*D)*(D*D)), matching H₀'s vertex count
+    -- Gₖ.square.zigzag H₀ : RegularGraph (nₖ * ((D*D)*(D*D))) (D*D)
+    ⟨nₖ * ((D * D) * (D * D)), Gₖ.square.zigzag H₀⟩
 
 /-- The spectral gap stays bounded at every level of the iteration.
-    With `baseExpander_gap ≤ 1/5`, the iteration converges to a fixed point ≈ 0.28.
-    The bound 1/2 holds at every step: squaring gives ≤ 1/4, then zigzag adds
-    at most 1/5 + 1/25 = 6/25, totaling 1/4 + 6/25 = 49/100 < 1/2. -/
-theorem zigzagFamily_gap (k : ℕ) :
-    spectralGap (zigzagFamily k).2 ≤ 1/2 := by
+    The hypotheses encode the fixed-point condition for the recurrence
+    λ_{k+1} ≤ λ_k² + β + β²: we need the base case `β² ≤ c` and the
+    inductive step `c² + β + β² ≤ c`. -/
+theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
+    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
+    (hiter : c ^ 2 + β + β ^ 2 ≤ c) (k : ℕ) :
+    spectralGap (zigzagFamily H₀ k).2 ≤ c := by
   induction k with
   | zero =>
-    -- Base case: λ(G₀²) = λ(G₀)² ≤ (1/5)² = 1/25 ≤ 1/2.
-    show spectralGap baseExpander.square ≤ 1 / 2
+    show spectralGap H₀.square ≤ c
     rw [spectralGap_square]
-    calc (spectralGap baseExpander) ^ 2
-        ≤ (1 / 5 : ℝ) ^ 2 :=
-          pow_le_pow_left₀ (spectralGap_nonneg _) baseExpander_gap 2
-      _ ≤ 1 / 2 := by norm_num
+    exact (pow_le_pow_left₀ (spectralGap_nonneg _) hβ 2).trans hbase
   | succ k ih =>
-    -- Inductive step: λ(Gₖ² ⓩ H₀) ≤ λ(Gₖ)² + λ(H₀) + λ(H₀)²
-    --   ≤ (1/2)² + 1/5 + (1/5)² = 1/4 + 1/5 + 1/25 = 49/100 ≤ 1/2
-    show spectralGap ((zigzagFamily k).2.square.zigzag baseExpander) ≤ 1 / 2
-    have h₁ : spectralGap (zigzagFamily k).2.square ≤ 1 / 4 := by
+    show spectralGap ((zigzagFamily H₀ k).2.square.zigzag H₀) ≤ c
+    have h₁ : spectralGap (zigzagFamily H₀ k).2.square ≤ c ^ 2 := by
       rw [spectralGap_square]
-      calc (spectralGap (zigzagFamily k).2) ^ 2
-          ≤ (1 / 2 : ℝ) ^ 2 := pow_le_pow_left₀ (spectralGap_nonneg _) ih 2
-        _ = 1 / 4 := by norm_num
-    calc spectralGap ((zigzagFamily k).2.square.zigzag baseExpander)
-        ≤ 1 / 4 + 1 / 5 + (1 / 5) ^ 2 :=
-          zigzag_spectral_bound _ _ _ _ h₁ baseExpander_gap
-      _ ≤ 1 / 2 := by norm_num
+      exact pow_le_pow_left₀ (spectralGap_nonneg _) ih 2
+    exact (zigzag_spectral_bound _ _ _ _ h₁ hβ).trans hiter
 
 
 /-! **The Main Result** -/
 
 /-- **Explicit expander families exist** (via zig-zag).
 
-    For any ε > 0, there exists a constant d and an explicit
-    d-regular graph family {Gₙ}_{n ∈ ℕ} with λ(Gₙ) ≤ 1 - ε. -/
-theorem explicit_expanders_exist_zigzag :
-    ∃ (d : ℕ), ∀ (n : ℕ), n > 0 →
-    ∃ (G : RegularGraph n d), spectralGap G ≤ 1/2 := by
-  -- Take d = D² = 64 from the zig-zag construction.
-  -- For each n, find k such that zigzagFamily k has ≥ n vertices,
+    Given a D-regular base expander `H₀` on D⁴ vertices with spectral gap ≤ β,
+    and constants satisfying the iteration fixed-point conditions, there is a
+    D²-regular expander family with spectral gap ≤ c at every size.
+
+    To get expanders at EVERY size n (not just n = D^(4(k+1))):
+    pick k such that `zigzagFamily H₀ k` has ≥ n vertices, then take
+    an induced subgraph (Cauchy interlacing preserves spectral gap). -/
+theorem explicit_expanders_exist_zigzag {D : ℕ}
+    {H₀ : RegularGraph ((D * D) * (D * D)) D}
+    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
+    (hiter : c ^ 2 + β + β ^ 2 ≤ c) :
+    ∀ (n : ℕ), n > 0 →
+    ∃ (G : RegularGraph n (D * D)), spectralGap G ≤ c := by
+  -- For each n, find k such that zigzagFamily H₀ k has ≥ n vertices,
   -- then take an induced subgraph on n vertices.
   -- (Subgraph spectral gap can only improve: fewer paths = less mixing,
   --  but formally this needs the Cauchy interlacing theorem.)
   --
-  -- Alternatively, the RVW paper shows how to handle all sizes
-  -- directly via a modified iteration.
+  -- The family `zigzagFamily H₀ k` satisfies `zigzagFamily_gap hβ hbase hiter k`.
   sorry
 
 -- The `zigzag_implies_aks_network` theorem connecting this to the AKS

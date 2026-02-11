@@ -93,7 +93,7 @@ Statement of the expander mixing lemma (sorry, future work).
 ### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
 Builds on `Square.lean` with the zig-zag product construction:
 1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
-2. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ 1 - (1-λ₂)²(1-λ₁)/2
+2. **Spectral composition theorem** — λ(G₁ ⓩ G₂) ≤ λ₁ + λ₂ + λ₂² (additive bound)
 3. **Base case** — concrete small expander (axiomatized: `baseExpander`)
 4. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
 5. **Main result** — `explicit_expanders_exist_zigzag`
@@ -115,6 +115,7 @@ Fin.lean → RegularGraph.lean → Square.lean → ZigZag.lean
 - Keep mathematically high-level files (e.g., `ZigZag.lean`) clean by moving reusable helpers (e.g., `Fin` arithmetic lemmas) into their own files (e.g., `AKS/Fin.lean`). Iterate with helpers in the same file during development, then extract as a final pass before committing.
 - Split files that grow beyond ~300 lines. Smaller files mean faster incremental checking (the Lean server re-elaborates from the change point, but only within the current file — imports are precompiled). The optimal split point for tooling-assisted development is smaller than for human-authored files.
 - Prefer algebraic notation over explicit constructor names when a typeclass instance exists: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`, `0` not `ContinuousLinearMap.zero`, etc. The algebraic forms are shorter, more readable, and match how mathematicians write. Don't add type ascriptions — if the other operand pins the type (e.g., `1 - meanCLM n`), bare `1` suffices.
+- **Parameterize theorems over abstract bounds, not hard-coded constants.** Theorem statements should take spectral gap bounds (β, c, etc.) as parameters with hypotheses encoding the required inequalities, rather than baking in specific fractions like `1/5` or `1/2`. Proofs should chain `.trans` through these hypotheses, not `norm_num` specific arithmetic. Similarly, prefer explicit types/degrees (e.g., `D * D`) over existential quantification (`∃ d`), and take concrete objects (like base expanders) as parameters rather than using axioms directly in theorem statements. The motivation: we eventually want explicit sorting network code with explicit constants (even if those constants are galactic), which requires every bound to be computable and extractable — not hidden inside an existential or baked into a proof term.
 
 ## Key Lean/Mathlib Conventions
 
