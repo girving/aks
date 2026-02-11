@@ -177,7 +177,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-Below `#exit`: complete graph eigenvalue analysis and the old eigenvalue-based `spectralGap_complete` proof (for reference). These can be deleted once we're confident the CLM proofs are stable.
+No `#exit` — all code in this file is type-checked. Old eigenvalue-based complete graph proofs have been deleted (superseded by CLM-native proofs).
 
 **Next steps:** the spectral gap infrastructure (`spectralGap_nonneg`, `spectralGap_le_one`, `spectralGap_square`, `spectralGap_complete`) is fully proved above `#exit`. The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
 
