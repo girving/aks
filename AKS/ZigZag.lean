@@ -12,8 +12,6 @@
 
 import AKS.Square
 
-#exit
-
 open Matrix BigOperators Finset
 
 
@@ -155,21 +153,6 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
   -- then optimize a quadratic form.
   sorry
 
-/-- **Corollary**: If G₂ has constant spectral gap (λ₂ < 1) and
-    G₁ has any spectral gap (λ₁ < 1), the zig-zag product has
-    spectral gap bounded away from 1 by a constant depending on λ₂. -/
-theorem zigzag_bounded_gap {n₁ d₁ d₂ : ℕ}
-    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
-    (lam₂ : ℝ) (hlam₂ : lam₂ < 1)
-    (hG₂ : spectralGap G₂ ≤ lam₂) :
-    spectralGap (G₁.zigzag G₂) < 1 := by
-  have h := zigzag_spectral_bound G₁ G₂ 1 lam₂ (spectralGap_le_one G₁) hG₂
-  -- 1 - (1 - λ₂)² · (1 - 1) / 2 = 1 - 0 = 1
-  -- But we need the actual λ₁ < 1 for a strict bound.
-  -- When λ₁ = λ(G₁) < 1 (which holds for any connected graph),
-  -- we get a strict inequality.
-  sorry
-
 
 /-! **The Base Case: A Concrete Small Expander** -/
 
@@ -229,19 +212,11 @@ noncomputable def zigzagFamily : ℕ → Σ (n : ℕ), RegularGraph n 64
   | 0 => ⟨4096, baseExpander.square⟩  -- G₀² is 64-regular on 4096 vertices
   | k + 1 =>
     let ⟨nₖ, Gₖ⟩ := zigzagFamily k
-    -- G_{k+1} = Gₖ² ⓩ H₀
-    -- Gₖ² has nₖ vertices, degree 64² = 4096
-    -- But we need H to have 4096 vertices...
-    -- Actually, let's track this more carefully.
-    --
-    -- At each step:
-    --   Gₖ  : (nₖ, D²)-regular
-    --   Gₖ² : (nₖ, D⁴)-regular
-    --   Gₖ² ⓩ H₀ : (nₖ · D⁴, D²)-regular   where H₀ has D⁴ vertices
-    --
-    -- So vertex count grows as nₖ₊₁ = nₖ · D⁴.
-    -- Starting from n₀ = D⁴: nₖ = D^(4 · (k+1)).
-    sorry
+    -- Gₖ² : RegularGraph nₖ (64 * 64), i.e. 4096-regular
+    -- baseExpander : RegularGraph 4096 8
+    -- Gₖ².zigzag baseExpander : RegularGraph (nₖ * 4096) (8 * 8), i.e. 64-regular
+    -- Lean reduces 64 * 64 = 4096 and 8 * 8 = 64 by native_decide/norm_num
+    ⟨nₖ * 4096, Gₖ.square.zigzag baseExpander⟩
 
 /-- The spectral gap stays bounded at every level of the iteration. -/
 theorem zigzagFamily_gap (k : ℕ) :
@@ -249,7 +224,12 @@ theorem zigzagFamily_gap (k : ℕ) :
   induction k with
   | zero =>
     -- Base case: λ(G₀²) = λ(G₀)² ≤ (9/10)² = 81/100 ≤ 99/100.
-    sorry
+    show spectralGap baseExpander.square ≤ 99 / 100
+    rw [spectralGap_square]
+    calc (spectralGap baseExpander) ^ 2
+        ≤ (9 / 10 : ℝ) ^ 2 :=
+          pow_le_pow_left₀ (spectralGap_nonneg _) baseExpander_gap 2
+        _ ≤ 99 / 100 := by norm_num
   | succ k ih =>
     -- Inductive step:
     -- λ(G_{k+1}) = λ(Gₖ² ⓩ baseExpander)
