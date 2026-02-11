@@ -11,23 +11,23 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 ## Build Commands
 
 ```bash
-lake build          # Build the project (first build downloads mathlib, takes a long time)
-lake clean          # Clean build artifacts
-```
-
-There are no tests or linter configurations. Correctness is verified through Lean's type checker — if `lake build` succeeds, all type-checked proofs are valid.
-
-### Fast Incremental Checking
-
-For iterative proof development, use the persistent Lean language server daemon instead of `lake build`. It keeps Mathlib imports in memory and re-elaborates only from the change point forward.
-
-```bash
 scripts/lean-check --start                  # Start daemon (once per session, ~5s)
 scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits near end)
 scripts/lean-check --stop                   # Stop daemon
 ```
 
-The daemon re-elaborates from the change point to the end. Since proof iteration typically happens at the end of a file, most checks are sub-second. Use `lake build` for final validation before committing (it also checks downstream files).
+**Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates only from the change point forward. Since proof iteration typically happens at the end of a file, most checks are sub-second. Start the daemon once per session, then check files by name.
+
+There are no tests or linter configurations. Correctness is verified through Lean's type checker — if `lean-check` reports no errors, all type-checked proofs are valid.
+
+### `lake build` (fallback only)
+
+Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state or need to verify downstream file interactions). It rebuilds from scratch and takes ~20s per changed file vs 0.2-2s for `lean-check`.
+
+```bash
+lake build          # Full rebuild — slow, use only as fallback
+lake clean          # Clean build artifacts
+```
 
 ### Mathlib Searches
 
