@@ -1,7 +1,7 @@
 /-
   # Regular Graphs and Spectral Theory
 
-  Lean 4 formalization of d-regular graphs via rotation maps,
+  Lean 4 formalization of `d`-regular graphs via rotation maps,
   their normalized adjacency matrices, spectral gap, graph squaring,
   and the complete graph as a concrete example.
 
