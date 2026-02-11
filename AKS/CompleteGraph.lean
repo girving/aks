@@ -49,7 +49,7 @@ private theorem walkCLM_completeGraph_apply {n : ℕ}
     `W - P = -(1/n) • (1 - P)` where W = walkCLM, P = meanCLM. -/
 private theorem walkCLM_sub_meanCLM_completeGraph {n : ℕ} (hn : n ≥ 1) :
     (completeGraph n).walkCLM - meanCLM (n + 1) =
-    (-(1 / (n : ℝ))) • (ContinuousLinearMap.id ℝ _ - meanCLM (n + 1)) := by
+    (-(1 / (n : ℝ))) • (1 - meanCLM (n + 1)) := by
   refine ContinuousLinearMap.ext (fun f ↦ ?_)
   apply PiLp.ext; intro v
   show (completeGraph n).walkCLM f v - meanCLM (n + 1) f v =
@@ -63,9 +63,9 @@ private theorem walkCLM_sub_meanCLM_completeGraph {n : ℕ} (hn : n ≥ 1) :
 
 /-- The norm of the orthogonal complement projection `1 - meanCLM` is 1
     (for n ≥ 2 vertices, i.e., non-constant functions exist). -/
-private theorem norm_id_sub_meanCLM {n : ℕ} (hn : n ≥ 2) :
-    ‖ContinuousLinearMap.id ℝ (EuclideanSpace ℝ (Fin n)) - meanCLM n‖ = 1 := by
-  set T := ContinuousLinearMap.id ℝ (EuclideanSpace ℝ (Fin n)) - meanCLM n
+private theorem norm_one_sub_meanCLM {n : ℕ} (hn : n ≥ 2) :
+    ‖(1 : EuclideanSpace ℝ (Fin n) →L[ℝ] _) - meanCLM n‖ = 1 := by
+  set T := (1 : EuclideanSpace ℝ (Fin n) →L[ℝ] _) - meanCLM n
   apply le_antisymm
   · -- Upper bound: ‖Tf‖ ≤ ‖f‖ (1 - P is a contraction)
     apply ContinuousLinearMap.opNorm_le_bound _ zero_le_one
@@ -114,4 +114,4 @@ theorem spectralGap_complete (n : ℕ) (hn : n ≥ 1) :
   unfold spectralGap
   rw [walkCLM_sub_meanCLM_completeGraph hn, norm_smul, Real.norm_eq_abs, abs_neg,
     abs_div, abs_one, Nat.abs_cast,
-    norm_id_sub_meanCLM (show n + 1 ≥ 2 by omega), mul_one]
+    norm_one_sub_meanCLM (show n + 1 ≥ 2 by omega), mul_one]
