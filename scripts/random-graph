@@ -1,0 +1,412 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["numpy", "scipy"]
+# ///
+"""Generate random D-regular simple graphs and analyze spectral gaps.
+
+Generates simple graphs (no self-loops, no multi-edges) using the
+configuration model with switching: start with a random perfect matching
+on n×D half-edges, then swap out any self-loops and multi-edges.
+
+Uses sparse matrices throughout — handles n up to ~100K easily.
+
+Each trial uses a deterministic sub-seed, so any graph can be reproduced.
+
+Examples:
+  scripts/random-graph --menu                     # Parameter space overview
+  scripts/random-graph -d 12                      # Best of 10 for D=12
+  scripts/random-graph -d 12 -s 50 --seed 42      # Reproducible search
+  scripts/random-graph -d 12 -s 50 --seed 42 -v   # Show every sample
+"""
+
+import argparse
+import math
+import sys
+import time
+
+import numpy as np
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import eigsh
+
+
+# ---------------------------------------------------------------------------
+# Graph generation: configuration model + switching
+# ---------------------------------------------------------------------------
+
+def _config_model_raw(n, d, rng):
+    """Raw configuration model: random perfect matching on n*d half-edges.
+
+    Returns matching array of shape (n*d,) where matching[k] is the partner
+    of half-edge k.  Half-edge k = vertex k//d, port k%d.
+    """
+    nd = n * d
+    perm = rng.permutation(nd)
+    matching = np.empty(nd, dtype=np.int64)
+    for k in range(0, nd, 2):
+        a, b = int(perm[k]), int(perm[k + 1])
+        matching[a] = b
+        matching[b] = a
+    return matching
+
+
+def _count_defects(matching, n, d):
+    """Count self-loops and multi-edges."""
+    nd = n * d
+    self_loops = 0
+    seen = set()
+    multi_edges = 0
+    for k in range(nd):
+        partner = int(matching[k])
+        if partner <= k:
+            continue
+        v, w = k // d, partner // d
+        if v == w:
+            self_loops += 1
+        else:
+            edge = (min(v, w), max(v, w))
+            if edge in seen:
+                multi_edges += 1
+            else:
+                seen.add(edge)
+    return self_loops, multi_edges
+
+
+def _find_defect_indices(matching, n, d):
+    """Find half-edge indices involved in self-loops or multi-edges."""
+    nd = n * d
+    defects = []
+    seen_edges = {}
+
+    for k in range(nd):
+        partner = int(matching[k])
+        if partner <= k:
+            continue
+        v, w = k // d, partner // d
+        if v == w:
+            defects.extend([k, partner])
+        else:
+            edge = (min(v, w), max(v, w))
+            if edge in seen_edges:
+                if seen_edges[edge] is not None:
+                    defects.extend(seen_edges[edge])
+                    seen_edges[edge] = None
+                defects.extend([k, partner])
+            else:
+                seen_edges[edge] = [k, partner]
+    return defects
+
+
+def _switch_defects(matching, n, d, rng, max_iters=200000):
+    """Remove self-loops and multi-edges by random switching."""
+    nd = n * d
+    for _ in range(max_iters):
+        defects = _find_defect_indices(matching, n, d)
+        if not defects:
+            return True
+
+        bad = defects[rng.integers(len(defects))]
+        bad_partner = int(matching[bad])
+
+        # Try random swaps
+        for _ in range(50):
+            good = int(rng.integers(nd))
+            if good == bad or good == bad_partner:
+                continue
+            good_partner = int(matching[good])
+            if good_partner == bad or good_partner == bad_partner:
+                continue
+
+            # New pairs: bad↔good_partner, good↔bad_partner
+            v_bad = bad // d
+            v_gp = good_partner // d
+            v_good = good // d
+            v_bp = bad_partner // d
+
+            if v_bad == v_gp or v_good == v_bp:
+                continue  # would create self-loop
+
+            # Check for multi-edge: would (v_bad, v_gp) or (v_good, v_bp) be duplicates?
+            # Quick check: count existing edges between these pairs
+            # (expensive to check perfectly, so we just do the swap and re-check)
+
+            matching[bad] = good_partner
+            matching[good_partner] = bad
+            matching[good] = bad_partner
+            matching[bad_partner] = good
+            break
+
+    return len(_find_defect_indices(matching, n, d)) == 0
+
+
+def make_simple_regular_graph(n, d, rng):
+    """Generate a random D-regular simple graph on n vertices.
+
+    Returns (matching, simple) where matching[k] is the partner of half-edge k.
+    """
+    assert n * d % 2 == 0, "n*d must be even"
+    matching = _config_model_raw(n, d, rng)
+    simple = _switch_defects(matching, n, d, rng)
+    return matching, simple
+
+
+def matching_to_sparse_adj(matching, n, d):
+    """Convert matching to sparse adjacency matrix."""
+    rows, cols = [], []
+    nd = n * d
+    for k in range(nd):
+        partner = int(matching[k])
+        if partner > k:
+            v, w = k // d, partner // d
+            rows.extend([v, w])
+            cols.extend([w, v])
+    data = np.ones(len(rows), dtype=np.float64)
+    return csr_matrix((data, (rows, cols)), shape=(n, n))
+
+
+def matching_to_rot(matching, n, d):
+    """Convert flat matching to rotation map array (n, d, 2)."""
+    rot = np.empty((n, d, 2), dtype=np.int32)
+    for k in range(n * d):
+        v, i = k // d, k % d
+        partner = int(matching[k])
+        w, j = partner // d, partner % d
+        rot[v, i] = [w, j]
+    return rot
+
+
+def is_simple_sparse(adj_sparse):
+    """Verify no self-loops or multi-edges in sparse matrix."""
+    if adj_sparse.diagonal().sum() > 0:
+        return False
+    if adj_sparse.max() > 1:
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Spectral analysis (always sparse)
+# ---------------------------------------------------------------------------
+
+def compute_spectral_gap(adj_sparse, d, k=10):
+    """Compute spectral gap using sparse eigensolver.
+
+    Returns (gap, top_eigs, bot_eigs).
+    """
+    n = adj_sparse.shape[0]
+    nev = min(k, n - 2)
+
+    top = eigsh(adj_sparse, k=nev, which='LM', return_eigenvectors=False)
+    bot = eigsh(adj_sparse, k=nev, which='SA', return_eigenvectors=False)
+
+    top_sorted = np.sort(top)[::-1]
+    bot_sorted = np.sort(bot)
+
+    # Trivial eigenvalue ≈ d is top_sorted[0]
+    # Spectral gap = max(|top_sorted[1]|, |bot_sorted[0]|) / d
+    lam2 = top_sorted[1] if len(top_sorted) > 1 else 0
+    lamn = bot_sorted[0] if len(bot_sorted) > 0 else 0
+    gap = max(abs(lam2), abs(lamn)) / d
+
+    return gap, lam2, lamn
+
+
+# ---------------------------------------------------------------------------
+# Theoretical bounds
+# ---------------------------------------------------------------------------
+
+def alon_boppana(d):
+    """Alon-Boppana lower bound: 2√(D-1)/D."""
+    return 2 * math.sqrt(d - 1) / d if d > 1 else 0.0
+
+
+def rvw_precise_fixed_point(beta):
+    """Fixed point c of precise RVW bound: β² = c²/(1 + c + c²)."""
+    b2 = beta ** 2
+    if b2 >= 1.0 / 3.0:
+        return None
+    a = 1 - b2
+    disc = b2 * b2 + 4 * a * b2
+    if disc < 0:
+        return None
+    c = (b2 + math.sqrt(disc)) / (2 * a)
+    return c if 0 < c < 1 else None
+
+
+def additive_fixed_point(beta):
+    """Fixed point c of additive bound: c² + β + β² = c."""
+    disc = 1 - 4 * (beta + beta ** 2)
+    if disc < 0:
+        return None
+    c = (1 + math.sqrt(disc)) / 2
+    return c if 0 < c < 1 else None
+
+
+# ---------------------------------------------------------------------------
+# Menu
+# ---------------------------------------------------------------------------
+
+def show_menu():
+    """Display parameter space overview."""
+    hdr = (f"{'D':>3}  {'n=D⁴':>10}  {'parity':>6}  {'AB β':>8}  "
+           f"{'Precise c':>10}  {'Add. c':>8}  {'Rot map':>9}")
+    sep = "=" * len(hdr)
+    print(sep)
+    print(hdr)
+    print(sep)
+
+    for d in range(3, 25):
+        n = d ** 4
+        parity_ok = (n * d) % 2 == 0
+        ab = alon_boppana(d)
+        pc = rvw_precise_fixed_point(ab)
+        ac = additive_fixed_point(ab)
+
+        graph_bytes = n * d * 2 * 4
+        if graph_bytes > 1e9:
+            sz = f"{graph_bytes / 1e9:.1f} GB"
+        elif graph_bytes > 1e6:
+            sz = f"{graph_bytes / 1e6:.1f} MB"
+        else:
+            sz = f"{graph_bytes / 1e3:.0f} KB"
+
+        parity_str = "ok" if parity_ok else "ODD"
+        pc_str = f"{pc:.4f}" if pc else "   —"
+        ac_str = f"{ac:.4f}" if ac else "  —"
+
+        marker = ""
+        if parity_ok and pc is not None:
+            marker = "  ◀"
+
+        print(f"{d:>3}  {n:>10,}  {parity_str:>6}  {ab:>8.4f}  "
+              f"{pc_str:>10}  {ac_str:>8}  {sz:>9}{marker}")
+
+    print(sep)
+    print()
+    print("parity   = n·D must be even for a D-regular graph on n=D⁴ vertices")
+    print("AB β     = Alon–Boppana lower bound (best possible spectral gap)")
+    print("Precise c = family spectral gap using precise RVW bound (needs β² < 1/3)")
+    print("Add. c   = family spectral gap using additive bound λ₁+λ₂+λ₂²")
+    print("Rot map  = size of rotation map as int32 pairs")
+    print("◀        = viable: even parity + precise RVW converges")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Generate random D-regular simple graphs and analyze spectral gaps',
+    )
+    parser.add_argument('-d', type=int, help='Degree (regularity)')
+    parser.add_argument('-n', type=int, help='Override vertex count (default: d⁴)')
+    parser.add_argument('-s', '--samples', type=int, default=10,
+                        help='Number of random graphs to try (default: 10)')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Master random seed for reproducibility')
+    parser.add_argument('--menu', action='store_true',
+                        help='Show parameter space overview')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Print every sample')
+    args = parser.parse_args()
+
+    if args.menu:
+        show_menu()
+        return
+
+    if args.d is None:
+        parser.error('-d is required (or use --menu)')
+
+    d = args.d
+    n = args.n if args.n else d ** 4
+
+    if n * d % 2 != 0:
+        print(f"Error: n*d = {n}*{d} = {n * d} must be even", file=sys.stderr)
+        sys.exit(1)
+
+    master_rng = np.random.default_rng(args.seed)
+
+    ab = alon_boppana(d)
+    print(f"D={d}, n={n:,} (D⁴={d**4:,}), Alon–Boppana β ≥ {ab:.6f}")
+    print(f"Sampling {args.samples} random simple {d}-regular graphs...\n")
+
+    best_gap = float('inf')
+    best_seed = None
+    best_lam2 = None
+    best_lamn = None
+    ok_count = 0
+
+    for trial in range(args.samples):
+        trial_seed = int(master_rng.integers(0, 2**62))
+        trial_rng = np.random.default_rng(trial_seed)
+
+        t0 = time.time()
+        matching, simple = make_simple_regular_graph(n, d, trial_rng)
+        if not simple:
+            if args.verbose:
+                sl, me = _count_defects(matching, n, d)
+                print(f"  [{trial+1:>4}/{args.samples}] seed={trial_seed}: "
+                      f"switching failed ({sl} self-loops, {me} multi-edges)")
+            continue
+
+        adj = matching_to_sparse_adj(matching, n, d)
+        assert is_simple_sparse(adj), f"Bug: not simple (seed={trial_seed})"
+
+        gap, lam2, lamn = compute_spectral_gap(adj, d)
+        elapsed = time.time() - t0
+        ok_count += 1
+
+        if args.verbose:
+            print(f"  [{trial+1:>4}/{args.samples}] seed={trial_seed}: "
+                  f"β={gap:.6f}  λ₂={lam2:.3f}  λₙ={lamn:.3f}  "
+                  f"{elapsed:.1f}s")
+
+        if gap < best_gap:
+            best_gap = gap
+            best_seed = trial_seed
+            best_lam2 = lam2
+            best_lamn = lamn
+
+    # --- Results ---
+    print(f"\n{'='*60}")
+    print(f"Results: {ok_count}/{args.samples} simple graphs generated")
+
+    if best_seed is None:
+        print("No simple graphs produced. Try more samples.")
+        sys.exit(1)
+
+    print(f"  Best seed:     {best_seed}")
+    print(f"  Spectral gap:  β = {best_gap:.6f}")
+    print(f"  Alon–Boppana:      {ab:.6f}")
+    print(f"  λ₂ = {best_lam2:.4f},  λₙ = {best_lamn:.4f}")
+
+    pc = rvw_precise_fixed_point(best_gap)
+    ac = additive_fixed_point(best_gap)
+
+    if pc is not None:
+        print(f"  Precise RVW →  c = {pc:.6f}  (family spectral gap)")
+    else:
+        print(f"  Precise RVW →  no convergence (β = {best_gap:.4f} too large)")
+
+    if ac is not None:
+        print(f"  Additive    →  c = {ac:.6f}")
+    else:
+        print(f"  Additive    →  no convergence")
+
+    # Suggest rational β
+    for denom in [d, d * d, 100, 1000]:
+        numer = math.ceil(best_gap * denom)
+        rat = numer / denom
+        if rat < 1.0:
+            pc2 = rvw_precise_fixed_point(rat)
+            if pc2 and pc2 < 1:
+                print(f"  Rational β ≤ {numer}/{denom} = {rat:.6f} → c = {pc2:.6f}")
+                break
+
+    print(f"\nTo reproduce: scripts/random-graph -d {d} -n {n} "
+          f"--seed {best_seed} -s 1 -v")
+
+
+if __name__ == '__main__':
+    main()

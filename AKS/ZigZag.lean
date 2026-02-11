@@ -11,7 +11,7 @@
 -/
 
 import AKS.Square
-import AKS.Base
+import AKS.Random
 
 open Matrix BigOperators Finset
 
