@@ -114,7 +114,7 @@ Fin.lean → RegularGraph.lean → Square.lean → ZigZag.lean
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
 - Keep mathematically high-level files (e.g., `ZigZag.lean`) clean by moving reusable helpers (e.g., `Fin` arithmetic lemmas) into their own files (e.g., `AKS/Fin.lean`). Iterate with helpers in the same file during development, then extract as a final pass before committing.
 - Split files that grow beyond ~300 lines. Smaller files mean faster incremental checking (the Lean server re-elaborates from the change point, but only within the current file — imports are precompiled). The optimal split point for tooling-assisted development is smaller than for human-authored files.
-- Prefer algebraic notation over explicit constructor names when a typeclass instance exists: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`, `0` not `ContinuousLinearMap.zero`, etc. The algebraic forms are shorter, more readable, and match how mathematicians write.
+- Prefer algebraic notation over explicit constructor names when a typeclass instance exists: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`, `0` not `ContinuousLinearMap.zero`, etc. The algebraic forms are shorter, more readable, and match how mathematicians write. Don't add type ascriptions — if the other operand pins the type (e.g., `1 - meanCLM n`), bare `1` suffices.
 
 ## Key Lean/Mathlib Conventions
 

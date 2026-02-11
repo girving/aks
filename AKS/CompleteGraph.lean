@@ -64,8 +64,8 @@ private theorem walkCLM_sub_meanCLM_completeGraph {n : ℕ} (hn : n ≥ 1) :
 /-- The norm of the orthogonal complement projection `1 - meanCLM` is 1
     (for n ≥ 2 vertices, i.e., non-constant functions exist). -/
 private theorem norm_one_sub_meanCLM {n : ℕ} (hn : n ≥ 2) :
-    ‖(1 : EuclideanSpace ℝ (Fin n) →L[ℝ] _) - meanCLM n‖ = 1 := by
-  set T := (1 : EuclideanSpace ℝ (Fin n) →L[ℝ] _) - meanCLM n
+    ‖1 - meanCLM n‖ = 1 := by
+  set T := 1 - meanCLM n
   apply le_antisymm
   · -- Upper bound: ‖Tf‖ ≤ ‖f‖ (1 - P is a contraction)
     apply ContinuousLinearMap.opNorm_le_bound _ zero_le_one
