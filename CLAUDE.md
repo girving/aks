@@ -127,6 +127,14 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **CLM self-adjointness via inner products.** To prove `IsSelfAdjoint A` for a CLM on `EuclideanSpace ℝ (Fin n)`: (1) `rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]; intro f g; change @inner ℝ _ _ (A f) g = @inner ℝ _ _ f (A g)` (2) decompose with `simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, myCLM_apply]` (3) rearrange sums. Handle d=0 separately. For `IsSelfAdjoint (A - B)` from `IsSelfAdjoint A` and `IsSelfAdjoint B`: use the Star diamond workaround above (`IsSymmetric.sub`).
 
+**`ext f v` on `EuclideanSpace` CLM equalities produces `.ofLp` goals.** After `ext f v` on `A f = B f` where the codomain is `EuclideanSpace ℝ (Fin n)`, the second `ext v` produces goals with `(... f).ofLp v` wrapping. Simp lemmas like `meanCLM_apply` and `walkCLM_apply` (which match `f v` form) may not fire. **Fix:** use `refine ContinuousLinearMap.ext (fun f ↦ ?_); apply PiLp.ext; intro v; show A f v = B f v` — the `show` converts from `ofLp` to plain function application (definitionally equal). Then `rw`/`simp` with `_apply` lemmas works.
+
+**`Fin n` has no `OfNat 0` or `OfNat 1` when `n` is variable.** Use `⟨0, by omega⟩ : Fin n` (with proof that `n > 0`) instead of `(0 : Fin n)`. Same for `1`. Bind with `set v0 : Fin n := ⟨0, by omega⟩` for reuse.
+
+**`field_simp` leaves `↑(1 + n)` and `↑n` as separate atoms.** `ring` can't close the goal because it treats them as independent variables. Fix: add `push_cast` between `field_simp` and `ring` to normalize `↑(1 + n)` to `1 + ↑n`.
+
+**`split_ifs` on nested ifs creates impossible branch combinations.** `if a then 1 else if b then -1 else 0` with `split_ifs` creates a case `a ∧ b` even when `a` and `b` are mutually exclusive. Handle with `exact absurd (h1.symm.trans h2) hne`. Alternatively, decompose nested ifs into sums of single ifs (`= (if a then 1 else 0) + (if b then -1 else 0)`) via a helper lemma, then use `Finset.sum_add_distrib` + `Finset.sum_ite_eq'`.
+
 **`Equiv.sum_comp` for rotation-bijection sum swaps.** To show `∑ v ∑ i, f(nbr v i) · g v = ∑ v ∑ i, f v · g(nbr v i)`: reindex via `G.rotEquiv.sum_comp (fun q ↦ f q.1 * g (G.rot q).1)`, then `simp only [show ∀ p, (G.rotEquiv p : _) = G.rot p from fun _ ↦ rfl, G.rot_involution]`. The `show` lemma bridges the `Equiv` coercion with the raw `rot` function. Don't use `Equiv.sum_comp` inside `calc` — it fails to unify when the coercion differs.
 
 **`linarith` can't handle division.** `1/↑n > 0` doesn't follow from `↑n > 0` in `linarith`'s linear fragment. Provide it as `have : (0:ℝ) < 1 / ↑n := by positivity`. Similarly, `(↑n + 1)/↑n = 1 + 1/↑n` needs `field_simp` to make `linarith`-accessible.
@@ -147,9 +155,13 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 - `eigenvalue_mem_ball`: needs `HasEigenvalue (toLin' A) μ`; gives `∃ k, μ ∈ closedBall (A k k) (∑ j ∈ univ.erase k, ‖A k j‖)`
 - Chain: `spectrum_toLin'` (bridge matrix ↔ linear map spectra) → `HasEigenvalue.of_mem_spectrum` → `eigenvalue_mem_ball`
 
+### Fin Sums
+- `Fin.sum_univ_succAbove (f : Fin (n+1) → M) (x : Fin (n+1)) : ∑ i, f i = f x + ∑ i, f (x.succAbove i)` — decompose sum by separating one index; import `Mathlib.Algebra.BigOperators.Fin`
+
 ### Finset Counting
 - `Finset.card_nbij'` takes `Set.MapsTo`/`Set.LeftInvOn`/`Set.RightInvOn` args
 - `card_eq_sum_card_fiberwise` needs `Set.MapsTo` proof (see `↑univ` note above)
+- `Finset.sum_ite_eq' (s : Finset α) (a : α) (b : α → β) : ∑ x ∈ s, (if x = a then b x else 0) = if a ∈ s then b a else 0`
 
 ### ContinuousLinearMap / C*-Algebra (spectral gap infrastructure)
 - Import: `Mathlib.Analysis.CStarAlgebra.Matrix` (provides `Matrix.toEuclideanCLM`)
@@ -165,18 +177,13 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-Below `#exit`: complete graph eigenvalue analysis and the old eigenvalue-based `spectralGap_complete` proof (for reference). The old eigenvalue-based square lemmas and operator-norm definitions have been deleted (superseded by CLM-native proofs above `#exit`).
+Below `#exit`: complete graph eigenvalue analysis and the old eigenvalue-based `spectralGap_complete` proof (for reference). These can be deleted once we're confident the CLM proofs are stable.
 
-**Next steps:** prove `spectralGap_le_one` and `spectralGap_complete` for the CLM-based definition. The `spectralGap_complete` strategy: for `completeGraph n`, `W - P = -(1/n) • (1 - P)`, so `‖W - P‖ = (1/n) · ‖1 - P‖`. Then `T = 1 - P` is a nonzero self-adjoint idempotent, giving `‖T‖ = 1`.
+**Next steps:** the spectral gap infrastructure (`spectralGap_nonneg`, `spectralGap_le_one`, `spectralGap_square`, `spectralGap_complete`) is fully proved above `#exit`. The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`
-
-**Done (below `#exit`, proved for old eigenvalue-based `spectralGap`):** `spectralGap_complete`
-
-**In progress (CLM-based `spectralGap`):**
-- `spectralGap_complete` — for `completeGraph n`, show `‖walkCLM - meanCLM‖ = 1/n`. Strategy: `W - P = -(1/n) • (1 - P)`, so `‖W - P‖ = (1/n) · ‖1 - P‖`. Then `T = 1 - P` is a nonzero self-adjoint idempotent, so `IsSelfAdjoint.norm_mul_self` + idempotency gives `‖T‖ ∈ {0,1}`, and `T ≠ 0` pins `‖T‖ = 1`.
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`
 
 **Achievable (weeks):** `halver_convergence`
 
