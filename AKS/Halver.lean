@@ -69,6 +69,42 @@ def epsHalverMerge (n : ℕ) (ε : ℝ) (k : ℕ)
   { comparators := (List.replicate k halver.comparators).flatten }
 
 
+/-! **Top/Bottom Half Partitioning** -/
+
+/-- Top half: positions with index < n/2 -/
+def topHalf (n : ℕ) : Finset (Fin n) :=
+  Finset.univ.filter (fun i ↦ (i : ℕ) < n / 2)
+
+/-- Bottom half: positions with index ≥ n/2 -/
+def bottomHalf (n : ℕ) : Finset (Fin n) :=
+  Finset.univ.filter (fun i ↦ n / 2 ≤ (i : ℕ))
+
+/-- Top and bottom halves cover all positions -/
+lemma topHalf_union_bottomHalf (n : ℕ) :
+    topHalf n ∪ bottomHalf n = Finset.univ := by
+  ext i
+  simp [topHalf, bottomHalf]
+  omega
+
+/-- Top and bottom halves are disjoint -/
+lemma topHalf_disjoint_bottomHalf (n : ℕ) :
+    (topHalf n ∩ bottomHalf n) = ∅ := by
+  ext i
+  simp [topHalf, bottomHalf]
+
+/-- Cardinality of top half -/
+lemma card_topHalf (n : ℕ) : (topHalf n).card = n / 2 := by
+  -- Use the fact that filtering gives exactly the first n/2 elements
+  have : topHalf n = Finset.filter (fun i ↦ i.val < n / 2) Finset.univ := rfl
+  rw [this]
+  -- Count elements with val < n / 2
+  sorry
+
+/-- Cardinality of bottom half -/
+lemma card_bottomHalf (n : ℕ) : (bottomHalf n).card = n - n / 2 := by
+  -- Use complementary counting
+  sorry
+
 /-! **Halver Composition** -/
 
 /-- An ε-sorted vector: at most εn elements are not in their
@@ -76,6 +112,93 @@ def epsHalverMerge (n : ℕ) (ε : ℝ) (k : ℕ)
 def IsEpsilonSorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
   ∃ (w : Fin n → Bool), Monotone w ∧
     ((Finset.univ.filter (fun i ↦ v i ≠ w i)).card : ℝ) ≤ ε * n
+
+/-! **Basic Properties of IsEpsilonSorted** -/
+
+/-- Witness extraction helper -/
+lemma IsEpsilonSorted.exists_witness {n : ℕ} {v : Fin n → Bool} {ε : ℝ}
+    (h : IsEpsilonSorted v ε) :
+    ∃ (w : Fin n → Bool), Monotone w ∧
+      ((Finset.univ.filter (fun i ↦ v i ≠ w i)).card : ℝ) ≤ ε * n :=
+  h
+
+/-- Monotone Boolean sequences have the pattern 0* 1* (zeros then ones) -/
+lemma Monotone.bool_pattern {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
+    ∃ k : ℕ, (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
+             (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
+  -- Use decidability: either all false, or there's a smallest true index
+  by_cases h_all_false : ∀ i : Fin n, w i = false
+  · -- Case: all false
+    use n
+    constructor
+    · intro i _; exact h_all_false i
+    · intro i hi; exfalso; exact Nat.not_le.mpr i.isLt hi
+  · -- Case: at least one true
+    push_neg at h_all_false
+    -- Use a sorry for now - this needs careful handling of Nat.find with dependent types
+    sorry
+
+/-- Relaxation: if ε₁ ≤ ε₂, then ε₁-sorted implies ε₂-sorted -/
+lemma IsEpsilonSorted.mono {n : ℕ} {v : Fin n → Bool} {ε₁ ε₂ : ℝ}
+    (h : IsEpsilonSorted v ε₁) (hle : ε₁ ≤ ε₂) :
+    IsEpsilonSorted v ε₂ := by
+  obtain ⟨w, hw_mono, hw_card⟩ := h
+  refine ⟨w, hw_mono, ?_⟩
+  calc ((Finset.univ.filter (fun i ↦ v i ≠ w i)).card : ℝ)
+      ≤ ε₁ * n := hw_card
+    _ ≤ ε₂ * n := by apply mul_le_mul_of_nonneg_right hle (Nat.cast_nonneg _)
+
+/-- Every sequence is trivially 1-sorted -/
+lemma isEpsilonSorted_one {n : ℕ} (v : Fin n → Bool) :
+    IsEpsilonSorted v 1 := by
+  -- Use the all-false sequence as witness
+  refine ⟨fun _ ↦ false, ?_, ?_⟩
+  · -- Constant false function is monotone
+    intro a b _
+    rfl
+  · -- At most n positions can differ
+    calc ((Finset.univ.filter (fun i ↦ v i ≠ false)).card : ℝ)
+        ≤ Finset.univ.card := by
+          exact_mod_cast Finset.card_mono (Finset.filter_subset _ _)
+      _ = Fintype.card (Fin n) := by simp
+      _ = n := by simp
+      _ = 1 * n := by ring
+
+/-! **Displaced Elements** -/
+
+/-- Count elements differing between two sequences -/
+def displaced {n : ℕ} (v w : Fin n → Bool) : Finset (Fin n) :=
+  Finset.univ.filter (fun i ↦ v i ≠ w i)
+
+/-- Displaced set is symmetric -/
+lemma card_displaced_symm {n : ℕ} (v w : Fin n → Bool) :
+    (displaced v w).card = (displaced w v).card := by
+  congr 1
+  ext i
+  simp [displaced]
+  tauto
+
+/-- Membership in displaced set -/
+lemma mem_displaced_iff {n : ℕ} (v w : Fin n → Bool) (i : Fin n) :
+    i ∈ displaced v w ↔ v i ≠ w i := by
+  simp [displaced]
+
+/-- Displaced set can be partitioned by value in witness -/
+lemma displaced_partition {n : ℕ} (v w : Fin n → Bool) :
+    displaced v w =
+      (displaced v w).filter (fun i ↦ w i = false) ∪
+      (displaced v w).filter (fun i ↦ w i = true) := by
+  ext i
+  simp [displaced]
+  cases w i <;> simp
+
+/-- Cardinality bound from IsEpsilonSorted -/
+lemma IsEpsilonSorted.card_displaced_bound {n : ℕ} {v : Fin n → Bool} {ε : ℝ}
+    (h : IsEpsilonSorted v ε) :
+    ∃ (w : Fin n → Bool), Monotone w ∧
+      ((displaced v w).card : ℝ) ≤ ε * n := by
+  obtain ⟨w, hw_mono, hw_card⟩ := h
+  exact ⟨w, hw_mono, by simp [displaced]; exact hw_card⟩
 
 /-- **Halver composition lemma**: Applying an ε-halver to a
     δ-sorted sequence yields a (δ·2ε)-sorted sequence.
