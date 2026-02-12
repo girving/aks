@@ -42,16 +42,62 @@ private lemma rvwBound_core_ineq {a b₁ b₂ : ℝ}
     let Δ := b₂ ^ 2 - b₁ ^ 2
     1 - (c₂ + c₁) * a ^ 2 / 4 - a * Real.sqrt (c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2) - Δ * a ^ 2 / 4 ≥ 0 := by
   intro c₁ c₂ Δ
-  -- Using identities c₁ + b₁² = 1, c₂ + b₂² = 1, Δ = b₂² - b₁²,
-  -- we get c₂ + c₁ + Δ = 2, simplifying the expression to:
-  -- 1 - a²/2 - a · √((1-b₁²)²·a²/4 + b₁²).
-  --
-  -- When a ≤ 1 and b₁ ≤ 1, this is nonnegative because:
-  -- √(...) ≤ √(a²/4 + 1) ≤ √(5/4), so a·√(...) ≤ √(5/4) ≈ 1.12,
-  -- while 1 - a²/2 ≥ 1/2.
-  --
-  -- The Lean proof requires extensive polynomial expansion + nlinarith.
-  sorry
+
+  -- Strategy: rearrange to show (1 - stuff without sqrt) ≥ a · √(...)
+  -- Then square both sides (both are nonneg) and use nlinarith
+  set S := Real.sqrt (c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2)
+
+  -- The expression equals: 1 - (c₂ + c₁ + Δ) * a² / 4 - a * S
+  have expand : 1 - (c₂ + c₁) * a ^ 2 / 4 - a * S - Δ * a ^ 2 / 4 =
+                1 - (c₂ + c₁ + Δ) * a ^ 2 / 4 - a * S := by ring
+
+  rw [expand]
+
+  -- Now use identities to simplify c₂ + c₁ + Δ
+  have hc₁ : c₁ = 1 - b₁ ^ 2 := rfl
+  have hc₂ : c₂ = 1 - b₂ ^ 2 := rfl
+  have hΔ : Δ = b₂ ^ 2 - b₁ ^ 2 := rfl
+
+  -- Compute c₂ + c₁ + Δ = 2 - 2b₁²
+  have sum_val : c₂ + c₁ + Δ = 2 - 2 * b₁ ^ 2 := by
+    simp only [hc₁, hc₂, hΔ]; ring
+
+  rw [sum_val]
+
+  -- Now need: 1 - (2 - 2b₁²)·a²/4 - a·S ≥ 0
+  -- Which is: 1 - a²/2 + b₁²·a²/2 - a·S ≥ 0
+  -- Or: 1 - a²/2 + b₁²·a²/2 ≥ a·S
+
+  have key : 1 - (2 - 2 * b₁ ^ 2) * a ^ 2 / 4 - a * S =
+             1 - a ^ 2 / 2 + b₁ ^ 2 * a ^ 2 / 2 - a * S := by ring
+  rw [key]
+
+  -- Show LHS ≥ 0 by proving: 1 - a²/2 + b₁²·a²/2 ≥ a·S
+  have hS_nonneg : 0 ≤ S := Real.sqrt_nonneg _
+  have hLHS : 0 ≤ 1 - a ^ 2 / 2 + b₁ ^ 2 * a ^ 2 / 2 := by nlinarith [sq_nonneg a, sq_nonneg b₁]
+
+  suffices h : 1 - a ^ 2 / 2 + b₁ ^ 2 * a ^ 2 / 2 ≥ a * S by linarith
+
+  -- Square both sides (both nonneg)
+  suffices h_sq : (1 - a ^ 2 / 2 + b₁ ^ 2 * a ^ 2 / 2) ^ 2 ≥ (a * S) ^ 2 by
+    have sqrt_ineq : Real.sqrt ((1 - a ^ 2 / 2 + b₁ ^ 2 * a ^ 2 / 2) ^ 2) ≥
+                     Real.sqrt ((a * S) ^ 2) := Real.sqrt_le_sqrt h_sq
+    simp only [Real.sqrt_sq hLHS, Real.sqrt_sq (by nlinarith [hS_nonneg] : 0 ≤ a * S)] at sqrt_ineq
+    exact sqrt_ineq
+
+  -- Expand (a * S)² = a² * S² = a² * (c₁²·a²/4 + b₁²)
+  have hS_sq : S ^ 2 = c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2 := by
+    have harg : 0 ≤ c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2 := by
+      nlinarith [sq_nonneg c₁, sq_nonneg a, sq_nonneg b₁]
+    rw [Real.sq_sqrt harg]
+
+  calc (1 - a ^ 2 / 2 + b₁ ^ 2 * a ^ 2 / 2) ^ 2
+      ≥ a ^ 2 * (c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2) := by
+        -- After expansion using c₁ = 1 - b₁², this reduces to: 1 ≥ a²
+        simp only [hc₁]
+        nlinarith [sq_nonneg a, sq_nonneg b₁]
+    _ = a ^ 2 * S ^ 2 := by rw [hS_sq]
+    _ = (a * S) ^ 2 := by ring
 
 /-- The key polynomial identity after expanding the squared inequality.
     This is the core algebraic fact: when a ≤ 1, the polynomial inequality holds. -/
