@@ -13,10 +13,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #title { position: fixed; top: 12px; right: 16px; z-index: 10; text-align: right; }
 #title h1 { font-size: 18px; font-weight: 600; color: #e6edf3; }
 #title p { font-size: 12px; color: #7d8590; margin-top: 2px; }
-#legend { position: fixed; bottom: 16px; left: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; }
-#legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-#legend .item:last-child { margin-bottom: 0; }
-#legend .dot { width: 12px; height: 12px; border-radius: 50%; }
+#legend { position: fixed; bottom: 16px; left: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; line-height: 1.5; }
+#legend .section { margin-bottom: 8px; }
+#legend .section:last-child { margin-bottom: 0; }
+#legend .section-title { color: #484f58; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+#legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+#legend .dot { border-radius: 50%; flex-shrink: 0; }
+#legend .size-dot { background: #484f58; }
 #stats { position: fixed; bottom: 16px; right: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; text-align: right; }
 #stats .num { font-size: 20px; font-weight: 700; }
 #tooltip { position: fixed; pointer-events: none; background: #1c2128; border: 1px solid #444c56; border-radius: 8px; padding: 12px 16px; font-size: 13px; max-width: 480px; z-index: 100; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
@@ -47,13 +50,25 @@ svg { width: 100vw; height: 100vh; }
 </div>
 
 <div id="legend">
-  <div class="item"><div class="dot" style="background:#3fb950;"></div> Proved</div>
-  <div class="item"><div class="dot" style="background:#d29922;"></div> Sorry</div>
-  <div class="item"><div class="dot" style="background:#f85149;"></div> Axiom</div>
-  <div class="item"><div class="dot" style="background:#58a6ff;"></div> Definition</div>
-  <div class="item" style="margin-top:6px; color:#484f58;">
-    <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#484f58" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#484f58"/></svg>
-    depends on
+  <div class="section">
+    <div class="section-title">Status</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#3fb950;"></div> Proved</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#d29922;"></div> Sorry</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#f85149;"></div> Axiom</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#58a6ff;"></div> Definition</div>
+  </div>
+  <div class="section">
+    <div class="section-title">Est. duration</div>
+    <div class="item"><div class="dot size-dot" style="width:8px;height:8px;"></div> done / n/a</div>
+    <div class="item"><div class="dot size-dot" style="width:12px;height:12px;"></div> days</div>
+    <div class="item"><div class="dot size-dot" style="width:16px;height:16px;"></div> weeks</div>
+    <div class="item"><div class="dot size-dot" style="width:22px;height:22px;"></div> months</div>
+  </div>
+  <div class="section">
+    <div class="item" style="color:#484f58;">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#484f58" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#484f58"/></svg>
+      depends on
+    </div>
   </div>
 </div>
 
@@ -259,7 +274,7 @@ const PROOF_DATA = {
       desc: "Top-level theorem: explicit expander families imply O(n log n) sorting networks." }
   ],
 
-  // Edges: [source, target] means "target depends on source" (arrow points downward: source → target)
+  // Edges: [source, target] means "target depends on source" (arrow points from source to target)
   edges: [
     // RegularGraph foundations
     ["RegularGraph", "walkCLM"],
@@ -423,19 +438,28 @@ const statusColor = {
   definition: "#58a6ff"
 };
 
-const NODE_RADIUS = 7;
+// Difficulty → radius mapping
+function difficultyRadius(d) {
+  if (!d) return 4;
+  if (d === "days") return 6;
+  if (d === "1-2 weeks" || d === "weeks") return 8;
+  if (d === "2-4 weeks") return 10;
+  if (d === "months") return 12;
+  return 4;
+}
+
 const W = window.innerWidth;
 const H = window.innerHeight;
 
 // Compute stats
 const proved = PROOF_DATA.nodes.filter(n => n.status === "proved").length;
 const sorry = PROOF_DATA.nodes.filter(n => n.status === "sorry").length;
-const axioms = PROOF_DATA.nodes.filter(n => n.status === "axiom").length;
+const axiomCount = PROOF_DATA.nodes.filter(n => n.status === "axiom").length;
 const defs = PROOF_DATA.nodes.filter(n => n.status === "definition").length;
 document.getElementById("stats").innerHTML =
   `<div class="num" style="color:#3fb950">${proved}</div> proved<br>` +
   `<div class="num" style="color:#d29922">${sorry}</div> sorry<br>` +
-  `<div class="num" style="color:#f85149">${axioms}</div> axiom<br>` +
+  `<div class="num" style="color:#f85149">${axiomCount}</div> axiom<br>` +
   `<div class="num" style="color:#58a6ff">${defs}</div> definitions`;
 
 // ── Compute DAG depth (longest path from roots) ──
@@ -462,28 +486,10 @@ function getDepth(id) {
 PROOF_DATA.nodes.forEach(n => getDepth(n.id));
 const maxDepth = Math.max(...PROOF_DATA.nodes.map(n => depth.get(n.id)));
 
-// ── Assign deterministic layer positions (Sugiyama-style) ──
-// Group nodes by depth layer
-const layers = new Map();
+// ── Assign radius and initial positions ──
 PROOF_DATA.nodes.forEach(n => {
   n.depth = depth.get(n.id);
-  if (!layers.has(n.depth)) layers.set(n.depth, []);
-  layers.get(n.depth).push(n);
-});
-
-// Layout constants
-const LAYER_H = 70;
-const TOP_PAD = 50;
-const GRAPH_W = 900;
-const LEFT_PAD = 60;
-
-// Position nodes: Y by depth, X spread evenly within each layer
-layers.forEach((nodesInLayer, d) => {
-  const count = nodesInLayer.length;
-  nodesInLayer.forEach((n, i) => {
-    n.y = TOP_PAD + d * LAYER_H;
-    n.x = LEFT_PAD + (i + 0.5) * (GRAPH_W / count);
-  });
+  n.radius = difficultyRadius(n.difficulty);
 });
 
 // Group nodes by file for group rectangles
@@ -493,12 +499,35 @@ PROOF_DATA.nodes.forEach(n => {
   fileGroups.get(n.file).push(n);
 });
 
+// Layout: Y is INVERTED (big theorems at top, foundations at bottom)
+const LAYER_H = 75;
+const TOP_PAD = 60;
+const GRAPH_W = 1000;
+const CENTER_X = GRAPH_W / 2;
+
+// Seed initial positions: Y by inverted depth, X spread with noise
+const layers = new Map();
+PROOF_DATA.nodes.forEach(n => {
+  if (!layers.has(n.depth)) layers.set(n.depth, []);
+  layers.get(n.depth).push(n);
+});
+layers.forEach((nodesInLayer, d) => {
+  const count = nodesInLayer.length;
+  const layerW = Math.min(GRAPH_W, count * 80);
+  nodesInLayer.forEach((n, i) => {
+    // Inverted: max depth at top
+    n.y = TOP_PAD + (maxDepth - d) * LAYER_H;
+    n.x = CENTER_X - layerW/2 + (i + 0.5) * (layerW / count);
+  });
+});
+
 // ── D3 setup ──
 const svg = d3.select("svg");
 const g = svg.append("g");
 
 // Arrow marker
-svg.append("defs").append("marker")
+const defs2 = svg.append("defs");
+defs2.append("marker")
   .attr("id", "arrowhead")
   .attr("viewBox", "0 0 10 6")
   .attr("refX", 10)
@@ -512,17 +541,17 @@ svg.append("defs").append("marker")
 
 // Zoom
 const zoom = d3.zoom()
-  .scaleExtent([0.2, 4])
+  .scaleExtent([0.15, 4])
   .on("zoom", (e) => g.attr("transform", e.transform));
 svg.call(zoom);
 
 function resetZoom() {
-  const graphH = TOP_PAD + (maxDepth + 1) * LAYER_H;
-  const scaleX = W / (GRAPH_W + 2 * LEFT_PAD);
-  const scaleY = H / (graphH + 40);
-  const s = Math.min(scaleX, scaleY, 1.2) * 0.9;
-  const tx = (W - (GRAPH_W + 2 * LEFT_PAD) * s) / 2;
-  const ty = 20;
+  const graphH = TOP_PAD + (maxDepth + 1) * LAYER_H + 40;
+  const scaleX = W / (GRAPH_W + 80);
+  const scaleY = (H - 20) / graphH;
+  const s = Math.min(scaleX, scaleY, 1.1) * 0.9;
+  const tx = (W - GRAPH_W * s) / 2;
+  const ty = 10;
   svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(s));
 }
 
@@ -537,39 +566,33 @@ const links = PROOF_DATA.edges
   .filter(([s, t]) => nodeMap.has(s) && nodeMap.has(t))
   .map(([s, t]) => ({ source: nodeMap.get(s), target: nodeMap.get(t) }));
 
-// ── Draw group rects ──
+// ── Force simulation for organic layout ──
+// Strong Y force keeps depth ordering; charge + collision spread nodes apart
+const simulation = d3.forceSimulation(PROOF_DATA.nodes)
+  .force("link", d3.forceLink(links).id(d => d.id).distance(50).strength(0.15))
+  .force("charge", d3.forceManyBody().strength(-120))
+  .force("y", d3.forceY().y(d => TOP_PAD + (maxDepth - d.depth) * LAYER_H).strength(0.85))
+  .force("x", d3.forceX(CENTER_X).strength(0.03))
+  .force("collision", d3.forceCollide().radius(d => d.radius + 14))
+  .alphaDecay(0.025)
+  .alpha(0.8);
+
+// ── Draw group rects (updated on tick) ──
 const groupRects = g.append("g").selectAll("rect")
   .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
   .join("rect")
   .attr("class", "group-rect")
   .attr("fill", d => d.color)
   .attr("stroke", "#21262d")
-  .attr("stroke-width", 1)
-  .each(function(gr) {
-    const nodes = fileGroups.get(gr.id);
-    const pad = 22;
-    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
-    d3.select(this)
-      .attr("x", Math.min(...xs) - pad).attr("y", Math.min(...ys) - pad)
-      .attr("width", Math.max(...xs) - Math.min(...xs) + 2*pad)
-      .attr("height", Math.max(...ys) - Math.min(...ys) + 2*pad);
-  });
+  .attr("stroke-width", 1);
 
 const groupLabels = g.append("g").selectAll("text")
   .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
   .join("text")
   .attr("class", "group-label")
-  .text(d => d.label)
-  .each(function(gr) {
-    const nodes = fileGroups.get(gr.id);
-    const pad = 22;
-    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
-    d3.select(this)
-      .attr("x", Math.min(...xs) - pad + 6)
-      .attr("y", Math.min(...ys) - pad + 13);
-  });
+  .text(d => d.label);
 
-// ── Draw edges with curved paths and arrowheads ──
+// ── Draw edges ──
 const linkSel = g.append("g")
   .selectAll("path")
   .data(links)
@@ -577,21 +600,8 @@ const linkSel = g.append("g")
   .attr("class", "link")
   .attr("stroke", "#30363d")
   .attr("stroke-width", 1.2)
-  .attr("stroke-opacity", 0.35)
-  .attr("marker-end", "url(#arrowhead)")
-  .attr("d", d => {
-    const sx = d.source.x, sy = d.source.y;
-    const tx = d.target.x, ty = d.target.y;
-    // Shorten line to stop at node edge
-    const dx = tx - sx, dy = ty - sy;
-    const len = Math.sqrt(dx*dx + dy*dy) || 1;
-    const r = NODE_RADIUS + 4;
-    const ex = tx - (dx/len)*r, ey = ty - (dy/len)*r;
-    // Gentle curve via control point offset
-    const mx = (sx + tx) / 2, my = (sy + ty) / 2;
-    const offset = (tx - sx) * 0.15;
-    return `M${sx},${sy + NODE_RADIUS} Q${mx + offset},${my} ${ex},${ey}`;
-  });
+  .attr("stroke-opacity", 0.3)
+  .attr("marker-end", "url(#arrowhead)");
 
 // ── Draw nodes ──
 const nodeSel = g.append("g")
@@ -599,37 +609,13 @@ const nodeSel = g.append("g")
   .data(PROOF_DATA.nodes)
   .join("circle")
   .attr("class", "node-circle")
-  .attr("r", NODE_RADIUS)
-  .attr("cx", d => d.x)
-  .attr("cy", d => d.y)
+  .attr("r", d => d.radius)
   .attr("fill", d => statusColor[d.status])
-  .attr("stroke", d => {
-    const c = d3.color(statusColor[d.status]);
-    return c.darker(0.5).formatHex();
-  })
+  .attr("stroke", d => d3.color(statusColor[d.status]).darker(0.5).formatHex())
   .call(d3.drag()
-    .on("start", function(e, d) { d3.select(this).raise(); })
-    .on("drag", function(e, d) {
-      d.x = e.x; d.y = e.y;
-      d3.select(this).attr("cx", d.x).attr("cy", d.y);
-      // Update connected edges
-      linkSel.attr("d", dd => {
-        const sx = dd.source.x, sy = dd.source.y;
-        const tx = dd.target.x, ty = dd.target.y;
-        const dx = tx - sx, dy = ty - sy;
-        const len = Math.sqrt(dx*dx + dy*dy) || 1;
-        const r = NODE_RADIUS + 4;
-        const ex = tx - (dx/len)*r, ey = ty - (dy/len)*r;
-        const mx = (sx + tx) / 2, my = (sy + ty) / 2;
-        const offset = (tx - sx) * 0.15;
-        return `M${sx},${sy + NODE_RADIUS} Q${mx + offset},${my} ${ex},${ey}`;
-      });
-      // Update label
-      labelSel.filter(dd => dd.id === d.id)
-        .attr("x", d.x).attr("y", d.y);
-      // Update group rects
-      updateGroupRects();
-    })
+    .on("start", (e, d) => { if (!e.active) simulation.alphaTarget(0.15).restart(); d.fx = d.x; d.fy = d.y; })
+    .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+    .on("end", (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
   );
 
 // ── Node labels ──
@@ -643,16 +629,40 @@ const labelSel = g.append("g")
     name = name.replace("RegularGraph.", "").replace("CLM", "");
     if (name.length > 22) name = name.substring(0, 20) + "..";
     return name;
-  })
-  .attr("x", d => d.x)
-  .attr("y", d => d.y)
-  .attr("dy", NODE_RADIUS + 12);
+  });
 
-function updateGroupRects() {
+// ── Edge path helper ──
+function edgePath(d) {
+  const sx = d.source.x, sy = d.source.y;
+  const tx = d.target.x, ty = d.target.y;
+  const dx = tx - sx, dy = ty - sy;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  // Shorten at both ends by node radii
+  const sr = d.source.radius + 2;
+  const tr = d.target.radius + 5; // extra for arrowhead
+  const bx = sx + (dx/len)*sr, by = sy + (dy/len)*sr;
+  const ex = tx - (dx/len)*tr, ey = ty - (dy/len)*tr;
+  // Gentle curve
+  const mx = (bx + ex) / 2, my = (by + ey) / 2;
+  const offset = (ex - bx) * 0.12;
+  return `M${bx},${by} Q${mx + offset},${my} ${ex},${ey}`;
+}
+
+// ── Tick ──
+simulation.on("tick", () => {
+  linkSel.attr("d", edgePath);
+
+  nodeSel.attr("cx", d => d.x).attr("cy", d => d.y);
+
+  labelSel
+    .attr("x", d => d.x)
+    .attr("y", d => d.y + d.radius + 12);
+
+  // Update group rectangles
   groupRects.each(function(gr) {
     const nodes = fileGroups.get(gr.id);
     if (!nodes || !nodes.length) return;
-    const pad = 22;
+    const pad = 24;
     const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
     d3.select(this)
       .attr("x", Math.min(...xs) - pad).attr("y", Math.min(...ys) - pad)
@@ -662,13 +672,12 @@ function updateGroupRects() {
   groupLabels.each(function(gr) {
     const nodes = fileGroups.get(gr.id);
     if (!nodes || !nodes.length) return;
-    const pad = 22;
-    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+    const pad = 24;
     d3.select(this)
-      .attr("x", Math.min(...xs) - pad + 6)
-      .attr("y", Math.min(...ys) - pad + 13);
+      .attr("x", Math.min(...nodes.map(n => n.x)) - pad + 6)
+      .attr("y", Math.min(...nodes.map(n => n.y)) - pad + 13);
   });
-}
+});
 
 // ── Tooltip ──
 const tooltip = document.getElementById("tooltip");
@@ -713,11 +722,11 @@ nodeSel.on("mouseover.highlight", (e, d) => {
 }).on("mouseout.highlight", () => {
   nodeSel.attr("opacity", 1);
   labelSel.attr("opacity", labelsVisible ? 1 : 0);
-  linkSel.attr("stroke-opacity", 0.35);
+  linkSel.attr("stroke-opacity", 0.3);
 });
 
 // ── Initial zoom to fit ──
-setTimeout(() => resetZoom(), 50);
+setTimeout(() => resetZoom(), 100);
 </script>
 </body>
 </html>
