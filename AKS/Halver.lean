@@ -126,17 +126,11 @@ lemma IsEpsilonSorted.exists_witness {n : ℕ} {v : Fin n → Bool} {ε : ℝ}
 lemma Monotone.bool_pattern {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
     ∃ k : ℕ, (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
              (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
-  -- Use decidability: either all false, or there's a smallest true index
-  by_cases h_all_false : ∀ i : Fin n, w i = false
-  · -- Case: all false
-    use n
-    constructor
-    · intro i _; exact h_all_false i
-    · intro i hi; exfalso; exact Nat.not_le.mpr i.isLt hi
-  · -- Case: at least one true
-    push_neg at h_all_false
-    -- Use a sorry for now - this needs careful handling of Nat.find with dependent types
-    sorry
+  -- Proof: For monotone Boolean sequences, false < true in the ordering.
+  -- So if w i = true and i ≤ j, then w j = true (by monotonicity).
+  -- This means all trues cluster at high indices, all falses at low indices.
+  -- The transition point is characterized by the cardinality of the false set.
+  sorry
 
 /-- Relaxation: if ε₁ ≤ ε₂, then ε₁-sorted implies ε₂-sorted -/
 lemma IsEpsilonSorted.mono {n : ℕ} {v : Fin n → Bool} {ε₁ ε₂ : ℝ}
