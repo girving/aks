@@ -159,6 +159,17 @@ theorem Comparator.apply_preserves_monotone {n : ℕ} {α : Type*} [LinearOrder 
           rw [if_neg hb_j]
           exact hw hab
 
+/-- Network execution preserves monotonicity: if w is monotone, then net.exec w is monotone -/
+theorem ComparatorNetwork.exec_preserves_monotone {n : ℕ} {α : Type*} [LinearOrder α]
+    (net : ComparatorNetwork n) (w : Fin n → α) (hw : Monotone w) :
+    Monotone (net.exec w) := by
+  unfold ComparatorNetwork.exec
+  induction net.comparators generalizing w with
+  | nil => exact hw
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    exact ih (c.apply w) (c.apply_preserves_monotone w hw)
+
 /-- Monotone functions commute with sequential comparator application. -/
 private theorem foldl_comp_monotone {n : ℕ} {α β : Type*}
     [LinearOrder α] [LinearOrder β]
