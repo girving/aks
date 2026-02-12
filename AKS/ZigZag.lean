@@ -10,82 +10,15 @@
   iterated construction that yields expanders at every size.
 -/
 
+import AKS.ZigZagSpectral
+import AKS.RVWBound
 import AKS.Square
 import AKS.Random
 
 open Matrix BigOperators Finset
 
 
-/-! **The Zig-Zag Product** -/
-
-/-- **The zig-zag product** G₁ ⓩ G₂.
-
-    Given:  G₁ = (n₁, d₁)-regular graph
-            G₂ = (d₁, d₂)-regular graph  (G₂ has d₁ vertices!)
-    Result: (n₁ · d₁, d₂²)-regular graph
-
-    Vertices of G₁ ⓩ G₂ are pairs (v, k) where v ∈ V(G₁), k ∈ V(G₂) = [d₁].
-
-    The rotation map performs three steps:
-    1. **Zig**: Walk along G₂ from port k using port a (first half of d₂²).
-       Arrive at port k'.
-    2. **Step**: Cross the big graph G₁ along port k'.
-       Arrive at (v', k'') on the other side.
-    3. **Zag**: Walk along G₂ again from port k'' using port b.
-       Arrive at final port k'''.
-
-    The pair (a, b) ∈ [d₂] × [d₂] encodes the d₂²-valued port. -/
-private def zigzag_rot {n₁ d₁ d₂ : ℕ}
-    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
-    (p : Fin (n₁ * d₁) × Fin (d₂ * d₂)) : Fin (n₁ * d₁) × Fin (d₂ * d₂) :=
-  have hd₁ : 0 < d₁ :=
-    Nat.pos_of_ne_zero (by rintro rfl; exact absurd p.1.isLt (by simp))
-  have hd₂ : 0 < d₂ :=
-    Nat.pos_of_ne_zero (by rintro rfl; exact absurd p.2.isLt (by simp))
-  -- Decode vertex (v, k) from Fin (n₁ * d₁)
-  let v : Fin n₁ := ⟨p.1.val / d₁, (Nat.div_lt_iff_lt_mul hd₁).mpr p.1.isLt⟩
-  let k : Fin d₁ := ⟨p.1.val % d₁, Nat.mod_lt _ hd₁⟩
-  -- Decode port (a, b) from Fin (d₂ * d₂)
-  let a : Fin d₂ := ⟨p.2.val / d₂, (Nat.div_lt_iff_lt_mul hd₂).mpr p.2.isLt⟩
-  let b : Fin d₂ := ⟨p.2.val % d₂, Nat.mod_lt _ hd₂⟩
-  -- Zig: walk in G₂ from k along port a
-  let zig := G₂.rot (k, a)
-  -- Step: walk in G₁ from v along port zig.1
-  let step := G₁.rot (v, zig.1)
-  -- Zag: walk in G₂ from step.2 along port b
-  let zag := G₂.rot (step.2, b)
-  -- Encode: vertex = (step.1, zag.1), port = (zag.2, zig.2)
-  (⟨step.1.val * d₁ + zag.1.val, Fin.pair_lt step.1 zag.1⟩,
-   ⟨zag.2.val * d₂ + zig.2.val, Fin.pair_lt zag.2 zig.2⟩)
-
-private theorem zigzag_rot_involution {n₁ d₁ d₂ : ℕ}
-    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
-    (p : Fin (n₁ * d₁) × Fin (d₂ * d₂)) :
-    zigzag_rot G₁ G₂ (zigzag_rot G₁ G₂ p) = p := by
-  obtain ⟨vk, ab⟩ := p
-  simp only [zigzag_rot, fin_encode_fst, fin_encode_snd, Prod.mk.eta,
-    G₁.rot_involution, G₂.rot_involution, fin_div_add_mod]
-
-def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
-    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂) :
-    RegularGraph (n₁ * d₁) (d₂ * d₂) where
-  rot := zigzag_rot G₁ G₂
-  rot_involution := zigzag_rot_involution G₁ G₂
-
-
 /-! **The Spectral Composition Theorem** -/
-
-/-- The precise RVW bound on the spectral gap of a zig-zag product.
-
-    f(λ₁, λ₂) = (1 − λ₂²) · λ₁ / 2 + √((1 − λ₂²)² · λ₁² / 4 + λ₂²)
-
-    This is tight (achieved by tensor products of complete graphs).
-    Earlier versions of this file used the weaker additive bound
-    `λ₁ + λ₂ + λ₂²`, but the iteration only converges with the precise
-    bound (the additive bound requires β < 0.207, below Alon–Boppana
-    for all D ≥ 3). -/
-noncomputable def rvwBound (lam₁ lam₂ : ℝ) : ℝ :=
-  (1 - lam₂ ^ 2) * lam₁ / 2 + Real.sqrt ((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2)
 
 /-- **The Main Theorem (Reingold–Vadhan–Wigderson 2002):**
 
@@ -101,12 +34,15 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (hG₁ : spectralGap G₁ ≤ lam₁)
     (hG₂ : spectralGap G₂ ≤ lam₂) :
     spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂ := by
-  -- Proof strategy:
-  -- 1. Decompose ℝ^{n·d} into n blocks of size d,
-  --    project each block onto constants (hat) and orthogonal (tilde).
-  -- 2. The zig-zag walk operator acts on (hat, tilde) components as a
-  --    2×2 block matrix; bound its norm via the triangle inequality.
-  -- 3. Show f is monotone in both arguments (to pass from spectralGap to lam₁/lam₂).
+  -- Assembly proof: plugs the sublemmas from ZigZagOperators, ZigZagSpectral,
+  -- and RVWBound together.
+  --
+  -- Step 1: Handle degenerate cases (d₁ = 0 or d₂ = 0).
+  -- Step 2: Rewrite walkCLM using zigzag_walkCLM_eq: W_Z = B · Σ · B.
+  -- Step 3: Apply rvw_operator_norm_bound with:
+  --   B = withinClusterCLM G₂, Σ = stepPermCLM G₁, Q = clusterMeanCLM, P = meanCLM
+  --   feeding in all the algebraic properties from ZigZagSpectral.lean.
+  -- Step 4: Chain with rvwBound_mono_left/right to pass from spectralGap to lam₁/lam₂.
   sorry
 
 
