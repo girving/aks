@@ -157,8 +157,19 @@ def format_diagnostic(d: dict) -> str:
     start = rng.get("start", {})
     line = start.get("line", 0) + 1
     col = start.get("character", 0)
-    msg = d.get("message", "").split("\n")[0]  # First line only
-    return f"  {sev_str} [{line}:{col}]: {msg}"
+    msg = d.get("message", "")
+
+    # Format multi-line messages with proper indentation
+    lines = msg.split("\n")
+    if len(lines) == 1:
+        return f"  {sev_str} [{line}:{col}]: {msg}"
+    else:
+        # First line with label, subsequent lines indented
+        result = [f"  {sev_str} [{line}:{col}]: {lines[0]}"]
+        for subsequent_line in lines[1:]:
+            if subsequent_line:  # Skip empty lines
+                result.append(f"    {subsequent_line}")
+        return "\n".join(result)
 
 
 def check_file(filepath: str):
