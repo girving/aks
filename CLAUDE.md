@@ -205,6 +205,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`spectralGap_le_one` proof pattern: contraction + WP = P.** To show `‖W - P‖ ≤ 1` for walk operator W and mean projection P: (1) prove `‖W‖ ≤ 1` via `opNorm_le_bound` + Cauchy-Schwarz (`sq_sum_le_card_mul_sum_sq` from `Mathlib.Algebra.Order.Chebyshev`) + double-counting via `rotEquiv.sum_comp`; (2) prove `WP = P` (walk of a constant = same constant); (3) prove `‖f - Pf‖ ≤ ‖f‖` via `field_simp` + `nlinarith`; (4) factor `(W-P)f = W(f - Pf)` and chain inequalities. Handle d = 0 separately with `‖Pf‖ ≤ ‖f‖` (Cauchy-Schwarz). Key Lean pitfall: `Nat.cast_ne_zero.mpr` often has type-class mismatch issues; use `by positivity` instead.
 
+**Indicator vector pattern for combinatorial-spectral bridges.** To relate a combinatorial quantity (edge count between sets) to a spectral bound (operator norm): (1) define `indicatorVec S` via `(WithLp.equiv 2 _).symm (fun v ↦ if v ∈ S then 1 else 0)` with an `@[simp]` apply lemma that's `rfl`; (2) prove `‖indicatorVec S‖ = √↑S.card` via `EuclideanSpace.norm_sq_eq` + `sum_boole`; (3) express the combinatorial quantity as `⟨1_S, A(1_T)⟩` by unfolding inner product (`PiLp.inner_apply` + `RCLike.inner_apply` + `conj_trivial`), then using `ite_mul`/`sum_filter`/`sum_boole` to convert indicator sums to filter cardinalities; (4) apply `abs_real_inner_le_norm` (Cauchy-Schwarz) + `le_opNorm` for the spectral bound. Key tactic sequence for indicator sums: `simp_rw [ite_mul, one_mul, zero_mul]; rw [← Finset.sum_filter]; have : univ.filter (· ∈ S) = S := by ext; simp`.
+
 ## Mathlib API Reference
 
 ### Spectral Theorem
