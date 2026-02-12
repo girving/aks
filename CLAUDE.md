@@ -29,6 +29,13 @@ lake build          # Full rebuild — slow, use only as fallback
 lake clean          # Clean build artifacts
 ```
 
+### Python Scripts
+
+Use `uv run` (not `pip install`) for Python scripts with dependencies:
+```bash
+uv run --with numpy --with networkx scripts/some_script.py
+```
+
 ### Mathlib Searches
 
 `rg` (ripgrep) through `.lake/packages/mathlib/Mathlib/` takes ~0.2s for any pattern. This is already fast. Example:
