@@ -75,10 +75,14 @@ Sections build on each other sequentially:
 1. **Comparator networks** — `Comparator`, `ComparatorNetwork` (flat list of comparators), execution model
 2. **0-1 principle** — reduces sorting correctness to Boolean inputs
 3. **Expander graphs** — `BipartiteExpander`, spectral gap, existence
-4. **ε-halvers** — approximate sorting via expanders (`IsEpsilonHalver`)
-5. **AKS construction** — recursive build: split → recurse → merge with halvers
-6. **Complexity analysis** — `IsBigO` notation, O(n log n) size
-7. **Correctness** — `halver_composition` (geometric decrease), `AKS.sorts`
+4. **AKS construction** — recursive build: split → recurse → merge with halvers
+5. **Complexity analysis** — `IsBigO` notation, O(n log n) size
+6. **Correctness** — `AKS.sorts`
+
+### `AKS/Halver.lean` — ε-Halver Theory
+ε-halvers and their composition properties, the engine driving AKS correctness:
+1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver`, `epsHalverMerge`
+2. **Halver composition** — `IsEpsilonSorted`, `halver_composition` (geometric decrease), `halver_convergence`
 
 ### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
@@ -98,7 +102,7 @@ The complete graph as a concrete example:
 2. **Spectral gap** — `spectralGap_complete`: λ(K_{n+1}) = 1/n
 
 ### `AKS/Mixing.lean` — Expander Mixing Lemma
-Statement of the expander mixing lemma (sorry, future work).
+Fully proved expander mixing lemma via indicator vectors + Cauchy-Schwarz + operator norm.
 
 ### `AKS/Random.lean` — Base Expander for Zig-Zag Construction
 Axiomatized base expander (chosen by fair dice roll, guaranteed to be random):
@@ -119,7 +123,7 @@ Fin.lean → RegularGraph.lean → Square.lean ──→ ZigZag.lean
                               → CompleteGraph.lean    ↓
                               → Mixing.lean     AKS.lean
            Random.lean ─────────────────────↗      ↑
-                                              Basic.lean
+                                         Basic.lean → Halver.lean
 ```
 
 ## Style
