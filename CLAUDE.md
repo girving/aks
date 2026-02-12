@@ -12,17 +12,20 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 
 ```bash
 scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits near end)
+scripts/lean-check --all                    # Check all project files (use before committing)
 scripts/lean-check --stop                   # Stop daemon (when done)
 scripts/sorries                             # Audit sorry, #exit, native_decide, axiom across codebase
 ```
 
 **Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates only from the change point forward. Since proof iteration typically happens at the end of a file, most checks are sub-second. The daemon auto-starts on first use (~5s).
 
+**Before committing, run `scripts/lean-check --all`** to verify all project files type-check. This catches cross-file breakage (e.g., a changed signature in one file breaking a downstream import) that single-file checks miss.
+
 There are no tests or linter configurations. Correctness is verified through Lean's type checker — if `lean-check` reports no errors, all type-checked proofs are valid.
 
 ### `lake build` (fallback only)
 
-Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state or need to verify downstream file interactions). It rebuilds from scratch and takes ~20s per changed file vs 0.2-2s for `lean-check`.
+Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state). For checking all files, prefer `scripts/lean-check --all` — it uses the daemon cache and is much faster.
 
 ```bash
 lake build          # Full rebuild — slow, use only as fallback
@@ -238,15 +241,15 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, and `ZigZag.lean` have no `#exit`. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (precise RVW bound, Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is `zigzag_spectral_bound` and `expander_mixing_lemma`.
+`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, `Mixing.lean`, and `ZigZag.lean` have no `#exit`. `Mixing.lean` has 0 sorry's — `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (precise RVW bound, Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is `zigzag_spectral_bound`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases), `expander_mixing_lemma`
 
 **Achievable (weeks):** `halver_convergence`
 
-**Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
+**Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `halver_composition`, `expander_gives_halver`
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
 

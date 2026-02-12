@@ -5,6 +5,7 @@ The daemon auto-starts on first use; no need to run --start explicitly.
 
 Usage:
   scripts/lean-check AKS/RegularGraph.lean
+  scripts/lean-check --all       # Check all project .lean files
   scripts/lean-check --start     # Start the daemon (optional, happens automatically)
   scripts/lean-check --stop      # Stop the daemon
   scripts/lean-check --ping      # Check if daemon is running
@@ -168,6 +169,70 @@ def check_file(filepath: str):
     sys.exit(1 if errors else 0)
 
 
+def find_project_files():
+    """Find all project .lean files (excluding lake dependencies)."""
+    import glob
+    files = []
+    for pattern in ["AKS.lean", "AKS/**/*.lean"]:
+        files.extend(glob.glob(pattern, root_dir=PROJECT_ROOT, recursive=True))
+    return sorted(set(files))
+
+
+def check_all():
+    """Check all project .lean files. Auto-starts daemon if needed."""
+    if not daemon_running():
+        if not start_daemon():
+            sys.exit(2)
+
+    files = find_project_files()
+    if not files:
+        print("No .lean files found.")
+        sys.exit(2)
+
+    print(f"Checking {len(files)} file(s)...\n")
+    total_errors = 0
+    total_warnings = 0
+    failed_files = []
+
+    for filepath in files:
+        t0 = time.time()
+        result = send_command({"command": "check", "file": filepath})
+        wall_time = time.time() - t0
+
+        if "error" in result:
+            print(f"  FAIL  {filepath}: {result['error']}")
+            failed_files.append(filepath)
+            total_errors += 1
+            continue
+
+        diagnostics = result.get("diagnostics", [])
+        server_time = result.get("time_seconds", "?")
+        errors = [d for d in diagnostics if d.get("severity", 0) == 1]
+        warnings = [d for d in diagnostics if d.get("severity", 0) == 2]
+
+        status = "FAIL" if errors else "  ok"
+        parts = [f"{status}  {filepath} ({server_time}s)"]
+        if errors:
+            parts.append(f" — {len(errors)} error(s)")
+            failed_files.append(filepath)
+        if warnings:
+            parts.append(f" — {len(warnings)} warning(s)")
+        print("".join(parts))
+
+        if errors:
+            for d in errors:
+                print(f"        {format_diagnostic(d)}")
+
+        total_errors += len(errors)
+        total_warnings += len(warnings)
+
+    print(f"\n{'='*50}")
+    print(f"{len(files)} files checked, {total_errors} error(s), {total_warnings} warning(s)")
+    if failed_files:
+        print(f"Failed: {', '.join(failed_files)}")
+    sys.exit(1 if failed_files else 0)
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -185,6 +250,8 @@ def main():
         else:
             print("Daemon is NOT running.")
             sys.exit(2)
+    elif arg == "--all":
+        check_all()
     elif arg.endswith(".lean"):
         check_file(arg)
     else:
