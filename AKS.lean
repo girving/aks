@@ -3,6 +3,9 @@ import AKS.Halver
 import AKS.Random
 import AKS.CompleteGraph
 import AKS.Mixing
+import AKS.ZigZagOperators
+import AKS.ZigZagSpectral
+import AKS.RVWBound
 import AKS.ZigZag
 
 

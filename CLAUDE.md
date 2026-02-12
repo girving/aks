@@ -61,6 +61,10 @@ Track tool performance against these baselines. If a command exceeds its expecte
 
 **Timeout protocol:** When any tool call times out, record it in `scripts/SLOW_COMMANDS.md` with context (what file, what operation, wall time). Then investigate root cause.
 
+### Git
+
+Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
+
 ## Architecture
 
 **Entry point:** `AKS.lean` — imports all modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
@@ -110,20 +114,43 @@ Axiomatized base expander (chosen by fair dice roll, guaranteed to be random):
 2. **`baseExpander_gap`** — axiom: spectral gap ≤ 5/9 ≈ 0.556 (just above Alon–Boppana 2√11/12 ≈ 0.553)
 3. **Certificate analysis** — all O(n)-data approaches (SDD, edge PSD, Krylov) are infeasible; see file header
 
-### `AKS/ZigZag.lean` — Zig-Zag Product and Expander Families
-Builds on `Square.lean` and `Random.lean` with the zig-zag product construction:
+### `AKS/ZigZagOperators.lean` — Zig-Zag Product and Walk Operators (~230 lines)
+Defines the zig-zag product and the three CLM operators for its spectral analysis:
 1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
-2. **Spectral composition theorem** — `rvwBound`: precise RVW bound on λ(G₁ ⓩ G₂)
-3. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
-4. **Main result** — `explicit_expanders_exist_zigzag`
+2. **Cluster encoding** — `cluster`/`port`/`encode` helpers for `Fin (n₁ * d₁)` ↔ `Fin n₁ × Fin d₁`
+3. **Within-cluster walk** — `withinClusterCLM` (`B = I ⊗ W_{G₂}`)
+4. **Step permutation** — `stepPermCLM` (`Σ`: permutes via `G₁.rot`)
+5. **Cluster mean** — `clusterMeanCLM` (`Q`: averages within each cluster)
+6. **Walk factorization** — `zigzag_walkCLM_eq`: `W_Z = B · Σ · B`
+
+### `AKS/ZigZagSpectral.lean` — Zig-Zag Operator Properties (~130 lines)
+Algebraic identities and spectral bounds for the zig-zag operators:
+1. **Algebraic properties** — `Q² = Q`, `Q* = Q`, `B* = B`, `Σ² = 1`, `Σ* = Σ`, `BQ = QB = Q`
+2. **Tilde contraction** — `‖B(I-Q)‖ ≤ spectralGap G₂`
+3. **Hat block norm** — `‖QΣQ - P‖ ≤ spectralGap G₁`
+4. **Global mean decomposition** — `P·Q = Q·P = P`
+
+### `AKS/RVWBound.lean` — Abstract RVW Operator Bound (~85 lines)
+Pure operator theory, no graph imports:
+1. **`rvwBound`** — the precise RVW bound function
+2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
+3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
+
+### `AKS/ZigZag.lean` — Expander Families (~115 lines)
+Assembles the spectral bound and builds the iterated construction:
+1. **Spectral composition theorem** — `zigzag_spectral_bound` (assembles sublemmas)
+2. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
+3. **Main result** — `explicit_expanders_exist_zigzag`
 
 ### Data flow
 ```
-Fin.lean → RegularGraph.lean → Square.lean ──→ ZigZag.lean
-                              → CompleteGraph.lean    ↓
-                              → Mixing.lean     AKS.lean
-           Random.lean ─────────────────────↗      ↑
-                                         Basic.lean → Halver.lean
+Fin.lean → RegularGraph.lean → Square.lean ──────────────→ ZigZag.lean
+                              → CompleteGraph.lean              ↓
+                              → Mixing.lean               AKS.lean
+                              → ZigZagOperators.lean ──→      ↑
+                                  ZigZagSpectral.lean ─↗  Basic.lean → Halver.lean
+           Random.lean ────────────────────────────↗
+           RVWBound.lean ─────────────────────────↗
 ```
 
 ## Style
@@ -247,7 +274,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-No files have `#exit`. `Mixing.lean` has 0 sorry's — `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (precise RVW bound, Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is `zigzag_spectral_bound`.
+No files have `#exit`. `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (assembly) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The `zigzag_spectral_bound` sorry has been decomposed into 16 smaller sublemmas across three new files: `ZigZagOperators.lean` (1 sorry: walk factorization), `ZigZagSpectral.lean` (12 sorry's: algebraic + spectral properties), and `RVWBound.lean` (3 sorry's: monotonicity + abstract operator bound). The mathematical core is `rvw_operator_norm_bound` in `RVWBound.lean` — a pure operator-theory result independent of graphs. Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is proving the easier sublemmas (algebraic properties).
 
 ## Proof Status by Difficulty
 
@@ -255,7 +282,12 @@ No files have `#exit`. `Mixing.lean` has 0 sorry's — `expander_mixing_lemma` i
 
 **Achievable (weeks):** `halver_convergence`
 
-**Substantial (months):** `zigzag_spectral_bound` (core lemma — operator norm bound via orthogonal decomposition), `halver_composition`, `expander_gives_halver`
+**Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
+- *Easy (days):* `clusterMeanCLM_idempotent`, `clusterMeanCLM_isSelfAdjoint`, `stepPermCLM_sq_eq_one`, `withinCluster_comp_clusterMean`, `clusterMean_comp_withinCluster`, `meanCLM_eq_clusterMean_comp`, `clusterMean_comp_meanCLM`, `rvwBound_mono_left`, `rvwBound_mono_right`
+- *Medium (1-2 weeks):* `withinClusterCLM_isSelfAdjoint`, `stepPermCLM_isSelfAdjoint`, `withinClusterCLM_norm_le_one`, `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
+- *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — Rayleigh quotient → 2×2 matrix eigenvalue)
+
+**Substantial (months):** `halver_composition`, `expander_gives_halver`
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
 
