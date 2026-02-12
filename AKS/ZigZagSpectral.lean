@@ -48,7 +48,17 @@ theorem withinCluster_comp_clusterMean {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) (hd₂ : 0 < d₂) :
     withinClusterCLM (n₁ := n₁) G₂ hd₁ * clusterMeanCLM hd₁ =
     clusterMeanCLM hd₁ := by
-  sorry
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, withinClusterCLM_apply,
+             clusterMeanCLM_apply]
+  -- LHS: (∑ j, (∑ i, f (encode (cluster (encode (cluster vk) (G₂.neighbor ...))) i)) / d₁) / d₂
+  -- cluster (encode v k) = v, so all inner sums equal (∑ i, f (encode (cluster vk) i)) / d₁
+  simp only [cluster_encode]
+  -- Now: (∑ j, (∑ i, f (encode (cluster vk) i)) / d₁) / d₂
+  rw [Finset.sum_const, Finset.card_fin]
+  -- d₂ • x / d₂ = x, which converts to d₂ * x / d₂ = x
+  simp
+  field_simp
 
 /-- The cluster mean absorbs the within-cluster walk: `Q * B = Q`.
     The cluster mean of the walked function equals the cluster mean
@@ -73,7 +83,11 @@ theorem stepPermCLM_sq_eq_one {n₁ d₁ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁) :
     stepPermCLM G₁ hd₁ * stepPermCLM G₁ hd₁ =
     (1 : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) := by
-  sorry
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, stepPermCLM_apply,
+             ContinuousLinearMap.one_apply, cluster_encode, port_encode]
+  -- After simplification: f (encode (rot (rot (cluster vk, port vk))).1 ...)
+  rw [RegularGraph.rot_involution, encode_cluster_port]
 
 /-- The step permutation is self-adjoint: `Σ* = Σ`.
     This follows from `Σ` being a permutation operator (hence isometry)

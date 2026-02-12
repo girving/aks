@@ -19,29 +19,29 @@ open Matrix BigOperators Finset
 /-! **Cluster Encoding Helpers** -/
 
 /-- Decode the cluster index from a product vertex. -/
-private def cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin n₁ :=
+def cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin n₁ :=
   ⟨vk.val / d₁, (Nat.div_lt_iff_lt_mul hd₁).mpr vk.isLt⟩
 
 /-- Decode the port index from a product vertex. -/
-private def port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin d₁ :=
+def port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin d₁ :=
   ⟨vk.val % d₁, Nat.mod_lt _ hd₁⟩
 
 /-- Encode a (cluster, port) pair as a product vertex. -/
-private def encode {n₁ d₁ : ℕ} (v : Fin n₁) (k : Fin d₁) : Fin (n₁ * d₁) :=
+def encode {n₁ d₁ : ℕ} (v : Fin n₁) (k : Fin d₁) : Fin (n₁ * d₁) :=
   ⟨v.val * d₁ + k.val, Fin.pair_lt v k⟩
 
 @[simp]
-private theorem cluster_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
+theorem cluster_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
     cluster hd₁ (encode v k) = v :=
   fin_encode_fst v k _
 
 @[simp]
-private theorem port_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
+theorem port_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
     port hd₁ (encode v k) = k :=
   fin_encode_snd v k _
 
 @[simp]
-private theorem encode_cluster_port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) :
+theorem encode_cluster_port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) :
     encode (cluster hd₁ vk) (port hd₁ vk) = vk :=
   fin_div_add_mod vk _
 
