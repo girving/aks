@@ -325,13 +325,11 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
   -- Second direction: ‖A‖ ≤ sup |⟨Ax, x⟩| (harder, uses Rayleigh quotient)
   have dir2 : ‖A‖ ≤ sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
       |@inner ℝ _ _ (A x.val) x.val|) := by
-    -- Key fact: spectralRadius A = ‖A‖ for self-adjoint A
-    have hrad : spectralRadius ℝ A = ‖A‖₊ := hA_sa.spectralRadius_eq_nnnorm
-
     -- spectralRadius = sup{‖k‖ : k ∈ spectrum}
     -- For self-adjoint A on EuclideanSpace ℝ (Fin n):
     -- - spectrum consists of real eigenvalues (Matrix.IsHermitian.eigenvalues_mem_spectrum_real)
     -- - eigenvalues achieved by Rayleigh quotient extrema (Rayleigh.lean)
+    -- - spectralRadius ℂ A = ‖A‖ for self-adjoint (IsSelfAdjoint.spectralRadius_eq_nnnorm)
     -- - Therefore: ‖A‖ = spectralRadius = max |eigenvalue| = max Rayleigh extremum
     --
     -- The connection requires bridging:
