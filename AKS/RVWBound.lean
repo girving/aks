@@ -33,11 +33,18 @@ noncomputable def rvwBound (lam₁ lam₂ : ℝ) : ℝ :=
 
 /-! **Monotonicity** -/
 
-/-- `rvwBound` is monotone in its first argument (for nonneg arguments). -/
+/-- `rvwBound` is monotone in its first argument (for nonneg arguments with b ≤ 1).
+    The constraint b ≤ 1 is natural since b represents a spectral gap bound. -/
 theorem rvwBound_mono_left {a₁ a₂ b : ℝ}
-    (ha₁ : 0 ≤ a₁) (hb : 0 ≤ b) (hab : a₁ ≤ a₂) :
+    (ha₁ : 0 ≤ a₁) (hb : 0 ≤ b) (hb1 : b ≤ 1) (hab : a₁ ≤ a₂) :
     rvwBound a₁ b ≤ rvwBound a₂ b := by
-  sorry
+  unfold rvwBound
+  have ha₂ : 0 ≤ a₂ := le_trans ha₁ hab
+  have hsqrt : Real.sqrt ((1 - b ^ 2) ^ 2 * a₁ ^ 2 / 4 + b ^ 2) ≤
+               Real.sqrt ((1 - b ^ 2) ^ 2 * a₂ ^ 2 / 4 + b ^ 2) := by
+    gcongr
+  have hc : 0 ≤ 1 - b ^ 2 := by nlinarith [sq_nonneg b]
+  linarith [mul_le_mul_of_nonneg_left hab hc]
 
 /-- `rvwBound` is monotone in its second argument (for nonneg arguments
     with λ₂ ≤ 1). -/
