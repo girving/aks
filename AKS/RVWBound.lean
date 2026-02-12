@@ -272,7 +272,32 @@ private lemma rvw_inner_product_expansion {n : ℕ}
       @inner ℝ _ _ (Sig (B (Q x))) (B ((1 - Q) x)) +
       @inner ℝ _ _ (Sig (B ((1 - Q) x))) (B (Q x)) +
       @inner ℝ _ _ (Sig (B ((1 - Q) x))) (B ((1 - Q) x)) := by
-  sorry
+  -- Substitute W = B·Σ·B
+  rw [hfact]
+  simp only [ContinuousLinearMap.mul_apply]
+
+  -- Use self-adjointness of B: ⟨B(ΣBx), x⟩ = ⟨ΣBx, Bx⟩
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hB_sa
+  have h_adj : @inner ℝ _ _ (B (Sig (B x))) x = @inner ℝ _ _ (Sig (B x)) (B x) :=
+    hB_sa (Sig (B x)) x
+
+  rw [h_adj]
+
+  -- Decompose x = Qx + (I-Q)x
+  have decomp : x = Q x + (1 - Q) x := by
+    simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply]; abel
+
+  -- Expand B x using decomposition and bilinearity of inner product
+  calc @inner ℝ _ _ (Sig (B x)) (B x)
+      = @inner ℝ _ _ (Sig (B (Q x + (1 - Q) x))) (B (Q x + (1 - Q) x)) := by rw [← decomp]
+    _ = @inner ℝ _ _ (Sig (B (Q x)) + Sig (B ((1 - Q) x))) (B (Q x) + B ((1 - Q) x)) := by
+          congr 1 <;> simp only [map_add]
+    _ = @inner ℝ _ _ (Sig (B (Q x))) (B (Q x)) +
+        @inner ℝ _ _ (Sig (B (Q x))) (B ((1 - Q) x)) +
+        @inner ℝ _ _ (Sig (B ((1 - Q) x))) (B (Q x)) +
+        @inner ℝ _ _ (Sig (B ((1 - Q) x))) (B ((1 - Q) x)) := by
+          rw [inner_add_left, inner_add_right, inner_add_right]
+          ring
 
 /-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A. -/
 private lemma rayleigh_quotient_bound {n : ℕ} (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
