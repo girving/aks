@@ -219,13 +219,44 @@ theorem rvwBound_mono_right {a b₁ b₂ : ℝ}
 private lemma hat_tilde_orthogonal {n : ℕ} (Q : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
     (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q) (x : EuclideanSpace ℝ (Fin n)) :
     @inner ℝ _ _ (Q x) ((1 - Q) x) = 0 := by
-  sorry
+  -- Expand (1 - Q) x = x - Q x
+  have h1 : @inner ℝ _ _ (Q x) ((1 - Q) x) = @inner ℝ _ _ (Q x) x - @inner ℝ _ _ (Q x) (Q x) := by
+    simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply]
+    rw [inner_sub_right]
+
+  rw [h1]
+
+  -- Use Q² = Q and self-adjointness to show ⟨Qx, x⟩ = ⟨Qx, Qx⟩
+  have h2 : @inner ℝ _ _ (Q x) x = @inner ℝ _ _ (Q x) (Q x) := by
+    -- ⟨Qx, x⟩ = ⟨Q²x, x⟩ since Q² = Q
+    conv_lhs => rw [← hQ_proj]
+    simp only [ContinuousLinearMap.mul_apply]
+    -- ⟨Q(Qx), x⟩ = ⟨Qx, Qx⟩ by self-adjointness
+    rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hQ_sa
+    exact hQ_sa (Q x) x
+
+  rw [h2]
+  ring
 
 /-- The squared norm decomposes: ‖x‖² = ‖Q x‖² + ‖(I-Q) x‖². -/
 private lemma hat_tilde_norm_sq {n : ℕ} (Q : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
     (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q) (x : EuclideanSpace ℝ (Fin n)) :
     ‖x‖ ^ 2 = ‖Q x‖ ^ 2 + ‖(1 - Q) x‖ ^ 2 := by
-  sorry
+  -- Use orthogonality: ⟨Qx, (I-Q)x⟩ = 0
+  have orth := hat_tilde_orthogonal Q hQ_proj hQ_sa x
+
+  -- Expand x = Qx + (I-Q)x
+  have decomp : x = Q x + (1 - Q) x := by
+    simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply]
+    abel
+
+  -- Use Pythagorean theorem
+  calc ‖x‖ ^ 2
+      = ‖Q x + (1 - Q) x‖ ^ 2 := by rw [← decomp]
+    _ = ‖Q x + (1 - Q) x‖ * ‖Q x + (1 - Q) x‖ := sq _
+    _ = ‖Q x‖ * ‖Q x‖ + ‖(1 - Q) x‖ * ‖(1 - Q) x‖ :=
+          norm_add_sq_eq_norm_sq_add_norm_sq_of_inner_eq_zero _ _ orth
+    _ = ‖Q x‖ ^ 2 + ‖(1 - Q) x‖ ^ 2 := by rw [← sq, ← sq]
 
 /-- Key inner product expansion for the RVW bound.
     Expands ⟨W x, x⟩ using W = B·Σ·B and the hat/tilde decomposition. -/
