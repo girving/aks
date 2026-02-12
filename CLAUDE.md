@@ -247,7 +247,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, `Mixing.lean`, and `ZigZag.lean` have no `#exit`. `Mixing.lean` has 0 sorry's — `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (precise RVW bound, Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is `zigzag_spectral_bound`.
+No files have `#exit`. `Mixing.lean` has 0 sorry's — `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (precise RVW bound, Tier 3) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is `zigzag_spectral_bound`.
 
 ## Proof Status by Difficulty
 
