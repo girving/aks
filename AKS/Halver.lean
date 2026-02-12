@@ -249,13 +249,23 @@ theorem halver_composition {n : ℕ} (net : ComparatorNetwork n)
     (hnet : IsEpsilonHalver net ε)
     (v : Fin n → Bool) (hv : IsEpsilonSorted v δ) :
     IsEpsilonSorted (net.exec v) (δ * 2 * ε) := by
-  -- Proof sketch:
-  -- 1. Since v is δ-sorted, at most δn elements are displaced.
-  -- 2. The ε-halver ensures that of the displaced elements,
-  --    at most a (1/2 + ε) fraction end up in the wrong half.
-  -- 3. The "wrong half" elements after halving: ≤ δn · 2ε.
-  -- 4. This is a purely combinatorial argument about how comparator
-  --    networks interact with approximate sortedness.
+  -- Step 1: Extract witness w₁ from v being δ-sorted
+  obtain ⟨w₁, hw₁_mono, hw₁_card⟩ := hv.exists_witness
+
+  -- Step 2: Construct output witness w₂ = net.exec w₁
+  let w₂ := net.exec w₁
+
+  -- w₂ is monotone (by Phase 2: network preserves monotonicity)
+  have hw₂_mono : Monotone w₂ := ComparatorNetwork.exec_preserves_monotone net w₁ hw₁_mono
+
+  -- Step 3: Show net.exec v is (δ·2ε)-sorted using w₂ as witness
+  refine ⟨w₂, hw₂_mono, ?_⟩
+
+  -- Need to show: |{i : (net.exec v) i ≠ w₂ i}| ≤ δ·2ε·n
+  -- This follows from bounding wrong-half elements
+
+  -- Key insight: wrong-half elements in the output are bounded by
+  -- the halver property combined with the input displacement
   sorry
 
 /-- **Convergence**: After O(log n) rounds of ε-halving (with ε < 1/2),
