@@ -59,11 +59,37 @@ def daemon_running() -> bool:
         return False
 
 
+def ensure_mathlib_cache():
+    """Download Mathlib cache if not present."""
+    import glob
+
+    # Check if Mathlib .olean files exist
+    mathlib_olean = os.path.join(PROJECT_ROOT, ".lake/packages/mathlib/.lake/build/lib/lean/Mathlib.olean")
+    if os.path.exists(mathlib_olean):
+        return  # Cache already present
+
+    print("Mathlib cache not found. Downloading...")
+    print("(This is a one-time operation, ~30s)")
+    result = subprocess.run(
+        ["lake", "exe", "cache", "get"],
+        cwd=PROJECT_ROOT,
+        capture_output=False,
+        text=True
+    )
+    if result.returncode != 0:
+        print("Warning: Failed to download Mathlib cache. Continuing anyway...")
+    else:
+        print("Mathlib cache downloaded successfully.")
+
+
 def start_daemon():
     """Start the daemon in the background."""
     if daemon_running():
         print("Daemon already running.")
         return True
+
+    # Ensure Mathlib cache is downloaded before starting daemon
+    ensure_mathlib_cache()
 
     print("Starting lean-daemon...")
     proc = subprocess.Popen(
