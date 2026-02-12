@@ -200,6 +200,53 @@ lemma IsEpsilonSorted.card_displaced_bound {n : ℕ} {v : Fin n → Bool} {ε : 
   obtain ⟨w, hw_mono, hw_card⟩ := h
   exact ⟨w, hw_mono, by simp [displaced]; exact hw_card⟩
 
+/-! **Wrong-Half Elements** -/
+
+/-- Elements that "should" be in bottom half (according to witness w)
+    but are actually in top half.
+    These are positions where w says 1 (bottom) but the position is in top half. -/
+def wrongHalfTop {n : ℕ} (v w : Fin n → Bool) : Finset (Fin n) :=
+  (displaced v w).filter (fun i ↦ (i : ℕ) < n / 2 ∧ w i = true)
+
+/-- Elements that "should" be in top half (according to witness w)
+    but are actually in bottom half.
+    These are positions where w says 0 (top) but the position is in bottom half. -/
+def wrongHalfBottom {n : ℕ} (v w : Fin n → Bool) : Finset (Fin n) :=
+  (displaced v w).filter (fun i ↦ n / 2 ≤ (i : ℕ) ∧ w i = false)
+
+/-- Wrong-half elements are a subset of displaced elements -/
+lemma wrongHalfTop_subset {n : ℕ} (v w : Fin n → Bool) :
+    wrongHalfTop v w ⊆ displaced v w := by
+  exact Finset.filter_subset _ _
+
+lemma wrongHalfBottom_subset {n : ℕ} (v w : Fin n → Bool) :
+    wrongHalfBottom v w ⊆ displaced v w := by
+  exact Finset.filter_subset _ _
+
+/-- Wrong-half elements are disjoint (can't be in both top and bottom) -/
+lemma wrongHalf_disjoint {n : ℕ} (v w : Fin n → Bool) :
+    Disjoint (wrongHalfTop v w) (wrongHalfBottom v w) := by
+  rw [Finset.disjoint_iff_inter_eq_empty]
+  ext i
+  simp [wrongHalfTop, wrongHalfBottom]
+  omega
+
+/-- Total wrong-half elements are bounded by total displaced elements -/
+lemma card_wrongHalf_le_displaced {n : ℕ} (v w : Fin n → Bool) :
+    (wrongHalfTop v w).card + (wrongHalfBottom v w).card ≤
+    (displaced v w).card := by
+  have h1 := wrongHalfTop_subset v w
+  have h2 := wrongHalfBottom_subset v w
+  have hdisj := wrongHalf_disjoint v w
+  calc (wrongHalfTop v w).card + (wrongHalfBottom v w).card
+      = (wrongHalfTop v w ∪ wrongHalfBottom v w).card := by
+          rw [Finset.card_union_of_disjoint hdisj]
+    _ ≤ (displaced v w).card := by
+          apply Finset.card_le_card
+          intro i
+          simp [wrongHalfTop, wrongHalfBottom, displaced]
+          tauto
+
 /-- **Halver composition lemma**: Applying an ε-halver to a
     δ-sorted sequence yields a (δ·2ε)-sorted sequence.
     This geometric decrease is the engine of AKS correctness. -/
