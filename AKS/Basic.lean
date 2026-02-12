@@ -136,37 +136,6 @@ theorem zero_one_principle {n : ℕ} (net : ComparatorNetwork n) :
   exact absurd h_sorted (by decide)
 
 
-/-! **Expander Graphs** -/
-
-/-- A `d`-regular bipartite graph on `n + n` vertices,
-    represented by a neighbor function. -/
-structure BipartiteExpander (n d : ℕ) where
-  /-- For each left vertex and each of its `d` ports, the right neighbor. -/
-  neighbor : Fin n → Fin d → Fin n
-
-/-- The spectral gap of a bipartite expander.
-    lam₂ is the second-largest eigenvalue of the normalized adjacency matrix.
-    Expansion quality is controlled by (1 - lam₂). -/
-noncomputable def bipartiteSpectralGap (n d : ℕ) (G : BipartiteExpander n d) : ℝ :=
-  -- In a full formalization, this would be defined via the eigenvalues
-  -- of the adjacency matrix of the bipartite graph.
-  sorry
-
-/-- An (n, d, lam)-expander has spectral gap at least (1 - lam). -/
-def IsExpander (n d : ℕ) (G : BipartiteExpander n d) (lam₂ : ℝ) : Prop :=
-  bipartiteSpectralGap n d G ≤ lam₂
-
-/-- **Existence of explicit expanders** (Margulis 1973 / Lubotzky–Phillips–Sarnak 1988).
-    For any ε > 0, there exist explicit d-regular bipartite expanders with
-    lam₂ < ε, where d depends only on ε (not on n). -/
-theorem explicit_expanders_exist (ε : ℝ) (hε : 0 < ε) :
-    ∃ (d : ℕ), ∀ (n : ℕ), n > 0 →
-    ∃ (G : BipartiteExpander n d), IsExpander n d G ε := by
-  -- This is a deep result in algebraic graph theory.
-  -- The Ramanujan bound gives lam₂ ≤ 2√(d-1)/d for LPS graphs.
-  sorry
-
-
 /-! **The AKS Construction** -/
 
 /- The AKS network is built recursively:

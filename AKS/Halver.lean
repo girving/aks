@@ -11,6 +11,7 @@
 -/
 
 import AKS.Basic
+import AKS.RegularGraph
 
 open Finset BigOperators
 
@@ -18,32 +19,46 @@ open Finset BigOperators
 /-! **ε-Halvers** -/
 
 /-- A comparator network is an ε-halver if, for every 0-1 input,
-    after applying the network, the top half has at most (1/2 + ε)
-    fraction of 1s.
+    after applying the network, the excess of 1s in the top half
+    (beyond fair share) is at most `ε · (n / 2)`.
 
-    Intuitively: it pushes 1s toward the bottom half. -/
+    Concretely: `onesInTop ≤ totalOnes / 2 + ε · (n / 2)`.
+
+    Intuitively: it balances 1s between the two halves, up to
+    an ε-fraction error. -/
 def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
   ∀ (v : Fin n → Bool),
     let w := net.exec v
     let topHalf := Finset.univ.filter (fun i : Fin n ↦ (i : ℕ) < n / 2)
     let onesInTop := (topHalf.filter (fun i ↦ w i = true)).card
-    (onesInTop : ℝ) ≤ (n / 2 : ℝ) * (1 / 2 + ε)
+    let totalOnes := (Finset.univ.filter (fun i : Fin n ↦ w i = true)).card
+    (onesInTop : ℝ) ≤ totalOnes / 2 + ε * (n / 2)
 
 /-- **Expanders yield ε-halvers.**
-    A single round of compare-and-swap along expander edges
-    produces an ε-halver with ε = λ₂. This is the core technical
-    lemma connecting graph expansion to approximate sorting. -/
-theorem expander_gives_halver (n d : ℕ) (G : BipartiteExpander n d)
-    (lam₂ : ℝ) (hG : IsExpander n d G lam₂) :
-    ∃ (net : ComparatorNetwork (2 * n)),
-      IsEpsilonHalver net lam₂ ∧ net.size ≤ n * d := by
+    Given a `d`-regular graph `G` on `m` vertices with spectral gap `≤ β`,
+    a single round of compare-and-swap along bipartite edges
+    (pairing vertex `v` with `m + G.neighbor v i`) produces an
+    ε-halver on `2m` wires with `ε = β`.
+
+    The bipartite structure comes from the *construction*, not the
+    graph type: every comparator connects a top wire (`< m`) to a
+    bottom wire (`≥ m`). This ensures bipartite monotonicity (top
+    values can only decrease, bottom values can only increase),
+    which — combined with the expander mixing lemma — yields the bound. -/
+theorem expander_gives_halver (m d : ℕ) (G : RegularGraph m d)
+    (β : ℝ) (hβ : spectralGap G ≤ β) :
+    ∃ (net : ComparatorNetwork (2 * m)),
+      IsEpsilonHalver net β ∧ net.size ≤ m * d := by
   -- Proof sketch:
-  -- 1. Construct the network: for each left vertex i and port p,
-  --    add comparator (i, n + G.neighbor i p).
-  -- 2. The Expander Mixing Lemma shows that for any sets S, T:
-  --    |e(S,T) - d|S||T|/n| ≤ λ₂ · d · √(|S|·|T|)
-  -- 3. Apply this with S = {1s in top half}, T = {0s in bottom half}
-  --    to show enough swaps occur to achieve ε-halving.
+  -- 1. Construct the network: for each vertex v : Fin m and port i : Fin d,
+  --    add comparator (v, m + G.neighbor v i).
+  -- 2. Bipartite monotonicity: in the output, for each edge (v, u) of G,
+  --    w v ≤ w (m + u). (Top values only decrease; bottom values only increase.)
+  -- 3. Let S = {top 1s}, T = {bottom 0s}. By monotonicity, e(S,T) = 0.
+  -- 4. By the expander mixing lemma (Mixing.lean):
+  --    |S|·|T|/m ≤ β · √(|S|·|T|), so |S|·|T| ≤ β²·m².
+  -- 5. With s = |S|, k = total ones, |T| = m - k + s:
+  --    s(m - k + s) ≤ β²m² implies s ≤ k/2 + βm.
   sorry
 
 /-- Merge two sorted halves using iterated ε-halvers.
@@ -75,7 +90,8 @@ theorem halver_composition {n : ℕ} (net : ComparatorNetwork n)
   -- 2. The ε-halver ensures that of the displaced elements,
   --    at most a (1/2 + ε) fraction end up in the wrong half.
   -- 3. The "wrong half" elements after halving: ≤ δn · 2ε.
-  -- 4. This requires careful counting using the expander mixing lemma.
+  -- 4. This is a purely combinatorial argument about how comparator
+  --    networks interact with approximate sortedness.
   sorry
 
 /-- **Convergence**: After O(log n) rounds of ε-halving (with ε < 1/2),

@@ -78,14 +78,14 @@ Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product ind
 Sections build on each other sequentially:
 1. **Comparator networks** — `Comparator`, `ComparatorNetwork` (flat list of comparators), execution model
 2. **0-1 principle** — reduces sorting correctness to Boolean inputs
-3. **Expander graphs** — `BipartiteExpander`, spectral gap, existence
-4. **AKS construction** — recursive build: split → recurse → merge with halvers
-5. **Complexity analysis** — `IsBigO` notation, O(n log n) size
-6. **Correctness** — `AKS.sorts`
+3. **AKS construction** — recursive build: split → recurse → merge with halvers
+4. **Complexity analysis** — `IsBigO` notation, O(n log n) size
+5. **Correctness** — `AKS.sorts`
 
 ### `AKS/Halver.lean` — ε-Halver Theory
-ε-halvers and their composition properties, the engine driving AKS correctness:
-1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver`, `epsHalverMerge`
+ε-halvers and their composition properties, the engine driving AKS correctness.
+Imports `RegularGraph.lean` for the expander → halver bridge:
+1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (takes `RegularGraph`), `epsHalverMerge`
 2. **Halver composition** — `IsEpsilonSorted`, `halver_composition` (geometric decrease), `halver_convergence`
 
 ### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
@@ -148,9 +148,9 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
                               → CompleteGraph.lean              ↓
                               → Mixing.lean               AKS.lean
                               → ZigZagOperators.lean ──→      ↑
-                                  ZigZagSpectral.lean ─↗  Basic.lean → Halver.lean
-           Random.lean ────────────────────────────↗
-           RVWBound.lean ─────────────────────────↗
+                                  ZigZagSpectral.lean ─↗  Basic.lean ─→ Halver.lean
+           Random.lean ────────────────────────────↗          ↑
+           RVWBound.lean ─────────────────────────↗  RegularGraph.lean
 ```
 
 ## Style
@@ -274,7 +274,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-No files have `#exit`. `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (assembly) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The `zigzag_spectral_bound` sorry has been decomposed into 16 smaller sublemmas across three new files: `ZigZagOperators.lean` (1 sorry: walk factorization), `ZigZagSpectral.lean` (12 sorry's: algebraic + spectral properties), and `RVWBound.lean` (3 sorry's: monotonicity + abstract operator bound). The mathematical core is `rvw_operator_norm_bound` in `RVWBound.lean` — a pure operator-theory result independent of graphs. Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is proving the easier sublemmas (algebraic properties).
+No files have `#exit`. `BipartiteExpander` has been removed — `expander_gives_halver` now takes `RegularGraph` directly and produces a bipartite comparator network (the bipartite structure comes from the construction, not the graph type). `IsEpsilonHalver` corrected to `onesInTop ≤ totalOnes/2 + ε·(n/2)` (the old definition `onesInTop ≤ (n/2)·(1/2+ε)` was unsatisfiable for ε < 1/2). `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (assembly) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The `zigzag_spectral_bound` sorry has been decomposed into 16 smaller sublemmas across three new files: `ZigZagOperators.lean` (1 sorry: walk factorization), `ZigZagSpectral.lean` (12 sorry's: algebraic + spectral properties), and `RVWBound.lean` (3 sorry's: monotonicity + abstract operator bound). The mathematical core is `rvw_operator_norm_bound` in `RVWBound.lean` — a pure operator-theory result independent of graphs. Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is proving the easier sublemmas (algebraic properties).
 
 ## Proof Status by Difficulty
 
@@ -287,7 +287,9 @@ No files have `#exit`. `expander_mixing_lemma` is fully proved via indicator vec
 - *Medium (1-2 weeks):* `withinClusterCLM_isSelfAdjoint`, `stepPermCLM_isSelfAdjoint`, `withinClusterCLM_norm_le_one`, `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — Rayleigh quotient → 2×2 matrix eigenvalue)
 
-**Substantial (months):** `halver_composition`, `expander_gives_halver`
+**Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
+
+**Substantial (months):** `halver_composition` (combinatorial witness construction for approximate sortedness)
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
 
