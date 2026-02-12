@@ -13,6 +13,7 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 ```bash
 scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits near end)
 scripts/lean-check --stop                   # Stop daemon (when done)
+scripts/sorries                             # Audit sorry, #exit, native_decide, axiom across codebase
 ```
 
 **Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates only from the change point forward. Since proof iteration typically happens at the end of a file, most checks are sub-second. The daemon auto-starts on first use (~5s).

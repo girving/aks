@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Audit sorry, #exit, native_decide, and axiom across the Lean codebase.
+
+Prints each hit with one line of context (usually the theorem/def name) and a
+summary count.  Informational only — always exits 0.
+"""
+
+import glob
+import os
+import re
+import sys
+
+MARKERS = ["sorry", "#exit", "native_decide", "axiom"]
+
+# Patterns: match markers as whole words / tokens.
+# For "sorry" and "axiom", require word boundaries so we skip comments that
+# mention them in prose.  For "#exit" and "native_decide" the tokens are
+# unambiguous enough already.
+PATTERN = re.compile(
+    r"(?<![`\w])(?P<marker>sorry|#exit|native_decide|axiom)\b"
+)
+
+# Lines that are pure comments (start with -- after optional whitespace) or
+# inside /- -/ doc-strings should be skipped for "sorry" and "axiom" to avoid
+# false positives on prose like "left as `sorry`".
+COMMENT_LINE = re.compile(r"^\s*--")
+
+
+def is_in_comment(line: str, marker: str) -> bool:
+    """Heuristic: skip markers that appear only inside a line comment."""
+    if marker in ("sorry", "axiom"):
+        stripped = line.lstrip()
+        if stripped.startswith("--") or stripped.startswith("/-"):
+            return True
+        # Also skip if the marker is inside a backtick-quoted identifier
+        # in a non-comment line (e.g., `sorry` in a doc string).
+        idx = line.find(marker)
+        if idx > 0 and line[idx - 1] == "`":
+            return True
+    return False
+
+
+def supports_color() -> bool:
+    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+
+def main() -> None:
+    use_color = supports_color()
+    RED = "\033[31m" if use_color else ""
+    RESET = "\033[0m" if use_color else ""
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # Collect all .lean files under AKS/ plus the top-level AKS.lean
+    lean_files = sorted(glob.glob(os.path.join(root, "AKS", "**", "*.lean"), recursive=True))
+    top = os.path.join(root, "AKS.lean")
+    if os.path.isfile(top):
+        lean_files.append(top)
+
+    counts = {m: 0 for m in MARKERS}
+    any_hit = False
+
+    for filepath in lean_files:
+        relpath = os.path.relpath(filepath, root)
+        with open(filepath) as f:
+            lines = f.readlines()
+
+        file_hits = []
+        for i, line in enumerate(lines):
+            for m in PATTERN.finditer(line):
+                marker = m.group("marker")
+                if is_in_comment(line, marker):
+                    continue
+                file_hits.append((i, marker))
+                counts[marker] += 1
+
+        if not file_hits:
+            continue
+
+        if any_hit:
+            print()
+        any_hit = True
+        print(f"{relpath}")
+
+        for lineno, marker in file_hits:
+            # Print one line of context before (if available)
+            if lineno > 0:
+                prev = lines[lineno - 1].rstrip()
+                print(f"  {lineno:>4}  {prev}")
+            hit_line = lines[lineno].rstrip()
+            arrow = f"  {RED}<- {marker}{RESET}"
+            print(f"  {lineno + 1:>4}  {hit_line}{arrow}")
+
+    # Summary
+    print()
+    parts = [f"{counts[m]} {m}" for m in MARKERS]
+    print(f"Summary: {', '.join(parts)}")
+
+
+if __name__ == "__main__":
+    main()
