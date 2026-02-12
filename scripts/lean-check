@@ -23,10 +23,13 @@ import subprocess
 import sys
 import time
 
-SOCKET_PATH = "/tmp/lean-daemon.sock"
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DAEMON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "lean-daemon.py")
-PID_FILE = "/tmp/lean-daemon.pid"
+# Derive unique paths from project root so multiple daemons can coexist
+import hashlib
+_project_hash = hashlib.md5(PROJECT_ROOT.encode()).hexdigest()[:8]
+SOCKET_PATH = f"/tmp/lean-daemon-{_project_hash}.sock"
+PID_FILE = f"/tmp/lean-daemon-{_project_hash}.pid"
 
 
 def send_command(cmd: dict, timeout: float = 180) -> dict:
@@ -65,7 +68,7 @@ def start_daemon():
     print("Starting lean-daemon...")
     proc = subprocess.Popen(
         [sys.executable, DAEMON_SCRIPT],
-        stdout=open("/tmp/lean-daemon.log", "w"),
+        stdout=open(f"/tmp/lean-daemon-{_project_hash}.log", "w"),
         stderr=subprocess.STDOUT,
         cwd=PROJECT_ROOT,
     )
@@ -81,7 +84,7 @@ def start_daemon():
         # Check if process died
         if proc.poll() is not None:
             print("Daemon process exited unexpectedly. Log:")
-            with open("/tmp/lean-daemon.log") as f:
+            with open(f"/tmp/lean-daemon-{_project_hash}.log") as f:
                 print(f.read())
             return False
         if i % 5 == 4:

@@ -24,8 +24,11 @@ import sys
 import threading
 import time
 
-SOCKET_PATH = "/tmp/lean-daemon.sock"
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Derive unique paths from project root so multiple daemons can coexist
+import hashlib
+_project_hash = hashlib.md5(PROJECT_ROOT.encode()).hexdigest()[:8]
+SOCKET_PATH = f"/tmp/lean-daemon-{_project_hash}.sock"
 
 
 class LspConnection:

@@ -32,7 +32,7 @@ theorem indicatorVec_apply {n : ℕ} (S : Finset (Fin n)) (v : Fin n) :
 private theorem sum_indicatorVec {n : ℕ} (S : Finset (Fin n)) :
     (∑ v : Fin n, if v ∈ S then (1 : ℝ) else 0) = ↑S.card := by
   rw [Finset.sum_boole]
-  push_cast; congr 1; ext; simp
+  congr 1; congr 1; ext; simp
 
 theorem norm_sq_indicatorVec {n : ℕ} (S : Finset (Fin n)) :
     ‖indicatorVec S‖ ^ 2 = ↑S.card := by
@@ -60,12 +60,12 @@ theorem inner_indicatorVec_walkCLM {n d : ℕ} (G : RegularGraph n d)
         (fun i : Fin d ↦ G.neighbor v i ∈ T)).card) : ℝ) / ↑d := by
   simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial,
     RegularGraph.walkCLM_apply, indicatorVec_apply]
-  -- Factor out /d from each term
-  simp_rw [mul_div_assoc']
+  -- Factor out /d from each term: simp normalizes to (b/d)*a; rewrite to b*a/d then factor
+  simp_rw [div_mul_eq_mul_div]
   rw [← Finset.sum_div]
   congr 1
-  -- Convert indicator multiplication: (if p then 1 else 0) * x = if p then x else 0
-  simp_rw [ite_mul, one_mul, zero_mul]
+  -- Convert indicator multiplication: x * (if p then 1 else 0) = if p then x else 0
+  simp_rw [mul_ite, mul_one, mul_zero]
   -- Restrict sum to S via sum_filter
   rw [← Finset.sum_filter]
   have huniv : Finset.univ.filter (· ∈ S) = S := by ext; simp
@@ -87,8 +87,8 @@ theorem inner_indicatorVec_meanCLM {n : ℕ}
     meanCLM_apply, indicatorVec_apply]
   -- The mean of indicatorVec T is T.card / n, constant in v
   simp_rw [sum_indicatorVec T]
-  -- Factor constant out of sum: ∑ v, ind_S(v) * (T.card/n) = (∑ v, ind_S(v)) * (T.card/n)
-  rw [← Finset.sum_mul, sum_indicatorVec S]
+  -- Factor constant out of sum: ∑ v, (T.card/n) * ind_S(v) = (T.card/n) * (∑ v, ind_S(v))
+  rw [← Finset.mul_sum, sum_indicatorVec S]
   ring
 
 
