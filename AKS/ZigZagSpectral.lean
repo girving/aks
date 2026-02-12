@@ -67,6 +67,15 @@ theorem clusterMean_comp_withinCluster {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) (hd₂ : 0 < d₂) :
     clusterMeanCLM hd₁ * withinClusterCLM (n₁ := n₁) G₂ hd₁ =
     clusterMeanCLM hd₁ := by
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, clusterMeanCLM_apply,
+             withinClusterCLM_apply, cluster_encode, port_encode]
+  -- LHS: ∑ i, ((∑ j, f (encode (cluster vk) (G₂.neighbor i j))) / d₂) / d₁
+  rw [Finset.sum_div, Finset.sum_div]
+  congr 1
+  -- Show: ∑ i, ∑ j, f (encode (cluster vk) (G₂.neighbor i j)) = d₂ · ∑ i, f (encode (cluster vk) i)
+  -- By rotation bijection: varying (i,j) ∈ Fin d₁ × Fin d₂,
+  -- {G₂.neighbor i j} covers each port exactly d₂ times
   sorry
 
 /-- The within-cluster walk is a contraction: `‖B‖ ≤ 1`. -/
@@ -136,10 +145,24 @@ theorem meanCLM_eq_clusterMean_comp {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) *
     clusterMeanCLM hd₁ =
     meanCLM (n₁ * d₁) := by
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, clusterMeanCLM_apply]
+  -- LHS: (∑ j, ((∑ i, f (encode (cluster j) i)) / d₁)) / (n₁ * d₁)
+  -- Reorganize the double sum
+  rw [Finset.sum_div]
+  -- Show: ∑ j, ∑ i, f (encode (cluster j) i) = ∑ k, f k
+  -- This follows from encode being a bijection from (v, i) to the product space
   sorry
 
 theorem clusterMean_comp_meanCLM {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     clusterMeanCLM (n₁ := n₁) hd₁ *
     (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) =
     meanCLM (n₁ * d₁) := by
-  sorry
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, clusterMeanCLM_apply, meanCLM_apply]
+  -- LHS: (∑ i, (meanCLM f) (encode (cluster vk) i)) / d₁
+  -- Since meanCLM f is constant (= (∑ k, f k) / (n₁ * d₁)), this simplifies
+  -- to (d₁ · ((∑ k, f k) / (n₁ * d₁))) / d₁ = (∑ k, f k) / (n₁ * d₁) = RHS
+  rw [Finset.sum_const, Finset.card_fin]
+  simp
+  field_simp
