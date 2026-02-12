@@ -126,17 +126,11 @@ lemma IsEpsilonSorted.exists_witness {n : ℕ} {v : Fin n → Bool} {ε : ℝ}
 lemma Monotone.bool_pattern {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
     ∃ k : ℕ, (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
              (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
-  -- Use decidability: either all false, or there's a smallest true index
-  by_cases h_all_false : ∀ i : Fin n, w i = false
-  · -- Case: all false
-    use n
-    constructor
-    · intro i _; exact h_all_false i
-    · intro i hi; exfalso; exact Nat.not_le.mpr i.isLt hi
-  · -- Case: at least one true
-    push_neg at h_all_false
-    -- Use a sorry for now - this needs careful handling of Nat.find with dependent types
-    sorry
+  -- Proof: For monotone Boolean sequences, false < true in the ordering.
+  -- So if w i = true and i ≤ j, then w j = true (by monotonicity).
+  -- This means all trues cluster at high indices, all falses at low indices.
+  -- The transition point is characterized by the cardinality of the false set.
+  sorry
 
 /-- Relaxation: if ε₁ ≤ ε₂, then ε₁-sorted implies ε₂-sorted -/
 lemma IsEpsilonSorted.mono {n : ℕ} {v : Fin n → Bool} {ε₁ ε₂ : ℝ}
@@ -200,6 +194,53 @@ lemma IsEpsilonSorted.card_displaced_bound {n : ℕ} {v : Fin n → Bool} {ε : 
   obtain ⟨w, hw_mono, hw_card⟩ := h
   exact ⟨w, hw_mono, by simp [displaced]; exact hw_card⟩
 
+/-! **Wrong-Half Elements** -/
+
+/-- Elements that "should" be in bottom half (according to witness w)
+    but are actually in top half.
+    These are positions where w says 1 (bottom) but the position is in top half. -/
+def wrongHalfTop {n : ℕ} (v w : Fin n → Bool) : Finset (Fin n) :=
+  (displaced v w).filter (fun i ↦ (i : ℕ) < n / 2 ∧ w i = true)
+
+/-- Elements that "should" be in top half (according to witness w)
+    but are actually in bottom half.
+    These are positions where w says 0 (top) but the position is in bottom half. -/
+def wrongHalfBottom {n : ℕ} (v w : Fin n → Bool) : Finset (Fin n) :=
+  (displaced v w).filter (fun i ↦ n / 2 ≤ (i : ℕ) ∧ w i = false)
+
+/-- Wrong-half elements are a subset of displaced elements -/
+lemma wrongHalfTop_subset {n : ℕ} (v w : Fin n → Bool) :
+    wrongHalfTop v w ⊆ displaced v w := by
+  exact Finset.filter_subset _ _
+
+lemma wrongHalfBottom_subset {n : ℕ} (v w : Fin n → Bool) :
+    wrongHalfBottom v w ⊆ displaced v w := by
+  exact Finset.filter_subset _ _
+
+/-- Wrong-half elements are disjoint (can't be in both top and bottom) -/
+lemma wrongHalf_disjoint {n : ℕ} (v w : Fin n → Bool) :
+    Disjoint (wrongHalfTop v w) (wrongHalfBottom v w) := by
+  rw [Finset.disjoint_iff_inter_eq_empty]
+  ext i
+  simp [wrongHalfTop, wrongHalfBottom]
+  omega
+
+/-- Total wrong-half elements are bounded by total displaced elements -/
+lemma card_wrongHalf_le_displaced {n : ℕ} (v w : Fin n → Bool) :
+    (wrongHalfTop v w).card + (wrongHalfBottom v w).card ≤
+    (displaced v w).card := by
+  have h1 := wrongHalfTop_subset v w
+  have h2 := wrongHalfBottom_subset v w
+  have hdisj := wrongHalf_disjoint v w
+  calc (wrongHalfTop v w).card + (wrongHalfBottom v w).card
+      = (wrongHalfTop v w ∪ wrongHalfBottom v w).card := by
+          rw [Finset.card_union_of_disjoint hdisj]
+    _ ≤ (displaced v w).card := by
+          apply Finset.card_le_card
+          intro i
+          simp [wrongHalfTop, wrongHalfBottom, displaced]
+          tauto
+
 /-- **Halver composition lemma**: Applying an ε-halver to a
     δ-sorted sequence yields a (δ·2ε)-sorted sequence.
     This geometric decrease is the engine of AKS correctness. -/
@@ -208,13 +249,23 @@ theorem halver_composition {n : ℕ} (net : ComparatorNetwork n)
     (hnet : IsEpsilonHalver net ε)
     (v : Fin n → Bool) (hv : IsEpsilonSorted v δ) :
     IsEpsilonSorted (net.exec v) (δ * 2 * ε) := by
-  -- Proof sketch:
-  -- 1. Since v is δ-sorted, at most δn elements are displaced.
-  -- 2. The ε-halver ensures that of the displaced elements,
-  --    at most a (1/2 + ε) fraction end up in the wrong half.
-  -- 3. The "wrong half" elements after halving: ≤ δn · 2ε.
-  -- 4. This is a purely combinatorial argument about how comparator
-  --    networks interact with approximate sortedness.
+  -- Step 1: Extract witness w₁ from v being δ-sorted
+  obtain ⟨w₁, hw₁_mono, hw₁_card⟩ := hv.exists_witness
+
+  -- Step 2: Construct output witness w₂ = net.exec w₁
+  let w₂ := net.exec w₁
+
+  -- w₂ is monotone (by Phase 2: network preserves monotonicity)
+  have hw₂_mono : Monotone w₂ := ComparatorNetwork.exec_preserves_monotone net w₁ hw₁_mono
+
+  -- Step 3: Show net.exec v is (δ·2ε)-sorted using w₂ as witness
+  refine ⟨w₂, hw₂_mono, ?_⟩
+
+  -- Need to show: |{i : (net.exec v) i ≠ w₂ i}| ≤ δ·2ε·n
+  -- This follows from bounding wrong-half elements
+
+  -- Key insight: wrong-half elements in the output are bounded by
+  -- the halver property combined with the input displacement
   sorry
 
 /-- **Convergence**: After O(log n) rounds of ε-halving (with ε < 1/2),
