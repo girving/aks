@@ -65,6 +65,14 @@ Track tool performance against these baselines. If a command exceeds its expecte
 
 Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
+### Proof Visualization (`docs/index.html`)
+
+Interactive dependency graph of the proof structure, served via GitHub Pages from the `docs/` directory.
+To refresh after proof changes: update the `PROOF_DATA` JSON block in `docs/index.html`
+with current theorem names, statuses, and line numbers. The visualization groups nodes
+by source file and colors them by status (green=proved, orange=sorry, red=axiom, blue=definition).
+Milestone theorems appear larger with a white border. Hover for type signatures; click to open source on GitHub.
+
 ## Architecture
 
 **Entry point:** `AKS.lean` — imports all modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.

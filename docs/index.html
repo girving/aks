@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AKS Sorting Network — Proof Dependency Graph</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+#controls { position: fixed; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; }
+#controls button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#controls button:hover { background: #30363d; }
+#title { position: fixed; top: 12px; right: 16px; z-index: 10; text-align: right; }
+#title h1 { font-size: 18px; font-weight: 600; color: #e6edf3; }
+#title p { font-size: 12px; color: #7d8590; margin-top: 2px; }
+#legend { position: fixed; bottom: 16px; left: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; }
+#legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+#legend .item:last-child { margin-bottom: 0; }
+#legend .dot { width: 12px; height: 12px; border-radius: 50%; }
+#stats { position: fixed; bottom: 16px; right: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; text-align: right; }
+#stats .num { font-size: 20px; font-weight: 700; }
+#tooltip { position: fixed; pointer-events: none; background: #1c2128; border: 1px solid #444c56; border-radius: 8px; padding: 12px 16px; font-size: 13px; max-width: 480px; z-index: 100; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+#tooltip .tt-name { font-weight: 700; font-size: 15px; color: #e6edf3; margin-bottom: 4px; }
+#tooltip .tt-file { font-size: 11px; color: #7d8590; margin-bottom: 6px; }
+#tooltip .tt-sig { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; color: #a5d6ff; background: #0d1117; padding: 6px 8px; border-radius: 4px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
+#tooltip .tt-desc { color: #c9d1d9; line-height: 1.4; }
+#tooltip .tt-diff { margin-top: 4px; font-size: 11px; color: #7d8590; font-style: italic; }
+svg { width: 100vw; height: 100vh; }
+.group-rect { rx: 12; ry: 12; }
+.group-label { font-size: 11px; font-weight: 600; fill: #484f58; pointer-events: none; }
+.link { stroke-opacity: 0.3; fill: none; }
+.node-circle { cursor: pointer; stroke-width: 2; transition: r 0.15s; }
+.node-label { font-size: 10px; fill: #8b949e; pointer-events: none; text-anchor: middle; }
+.node-circle:hover { filter: brightness(1.3); }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <button onclick="resetZoom()">Reset View</button>
+  <button onclick="toggleLabels()">Toggle Labels</button>
+</div>
+
+<div id="title">
+  <h1>AKS Sorting Network</h1>
+  <p>Lean 4 Proof Dependency Graph</p>
+</div>
+
+<div id="legend">
+  <div class="item"><div class="dot" style="background:#3fb950;"></div> Proved</div>
+  <div class="item"><div class="dot" style="background:#d29922;"></div> Sorry</div>
+  <div class="item"><div class="dot" style="background:#f85149;"></div> Axiom</div>
+  <div class="item"><div class="dot" style="background:#58a6ff;"></div> Definition</div>
+</div>
+
+<div id="stats"></div>
+<div id="tooltip"></div>
+
+<svg></svg>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// PROOF_DATA — update this block to refresh the visualization
+// ═══════════════════════════════════════════════════════
+const PROOF_DATA = {
+  repo: "https://github.com/girving/aks",
+  nodes: [
+    // ── Fin.lean ──
+    { id: "Fin.pair_lt", file: "AKS/Fin.lean", line: 13, status: "proved", kind: "theorem",
+      sig: "Fin.pair_lt : j.val * d + i.val < n * d",
+      desc: "Product encoding bound for Fin n x Fin d." },
+
+    // ── RegularGraph.lean ──
+    { id: "RegularGraph", file: "AKS/RegularGraph.lean", line: 35, status: "definition", kind: "structure",
+      sig: "structure RegularGraph (n d : ℕ) where\n  rot : Fin n × Fin d → Fin n × Fin d\n  rot_involution : ...",
+      desc: "D-regular graph on n vertices, represented by an involutory rotation map on vertex-port pairs." },
+    { id: "walkCLM", file: "AKS/RegularGraph.lean", line: 130, status: "definition", kind: "def",
+      sig: "RegularGraph.walkCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Walk operator as a continuous linear map: averages a function over neighbors." },
+    { id: "meanCLM", file: "AKS/RegularGraph.lean", line: 163, status: "definition", kind: "def",
+      sig: "meanCLM (n : ℕ) : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Mean projection CLM: projects onto the constant-function subspace." },
+    { id: "spectralGap", file: "AKS/RegularGraph.lean", line: 242, status: "definition", kind: "def",
+      sig: "spectralGap (G : RegularGraph n d) : ℝ := ‖G.walkCLM - meanCLM n‖",
+      desc: "Spectral gap: operator norm of walk minus mean projection." },
+    { id: "spectralGap_nonneg", file: "AKS/RegularGraph.lean", line: 246, status: "proved", kind: "theorem",
+      sig: "spectralGap_nonneg : 0 ≤ spectralGap G",
+      desc: "Spectral gap is non-negative (norm is non-negative)." },
+    { id: "spectralGap_le_one", file: "AKS/RegularGraph.lean", line: 309, status: "proved", kind: "theorem",
+      sig: "spectralGap_le_one : spectralGap G ≤ 1",
+      desc: "Spectral gap is at most 1. Proved via walk contraction and WP = P factoring.", milestone: true },
+
+    // ── Square.lean ──
+    { id: "RegularGraph.square", file: "AKS/Square.lean", line: 39, status: "definition", kind: "def",
+      sig: "RegularGraph.square : RegularGraph n (d * d)",
+      desc: "Squared graph: two-step walks become single edges. Degree goes from d to d*d." },
+    { id: "spectralGap_square", file: "AKS/Square.lean", line: 205, status: "proved", kind: "theorem",
+      sig: "spectralGap_square : spectralGap G.square = (spectralGap G) ^ 2",
+      desc: "Squaring a graph squares its spectral gap. Key CLM identity: (W-P)^2 = W^2 - P.", milestone: true },
+
+    // ── CompleteGraph.lean ──
+    { id: "completeGraph", file: "AKS/CompleteGraph.lean", line: 30, status: "definition", kind: "def",
+      sig: "completeGraph (n : ℕ) : RegularGraph (n + 1) n",
+      desc: "Complete graph K_{n+1} as an n-regular graph, using Fin.succAbove/predAbove." },
+    { id: "spectralGap_complete", file: "AKS/CompleteGraph.lean", line: 112, status: "proved", kind: "theorem",
+      sig: "spectralGap_complete : spectralGap (completeGraph n) = 1 / n",
+      desc: "The complete graph K_{n+1} has spectral gap exactly 1/n.", milestone: true },
+
+    // ── Mixing.lean ──
+    { id: "indicatorVec", file: "AKS/Mixing.lean", line: 24, status: "definition", kind: "def",
+      sig: "indicatorVec (S : Finset (Fin n)) : EuclideanSpace ℝ (Fin n)",
+      desc: "Indicator vector: 1 on vertices in S, 0 elsewhere." },
+    { id: "expander_mixing_lemma", file: "AKS/Mixing.lean", line: 120, status: "proved", kind: "theorem",
+      sig: "expander_mixing_lemma : |edges(S,T)/d - |S||T|/n| ≤ λ · √(|S|·|T|)",
+      desc: "Expander mixing lemma: edge distribution between sets S,T is close to uniform, controlled by spectral gap.", milestone: true },
+
+    // ── Basic.lean — Sorting Networks ──
+    { id: "Comparator", file: "AKS/Basic.lean", line: 36, status: "definition", kind: "structure",
+      sig: "structure Comparator (n : ℕ) where\n  i : Fin n\n  j : Fin n",
+      desc: "A comparator: swaps elements at positions i and j if out of order." },
+    { id: "ComparatorNetwork", file: "AKS/Basic.lean", line: 50, status: "definition", kind: "structure",
+      sig: "structure ComparatorNetwork (n : ℕ) where\n  comparators : List (Comparator n)",
+      desc: "A comparator network: a sequence of comparators applied in order." },
+    { id: "IsSortingNetwork", file: "AKS/Basic.lean", line: 99, status: "definition", kind: "def",
+      sig: "IsSortingNetwork (net : ComparatorNetwork n) : Prop",
+      desc: "Predicate: the network sorts every input." },
+    { id: "zero_one_principle", file: "AKS/Basic.lean", line: 109, status: "proved", kind: "theorem",
+      sig: "zero_one_principle : (∀ v : Fin n → Bool, Monotone (net.exec v)) → IsSortingNetwork net",
+      desc: "The 0-1 principle: if a comparator network sorts all Boolean inputs, it sorts everything.", milestone: true },
+    { id: "AKS", file: "AKS/Basic.lean", line: 153, status: "sorry", kind: "def",
+      sig: "AKS (n : ℕ) : ComparatorNetwork n",
+      desc: "The AKS sorting network construction: split, recurse, merge with halvers." },
+    { id: "AKS.size_nlogn", file: "AKS/Basic.lean", line: 176, status: "sorry", kind: "theorem",
+      sig: "AKS.size_nlogn : (fun n ↦ (AKS n).size) =O(fun n ↦ n * log n)",
+      desc: "The AKS network has O(n log n) comparators." },
+    { id: "AKS.sorts", file: "AKS/Basic.lean", line: 192, status: "sorry", kind: "theorem",
+      sig: "AKS.sorts (n : ℕ) : IsSortingNetwork (AKS n)",
+      desc: "The AKS construction produces a valid sorting network.", milestone: true },
+
+    // ── Halver.lean ──
+    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 29, status: "definition", kind: "def",
+      sig: "IsEpsilonHalver (net : ComparatorNetwork n) (ε : ℝ) : Prop",
+      desc: "ε-halver: ones in top half ≤ totalOnes/2 + ε·(n/2)." },
+    { id: "expander_gives_halver", file: "AKS/Halver.lean", line: 48, status: "sorry", kind: "theorem",
+      sig: "expander_gives_halver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d",
+      desc: "An expander with spectral gap ≤ β yields a β-halver. Bridge from spectral to combinatorial.", difficulty: "weeks" },
+    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 67, status: "definition", kind: "def",
+      sig: "epsHalverMerge (n ε : ℝ) (k : ℕ) (halver : ComparatorNetwork n) : ComparatorNetwork n",
+      desc: "Iterated halver merge: apply halver k times for geometric convergence." },
+    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 76, status: "definition", kind: "def",
+      sig: "IsEpsilonSorted (v : Fin n → Bool) (ε : ℝ) : Prop",
+      desc: "ε-sortedness: at most ε·n elements are out of place." },
+    { id: "halver_composition", file: "AKS/Halver.lean", line: 83, status: "sorry", kind: "theorem",
+      sig: "halver_composition : IsEpsilonSorted (net.exec v) (δ * 2 * ε)",
+      desc: "Composing an ε-halver with a δ-sorted input gives (2εδ)-sorted output.", difficulty: "months" },
+    { id: "halver_convergence", file: "AKS/Halver.lean", line: 100, status: "sorry", kind: "theorem",
+      sig: "halver_convergence : ∀ v, ∃ net, Monotone (net.exec v)",
+      desc: "Repeated halving converges to a sorting network when 2ε < 1.", difficulty: "weeks" },
+
+    // ── ZigZagOperators.lean ──
+    { id: "RegularGraph.zigzag", file: "AKS/ZigZagOperators.lean", line: 212, status: "definition", kind: "def",
+      sig: "RegularGraph.zigzag (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂) :\n  RegularGraph (n₁ * d₁) (d₂ * d₂)",
+      desc: "Zig-zag product: combines a big graph G₁ with a small graph G₂. Three-step walk: zig, step, zag." },
+    { id: "withinClusterCLM", file: "AKS/ZigZagOperators.lean", line: 74, status: "definition", kind: "def",
+      sig: "withinClusterCLM (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) :\n  EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] ...",
+      desc: "Within-cluster walk operator B = I ⊗ W_{G₂}: walks within each cluster using G₂." },
+    { id: "stepPermCLM", file: "AKS/ZigZagOperators.lean", line: 113, status: "definition", kind: "def",
+      sig: "stepPermCLM (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁) :\n  EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] ...",
+      desc: "Step permutation operator Σ: permutes via G₁.rot, swapping between clusters." },
+    { id: "clusterMeanCLM", file: "AKS/ZigZagOperators.lean", line: 150, status: "definition", kind: "def",
+      sig: "clusterMeanCLM (hd₁ : 0 < d₁) :\n  EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] ...",
+      desc: "Cluster mean operator Q: averages within each cluster (projects onto cluster-constant functions)." },
+    { id: "zigzag_walkCLM_eq", file: "AKS/ZigZagOperators.lean", line: 225, status: "sorry", kind: "theorem",
+      sig: "zigzag_walkCLM_eq : (G₁.zigzag G₂).walkCLM = B * Σ * B",
+      desc: "Walk factorization: the zig-zag walk operator equals B · Σ · B.", difficulty: "1-2 weeks" },
+
+    // ── ZigZagSpectral.lean ──
+    { id: "clusterMeanCLM_idempotent", file: "AKS/ZigZagSpectral.lean", line: 22, status: "sorry", kind: "theorem",
+      sig: "clusterMeanCLM_idempotent : Q * Q = Q",
+      desc: "Cluster mean is idempotent (it's a projection).", difficulty: "days" },
+    { id: "clusterMeanCLM_isSelfAdjoint", file: "AKS/ZigZagSpectral.lean", line: 28, status: "sorry", kind: "theorem",
+      sig: "clusterMeanCLM_isSelfAdjoint : IsSelfAdjoint Q",
+      desc: "Cluster mean is self-adjoint.", difficulty: "days" },
+    { id: "withinClusterCLM_isSelfAdjoint", file: "AKS/ZigZagSpectral.lean", line: 36, status: "sorry", kind: "theorem",
+      sig: "withinClusterCLM_isSelfAdjoint : IsSelfAdjoint B",
+      desc: "Within-cluster walk is self-adjoint (inherits from G₂).", difficulty: "1-2 weeks" },
+    { id: "withinCluster_comp_clusterMean", file: "AKS/ZigZagSpectral.lean", line: 44, status: "sorry", kind: "theorem",
+      sig: "withinCluster_comp_clusterMean : B * Q = Q",
+      desc: "Walking within clusters then averaging = just averaging (BQ = Q).", difficulty: "days" },
+    { id: "clusterMean_comp_withinCluster", file: "AKS/ZigZagSpectral.lean", line: 53, status: "sorry", kind: "theorem",
+      sig: "clusterMean_comp_withinCluster : Q * B = Q",
+      desc: "Averaging then walking within clusters = just averaging (QB = Q).", difficulty: "days" },
+    { id: "withinClusterCLM_norm_le_one", file: "AKS/ZigZagSpectral.lean", line: 60, status: "sorry", kind: "theorem",
+      sig: "withinClusterCLM_norm_le_one : ‖B‖ ≤ 1",
+      desc: "Within-cluster walk is a contraction.", difficulty: "1-2 weeks" },
+    { id: "stepPermCLM_sq_eq_one", file: "AKS/ZigZagSpectral.lean", line: 69, status: "sorry", kind: "theorem",
+      sig: "stepPermCLM_sq_eq_one : Σ * Σ = 1",
+      desc: "Step permutation is an involution (because G₁.rot is).", difficulty: "days" },
+    { id: "stepPermCLM_isSelfAdjoint", file: "AKS/ZigZagSpectral.lean", line: 78, status: "sorry", kind: "theorem",
+      sig: "stepPermCLM_isSelfAdjoint : IsSelfAdjoint Σ",
+      desc: "Step permutation is self-adjoint (orthogonal involution).", difficulty: "1-2 weeks" },
+    { id: "withinCluster_tilde_contraction", file: "AKS/ZigZagSpectral.lean", line: 92, status: "sorry", kind: "theorem",
+      sig: "withinCluster_tilde_contraction : ‖B(I - Q)‖ ≤ spectralGap G₂",
+      desc: "Within-cluster walk restricted to non-constant part contracts by λ(G₂).", difficulty: "1-2 weeks" },
+    { id: "hat_block_norm", file: "AKS/ZigZagSpectral.lean", line: 103, status: "sorry", kind: "theorem",
+      sig: "hat_block_norm : ‖QΣQ - P‖ ≤ spectralGap G₁",
+      desc: "The 'hat' operator QΣQ minus global mean is bounded by λ(G₁).", difficulty: "1-2 weeks" },
+    { id: "meanCLM_eq_clusterMean_comp", file: "AKS/ZigZagSpectral.lean", line: 118, status: "sorry", kind: "theorem",
+      sig: "meanCLM_eq_clusterMean_comp : P * Q = P",
+      desc: "Global mean composed with cluster mean = global mean.", difficulty: "days" },
+    { id: "clusterMean_comp_meanCLM", file: "AKS/ZigZagSpectral.lean", line: 124, status: "sorry", kind: "theorem",
+      sig: "clusterMean_comp_meanCLM : Q * P = P",
+      desc: "Cluster mean composed with global mean = global mean.", difficulty: "days" },
+
+    // ── RVWBound.lean ──
+    { id: "rvwBound", file: "AKS/RVWBound.lean", line: 30, status: "definition", kind: "def",
+      sig: "rvwBound (lam₁ lam₂ : ℝ) : ℝ",
+      desc: "The precise Reingold-Vadhan-Wigderson bound function for zig-zag spectral composition." },
+    { id: "rvwBound_mono_left", file: "AKS/RVWBound.lean", line: 37, status: "sorry", kind: "theorem",
+      sig: "rvwBound_mono_left : a₁ ≤ a₂ → rvwBound a₁ b ≤ rvwBound a₂ b",
+      desc: "RVW bound is monotone in the first argument.", difficulty: "days" },
+    { id: "rvwBound_mono_right", file: "AKS/RVWBound.lean", line: 44, status: "sorry", kind: "theorem",
+      sig: "rvwBound_mono_right : b₁ ≤ b₂ → rvwBound a b₁ ≤ rvwBound a b₂",
+      desc: "RVW bound is monotone in the second argument.", difficulty: "days" },
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 71, status: "sorry", kind: "theorem",
+      sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
+      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Mathematical heart of the zig-zag analysis.", milestone: true, difficulty: "2-4 weeks" },
+
+    // ── Random.lean ──
+    { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
+      sig: "axiom baseExpander : RegularGraph 20736 12",
+      desc: "Base expander: 12-regular graph on 20736 = 12^4 vertices. Axiomatized (certificate is infeasible)." },
+    { id: "baseExpander_gap", file: "AKS/Random.lean", line: 108, status: "axiom", kind: "axiom",
+      sig: "axiom baseExpander_gap : spectralGap baseExpander ≤ 5/9",
+      desc: "Base expander has spectral gap ≤ 5/9 ≈ 0.556 (just above Alon-Boppana bound)." },
+
+    // ── ZigZag.lean ──
+    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 31, status: "sorry", kind: "theorem",
+      sig: "zigzag_spectral_bound : spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂",
+      desc: "Zig-zag spectral composition: assembles all sublemmas into the final bound.", milestone: true, difficulty: "1-2 weeks" },
+    { id: "zigzagFamily", file: "AKS/ZigZag.lean", line: 73, status: "definition", kind: "def",
+      sig: "zigzagFamily (H₀ : RegularGraph ((D*D)*(D*D)) D) : ℕ → Σ n, RegularGraph n (D*D)",
+      desc: "Iterated zig-zag construction: square then zig-zag with base, producing growing expander families." },
+    { id: "zigzagFamily_gap", file: "AKS/ZigZag.lean", line: 87, status: "proved", kind: "theorem",
+      sig: "zigzagFamily_gap : spectralGap (zigzagFamily H₀ k).2 ≤ c",
+      desc: "Every graph in the zig-zag family has spectral gap ≤ c. Proved by induction using squaring + zig-zag bounds.", milestone: true },
+    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 115, status: "sorry", kind: "theorem",
+      sig: "explicit_expanders_exist_zigzag :\n  ∀ n > 0, ∃ G : RegularGraph n (D*D), spectralGap G ≤ c",
+      desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
+
+    // ── AKS.lean ──
+    { id: "zigzag_implies_aks_network", file: "AKS.lean", line: 19, status: "sorry", kind: "theorem",
+      sig: "zigzag_implies_aks_network :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ 99/100) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
+      desc: "Top-level theorem: explicit expander families imply O(n log n) sorting networks.", milestone: true }
+  ],
+
+  // Edges: [source, target] means source is used by target
+  edges: [
+    // RegularGraph foundations
+    ["RegularGraph", "walkCLM"],
+    ["RegularGraph", "meanCLM"],
+    ["walkCLM", "spectralGap"],
+    ["meanCLM", "spectralGap"],
+    ["spectralGap", "spectralGap_nonneg"],
+    ["spectralGap", "spectralGap_le_one"],
+    ["walkCLM", "spectralGap_le_one"],
+    ["meanCLM", "spectralGap_le_one"],
+
+    // Square
+    ["RegularGraph", "RegularGraph.square"],
+    ["spectralGap", "spectralGap_square"],
+    ["RegularGraph.square", "spectralGap_square"],
+    ["walkCLM", "spectralGap_square"],
+    ["meanCLM", "spectralGap_square"],
+
+    // Complete graph
+    ["RegularGraph", "completeGraph"],
+    ["spectralGap", "spectralGap_complete"],
+    ["completeGraph", "spectralGap_complete"],
+
+    // Mixing lemma
+    ["spectralGap", "expander_mixing_lemma"],
+    ["walkCLM", "expander_mixing_lemma"],
+    ["indicatorVec", "expander_mixing_lemma"],
+    ["RegularGraph", "expander_mixing_lemma"],
+
+    // Sorting network basics
+    ["Comparator", "ComparatorNetwork"],
+    ["ComparatorNetwork", "IsSortingNetwork"],
+    ["ComparatorNetwork", "zero_one_principle"],
+    ["IsSortingNetwork", "zero_one_principle"],
+
+    // Halver theory
+    ["ComparatorNetwork", "IsEpsilonHalver"],
+    ["RegularGraph", "expander_gives_halver"],
+    ["spectralGap", "expander_gives_halver"],
+    ["IsEpsilonHalver", "expander_gives_halver"],
+    ["expander_mixing_lemma", "expander_gives_halver"],
+    ["IsEpsilonHalver", "epsHalverMerge"],
+    ["ComparatorNetwork", "epsHalverMerge"],
+    ["IsEpsilonSorted", "halver_composition"],
+    ["IsEpsilonHalver", "halver_composition"],
+    ["halver_composition", "halver_convergence"],
+    ["epsHalverMerge", "halver_convergence"],
+
+    // Zig-zag operators
+    ["RegularGraph", "RegularGraph.zigzag"],
+    ["walkCLM", "withinClusterCLM"],
+    ["RegularGraph", "stepPermCLM"],
+    ["meanCLM", "clusterMeanCLM"],
+    ["Fin.pair_lt", "withinClusterCLM"],
+    ["Fin.pair_lt", "stepPermCLM"],
+    ["Fin.pair_lt", "clusterMeanCLM"],
+    ["withinClusterCLM", "zigzag_walkCLM_eq"],
+    ["stepPermCLM", "zigzag_walkCLM_eq"],
+    ["RegularGraph.zigzag", "zigzag_walkCLM_eq"],
+
+    // Zig-zag spectral properties
+    ["clusterMeanCLM", "clusterMeanCLM_idempotent"],
+    ["clusterMeanCLM", "clusterMeanCLM_isSelfAdjoint"],
+    ["withinClusterCLM", "withinClusterCLM_isSelfAdjoint"],
+    ["withinClusterCLM", "withinCluster_comp_clusterMean"],
+    ["clusterMeanCLM", "withinCluster_comp_clusterMean"],
+    ["clusterMeanCLM", "clusterMean_comp_withinCluster"],
+    ["withinClusterCLM", "clusterMean_comp_withinCluster"],
+    ["withinClusterCLM", "withinClusterCLM_norm_le_one"],
+    ["stepPermCLM", "stepPermCLM_sq_eq_one"],
+    ["stepPermCLM", "stepPermCLM_isSelfAdjoint"],
+    ["withinClusterCLM", "withinCluster_tilde_contraction"],
+    ["clusterMeanCLM", "withinCluster_tilde_contraction"],
+    ["spectralGap", "withinCluster_tilde_contraction"],
+    ["stepPermCLM", "hat_block_norm"],
+    ["clusterMeanCLM", "hat_block_norm"],
+    ["meanCLM", "hat_block_norm"],
+    ["spectralGap", "hat_block_norm"],
+    ["meanCLM", "meanCLM_eq_clusterMean_comp"],
+    ["clusterMeanCLM", "meanCLM_eq_clusterMean_comp"],
+    ["clusterMeanCLM", "clusterMean_comp_meanCLM"],
+    ["meanCLM", "clusterMean_comp_meanCLM"],
+
+    // RVW bound
+    ["rvwBound", "rvwBound_mono_left"],
+    ["rvwBound", "rvwBound_mono_right"],
+    ["rvwBound", "rvw_operator_norm_bound"],
+
+    // Zig-zag assembly
+    ["zigzag_walkCLM_eq", "zigzag_spectral_bound"],
+    ["clusterMeanCLM_idempotent", "zigzag_spectral_bound"],
+    ["clusterMeanCLM_isSelfAdjoint", "zigzag_spectral_bound"],
+    ["withinClusterCLM_isSelfAdjoint", "zigzag_spectral_bound"],
+    ["withinCluster_comp_clusterMean", "zigzag_spectral_bound"],
+    ["clusterMean_comp_withinCluster", "zigzag_spectral_bound"],
+    ["withinClusterCLM_norm_le_one", "zigzag_spectral_bound"],
+    ["stepPermCLM_sq_eq_one", "zigzag_spectral_bound"],
+    ["stepPermCLM_isSelfAdjoint", "zigzag_spectral_bound"],
+    ["withinCluster_tilde_contraction", "zigzag_spectral_bound"],
+    ["hat_block_norm", "zigzag_spectral_bound"],
+    ["meanCLM_eq_clusterMean_comp", "zigzag_spectral_bound"],
+    ["clusterMean_comp_meanCLM", "zigzag_spectral_bound"],
+    ["rvw_operator_norm_bound", "zigzag_spectral_bound"],
+
+    // Iterated construction
+    ["RegularGraph.square", "zigzagFamily"],
+    ["RegularGraph.zigzag", "zigzagFamily"],
+    ["zigzag_spectral_bound", "zigzagFamily_gap"],
+    ["spectralGap_square", "zigzagFamily_gap"],
+    ["rvwBound_mono_left", "zigzagFamily_gap"],
+    ["rvwBound_mono_right", "zigzagFamily_gap"],
+    ["zigzagFamily", "zigzagFamily_gap"],
+    ["zigzagFamily_gap", "explicit_expanders_exist_zigzag"],
+    ["zigzagFamily", "explicit_expanders_exist_zigzag"],
+
+    // Base expander
+    ["RegularGraph", "baseExpander"],
+    ["spectralGap", "baseExpander_gap"],
+    ["baseExpander", "baseExpander_gap"],
+
+    // Top-level AKS construction
+    ["zero_one_principle", "AKS.sorts"],
+    ["halver_convergence", "AKS.sorts"],
+    ["AKS", "AKS.sorts"],
+    ["IsSortingNetwork", "AKS.sorts"],
+    ["halver_convergence", "AKS"],
+    ["expander_gives_halver", "AKS"],
+    ["epsHalverMerge", "AKS"],
+    ["AKS", "AKS.size_nlogn"],
+
+    // Top-level theorem
+    ["explicit_expanders_exist_zigzag", "zigzag_implies_aks_network"],
+    ["AKS.sorts", "zigzag_implies_aks_network"],
+    ["AKS.size_nlogn", "zigzag_implies_aks_network"],
+    ["baseExpander_gap", "zigzag_implies_aks_network"]
+  ],
+
+  // File groupings with display names
+  groups: [
+    { id: "AKS/Fin.lean", label: "Fin.lean", color: "#1a1e24" },
+    { id: "AKS/RegularGraph.lean", label: "RegularGraph.lean", color: "#1a1e24" },
+    { id: "AKS/Square.lean", label: "Square.lean", color: "#1a1e24" },
+    { id: "AKS/CompleteGraph.lean", label: "CompleteGraph.lean", color: "#1a1e24" },
+    { id: "AKS/Mixing.lean", label: "Mixing.lean", color: "#1a1e24" },
+    { id: "AKS/Basic.lean", label: "Basic.lean", color: "#1a1e24" },
+    { id: "AKS/Halver.lean", label: "Halver.lean", color: "#1a1e24" },
+    { id: "AKS/ZigZagOperators.lean", label: "ZigZagOperators.lean", color: "#1a1e24" },
+    { id: "AKS/ZigZagSpectral.lean", label: "ZigZagSpectral.lean", color: "#1a1e24" },
+    { id: "AKS/RVWBound.lean", label: "RVWBound.lean", color: "#1a1e24" },
+    { id: "AKS/ZigZag.lean", label: "ZigZag.lean", color: "#1a1e24" },
+    { id: "AKS/Random.lean", label: "Random.lean", color: "#1a1e24" },
+    { id: "AKS.lean", label: "AKS.lean", color: "#1a1e24" }
+  ]
+};
+// ═══════════════════════════════════════════════════════
+
+const statusColor = {
+  proved: "#3fb950",
+  sorry: "#d29922",
+  axiom: "#f85149",
+  definition: "#58a6ff"
+};
+
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+// Compute stats
+const proved = PROOF_DATA.nodes.filter(n => n.status === "proved").length;
+const sorry = PROOF_DATA.nodes.filter(n => n.status === "sorry").length;
+const axioms = PROOF_DATA.nodes.filter(n => n.status === "axiom").length;
+const defs = PROOF_DATA.nodes.filter(n => n.status === "definition").length;
+document.getElementById("stats").innerHTML =
+  `<div class="num" style="color:#3fb950">${proved}</div> proved<br>` +
+  `<div class="num" style="color:#d29922">${sorry}</div> sorry<br>` +
+  `<div class="num" style="color:#f85149">${axioms}</div> axiom<br>` +
+  `<div class="num" style="color:#58a6ff">${defs}</div> definitions`;
+
+// Assign depth for Y positioning (topological sort)
+const nodeMap = new Map(PROOF_DATA.nodes.map(n => [n.id, n]));
+const inEdges = new Map();
+const outEdges = new Map();
+PROOF_DATA.nodes.forEach(n => { inEdges.set(n.id, []); outEdges.set(n.id, []); });
+PROOF_DATA.edges.forEach(([s, t]) => {
+  if (inEdges.has(t) && outEdges.has(s)) {
+    inEdges.get(t).push(s);
+    outEdges.get(s).push(t);
+  }
+});
+
+// Compute depth via longest-path
+const depth = new Map();
+function getDepth(id) {
+  if (depth.has(id)) return depth.get(id);
+  depth.set(id, -1); // cycle guard
+  const parents = inEdges.get(id) || [];
+  const d = parents.length === 0 ? 0 : 1 + Math.max(...parents.map(getDepth));
+  depth.set(id, d);
+  return d;
+}
+PROOF_DATA.nodes.forEach(n => getDepth(n.id));
+const maxDepth = Math.max(...PROOF_DATA.nodes.map(n => depth.get(n.id)));
+
+// Assign positions
+PROOF_DATA.nodes.forEach(n => {
+  n.depth = depth.get(n.id);
+  n.radius = n.milestone ? 10 : 6;
+});
+
+// Group nodes by file for group rectangles
+const fileGroups = new Map();
+PROOF_DATA.nodes.forEach(n => {
+  if (!fileGroups.has(n.file)) fileGroups.set(n.file, []);
+  fileGroups.get(n.file).push(n);
+});
+
+// D3 setup
+const svg = d3.select("svg");
+const g = svg.append("g");
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.2, 4])
+  .on("zoom", (e) => g.attr("transform", e.transform));
+svg.call(zoom);
+
+function resetZoom() {
+  svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(W/2 - 400, 40).scale(0.85));
+}
+
+let labelsVisible = true;
+function toggleLabels() {
+  labelsVisible = !labelsVisible;
+  g.selectAll(".node-label").attr("opacity", labelsVisible ? 1 : 0);
+}
+
+// Build links and nodes data
+const links = PROOF_DATA.edges
+  .filter(([s, t]) => nodeMap.has(s) && nodeMap.has(t))
+  .map(([s, t]) => ({ source: s, target: t }));
+
+const simulation = d3.forceSimulation(PROOF_DATA.nodes)
+  .force("link", d3.forceLink(links).id(d => d.id).distance(60).strength(0.4))
+  .force("charge", d3.forceManyBody().strength(-180))
+  .force("x", d3.forceX(W / 2).strength(0.03))
+  .force("y", d3.forceY().y(d => 60 + (d.depth / (maxDepth || 1)) * (H - 120)).strength(0.35))
+  .force("collision", d3.forceCollide().radius(d => d.radius + 8))
+  .alphaDecay(0.02);
+
+// File-group columns — assign an x-target per file for clustering
+const fileOrder = [
+  "AKS/Fin.lean", "AKS/RegularGraph.lean", "AKS/Square.lean", "AKS/CompleteGraph.lean",
+  "AKS/Mixing.lean", "AKS/Basic.lean", "AKS/Halver.lean",
+  "AKS/ZigZagOperators.lean", "AKS/ZigZagSpectral.lean", "AKS/RVWBound.lean",
+  "AKS/ZigZag.lean", "AKS/Random.lean", "AKS.lean"
+];
+const fileX = new Map();
+fileOrder.forEach((f, i) => fileX.set(f, 80 + i * 65));
+simulation.force("fileX", d3.forceX().x(d => fileX.get(d.file) || W/2).strength(0.12));
+
+// Draw edges
+const linkSel = g.append("g")
+  .selectAll("line")
+  .data(links)
+  .join("line")
+  .attr("class", "link")
+  .attr("stroke", "#30363d")
+  .attr("stroke-width", 1);
+
+// Draw group rects (updated on tick)
+const groupRects = g.append("g").selectAll("rect")
+  .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
+  .join("rect")
+  .attr("class", "group-rect")
+  .attr("fill", d => d.color)
+  .attr("stroke", "#21262d")
+  .attr("stroke-width", 1);
+
+const groupLabels = g.append("g").selectAll("text")
+  .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
+  .join("text")
+  .attr("class", "group-label")
+  .text(d => d.label);
+
+// Draw nodes
+const nodeSel = g.append("g")
+  .selectAll("circle")
+  .data(PROOF_DATA.nodes)
+  .join("circle")
+  .attr("class", "node-circle")
+  .attr("r", d => d.radius)
+  .attr("fill", d => statusColor[d.status])
+  .attr("stroke", d => d.milestone ? "#e6edf3" : statusColor[d.status])
+  .call(d3.drag()
+    .on("start", (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+    .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+    .on("end", (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+  );
+
+// Node labels
+const labelSel = g.append("g")
+  .selectAll("text")
+  .data(PROOF_DATA.nodes)
+  .join("text")
+  .attr("class", "node-label")
+  .text(d => {
+    // Shorten long names
+    let name = d.id;
+    name = name.replace("RegularGraph.", "").replace("CLM", "");
+    if (name.length > 20) name = name.substring(0, 18) + "..";
+    return name;
+  })
+  .attr("dy", d => d.radius + 12);
+
+// Tooltip
+const tooltip = document.getElementById("tooltip");
+
+nodeSel.on("mouseover", (e, d) => {
+  tooltip.style.display = "block";
+  let html = `<div class="tt-name">${d.id}</div>`;
+  html += `<div class="tt-file">${d.file}:${d.line} &mdash; <span style="color:${statusColor[d.status]}">${d.status}</span></div>`;
+  html += `<div class="tt-sig">${escHtml(d.sig)}</div>`;
+  html += `<div class="tt-desc">${d.desc}</div>`;
+  if (d.difficulty) html += `<div class="tt-diff">Estimated difficulty: ${d.difficulty}</div>`;
+  tooltip.innerHTML = html;
+})
+.on("mousemove", (e) => {
+  let x = e.clientX + 16;
+  let y = e.clientY + 16;
+  if (x + 480 > W) x = e.clientX - 496;
+  if (y + 200 > H) y = e.clientY - 200;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+})
+.on("mouseout", () => { tooltip.style.display = "none"; })
+.on("click", (e, d) => {
+  const url = `${PROOF_DATA.repo}/blob/main/${d.file}#L${d.line}`;
+  window.open(url, "_blank");
+});
+
+function escHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Tick
+simulation.on("tick", () => {
+  linkSel
+    .attr("x1", d => d.source.x)
+    .attr("y1", d => d.source.y)
+    .attr("x2", d => d.target.x)
+    .attr("y2", d => d.target.y);
+
+  nodeSel
+    .attr("cx", d => d.x)
+    .attr("cy", d => d.y);
+
+  labelSel
+    .attr("x", d => d.x)
+    .attr("y", d => d.y);
+
+  // Update group rectangles
+  groupRects.each(function(gr) {
+    const nodes = fileGroups.get(gr.id);
+    if (!nodes || nodes.length === 0) return;
+    const pad = 24;
+    const xs = nodes.map(n => n.x);
+    const ys = nodes.map(n => n.y);
+    const x0 = Math.min(...xs) - pad;
+    const y0 = Math.min(...ys) - pad;
+    const x1 = Math.max(...xs) + pad;
+    const y1 = Math.max(...ys) + pad;
+    d3.select(this)
+      .attr("x", x0).attr("y", y0)
+      .attr("width", x1 - x0).attr("height", y1 - y0);
+  });
+
+  groupLabels.each(function(gr) {
+    const nodes = fileGroups.get(gr.id);
+    if (!nodes || nodes.length === 0) return;
+    const pad = 24;
+    const xs = nodes.map(n => n.x);
+    const ys = nodes.map(n => n.y);
+    d3.select(this)
+      .attr("x", Math.min(...xs) - pad + 6)
+      .attr("y", Math.min(...ys) - pad + 14);
+  });
+});
+
+// Highlight connected nodes on hover
+nodeSel.on("mouseover.highlight", (e, d) => {
+  const connected = new Set();
+  connected.add(d.id);
+  links.forEach(l => {
+    const sId = typeof l.source === "string" ? l.source : l.source.id;
+    const tId = typeof l.target === "string" ? l.target : l.target.id;
+    if (sId === d.id) connected.add(tId);
+    if (tId === d.id) connected.add(sId);
+  });
+  nodeSel.attr("opacity", n => connected.has(n.id) ? 1 : 0.15);
+  labelSel.attr("opacity", n => connected.has(n.id) && labelsVisible ? 1 : 0.05);
+  linkSel.attr("stroke-opacity", l => {
+    const sId = typeof l.source === "string" ? l.source : l.source.id;
+    const tId = typeof l.target === "string" ? l.target : l.target.id;
+    return (sId === d.id || tId === d.id) ? 0.7 : 0.03;
+  });
+}).on("mouseout.highlight", () => {
+  nodeSel.attr("opacity", 1);
+  labelSel.attr("opacity", labelsVisible ? 1 : 0);
+  linkSel.attr("stroke-opacity", 0.3);
+});
+
+// Initial zoom
+setTimeout(() => resetZoom(), 100);
+</script>
+</body>
+</html>
