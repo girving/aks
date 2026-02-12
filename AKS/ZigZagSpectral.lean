@@ -22,7 +22,10 @@ open Matrix BigOperators Finset
 theorem clusterMeanCLM_idempotent {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     (clusterMeanCLM hd₁ : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) *
     clusterMeanCLM hd₁ = clusterMeanCLM hd₁ := by
-  sorry
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, clusterMeanCLM_apply]
+  simp
+  field_simp
 
 /-- The cluster mean projection is self-adjoint: `Q* = Q`. -/
 theorem clusterMeanCLM_isSelfAdjoint {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :

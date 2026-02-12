@@ -11,6 +11,8 @@
 
 import Mathlib.Analysis.InnerProductSpace.PiL2
 import Mathlib.Analysis.InnerProductSpace.Adjoint
+import Mathlib.Analysis.InnerProductSpace.Rayleigh
+import Mathlib.Analysis.CStarAlgebra.Spectrum
 
 open BigOperators
 
@@ -299,28 +301,52 @@ private lemma rvw_inner_product_expansion {n : ℕ}
           rw [inner_add_left, inner_add_right, inner_add_right]
           ring
 
-/-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A.
-
-    Proof strategy (using Mathlib's Rayleigh quotient machinery):
-    1. Convert to LinearMap: A as CLM → A as LinearMap (IsSymmetric)
-    2. Use LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional:
-       The supremum of ⟨Ax,x⟩/‖x‖² over x≠0 is an eigenvalue
-    3. For unit vectors: sup |⟨Ax,x⟩| = that eigenvalue (since ‖x‖=1)
-    4. Use IsSelfAdjoint.spectralRadius_eq_nnnorm: spectralRadius A = ‖A‖
-    5. Connect: spectralRadius = max |eigenvalue| = sup Rayleigh quotient
-
-    Key missing piece: spectralRadius equals max absolute eigenvalue for
-    self-adjoint CLMs on EuclideanSpace ℝ (Fin n). This should follow from
-    the finite-dimensional spectral theorem. -/
-private lemma rayleigh_quotient_bound {n : ℕ} (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+/-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A. -/
+private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
+    (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
     (hA_sa : IsSelfAdjoint A) :
     ‖A‖ = sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
       |@inner ℝ _ _ (A x.val) x.val|) := by
-  -- The pieces are in Mathlib but need assembly:
-  -- - Mathlib/Analysis/InnerProductSpace/Rayleigh.lean has Rayleigh quotient extrema
-  -- - Mathlib/Analysis/CStarAlgebra/Spectrum.lean has spectralRadius = norm
-  -- - Need: spectralRadius = max |eigenvalue| for finite-dimensional case
-  sorry
+  -- First direction: sup |⟨Ax, x⟩| ≤ ‖A‖ by Cauchy-Schwarz
+  have dir1 : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
+      |@inner ℝ _ _ (A x.val) x.val|) ≤ ‖A‖ := by
+    apply Real.sSup_le
+    · intro b ⟨x, hx⟩
+      simp only [Subtype.coe_mk] at hx
+      rw [← hx]
+      calc |@inner ℝ _ _ (A x.val) x.val|
+          ≤ ‖A x.val‖ * ‖x.val‖ := abs_real_inner_le_norm _ _
+        _ ≤ ‖A‖ * ‖x.val‖ * ‖x.val‖ := by
+            gcongr
+            exact ContinuousLinearMap.le_opNorm A x.val
+        _ = ‖A‖ := by rw [x.prop]; ring
+    · exact norm_nonneg _
+
+  -- Second direction: ‖A‖ ≤ sup |⟨Ax, x⟩| (harder, uses Rayleigh quotient)
+  have dir2 : ‖A‖ ≤ sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
+      |@inner ℝ _ _ (A x.val) x.val|) := by
+    -- spectralRadius = sup{‖k‖ : k ∈ spectrum}
+    -- For self-adjoint A on EuclideanSpace ℝ (Fin n):
+    -- - spectrum consists of real eigenvalues (Matrix.IsHermitian.eigenvalues_mem_spectrum_real)
+    -- - eigenvalues achieved by Rayleigh quotient extrema (Rayleigh.lean)
+    -- - spectralRadius ℂ A = ‖A‖ for self-adjoint (IsSelfAdjoint.spectralRadius_eq_nnnorm)
+    -- - Therefore: ‖A‖ = spectralRadius = max |eigenvalue| = max Rayleigh extremum
+    --
+    -- The connection requires bridging:
+    -- (a) CLM ↔ Matrix ↔ LinearMap representations
+    -- (b) spectrum ↔ eigenvalues ↔ Rayleigh extrema
+    --
+    -- Components in Mathlib:
+    -- - spectralRadius 𝕜 a = ⨆ k ∈ spectrum 𝕜 a, ‖k‖₊ (Normed/Algebra/Spectrum.lean)
+    -- - Matrix.spectrum_toEuclideanLin: spectrum match (Matrix/Spectrum.lean:39)
+    -- - IsHermitian.eigenvalues_mem_spectrum_real (Matrix/Spectrum.lean:77)
+    -- - hasEigenvalue_iSup_of_finiteDimensional (InnerProductSpace/Rayleigh.lean:230)
+    --
+    -- Missing: explicit proof that for EuclideanSpace ℝ (Fin n):
+    --   max{|⟨Ax,x⟩| : ‖x‖=1} = max{|λ| : λ eigenvalue of A}
+    sorry
+
+  exact le_antisymm dir2 dir1
 
 /-- The 2×2 matrix whose largest eigenvalue equals rvwBound(λ₁, λ₂).
     This is the matrix M = [[(1-λ₂²)λ₁, λ₂], [λ₂, 0]]. -/
@@ -390,7 +416,7 @@ theorem rvw_operator_norm_bound
     sorry
 
   -- Use Rayleigh quotient bound
-  have ray_bound := rayleigh_quotient_bound (W - P) hWP_sa
+  have ray_bound := rayleigh_quotient_bound hn (W - P) hWP_sa
 
   -- Bound the Rayleigh quotient for each unit vector
   have key : ∀ (x : EuclideanSpace ℝ (Fin n)), ‖x‖ = 1 →
