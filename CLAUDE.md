@@ -12,17 +12,20 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 
 ```bash
 scripts/lean-check AKS/RegularGraph.lean    # Check a file (~0.2-2s for edits near end)
+scripts/lean-check --all                    # Check all project files (use before committing)
 scripts/lean-check --stop                   # Stop daemon (when done)
 scripts/sorries                             # Audit sorry, #exit, native_decide, axiom across codebase
 ```
 
 **Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates only from the change point forward. Since proof iteration typically happens at the end of a file, most checks are sub-second. The daemon auto-starts on first use (~5s).
 
+**Before committing, run `scripts/lean-check --all`** to verify all project files type-check. This catches cross-file breakage (e.g., a changed signature in one file breaking a downstream import) that single-file checks miss.
+
 There are no tests or linter configurations. Correctness is verified through Lean's type checker — if `lean-check` reports no errors, all type-checked proofs are valid.
 
 ### `lake build` (fallback only)
 
-Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state or need to verify downstream file interactions). It rebuilds from scratch and takes ~20s per changed file vs 0.2-2s for `lean-check`.
+Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state). For checking all files, prefer `scripts/lean-check --all` — it uses the daemon cache and is much faster.
 
 ```bash
 lake build          # Full rebuild — slow, use only as fallback
@@ -229,6 +232,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`spectralGap_le_one` proof pattern: contraction + WP = P.** To show `‖W - P‖ ≤ 1` for walk operator W and mean projection P: (1) prove `‖W‖ ≤ 1` via `opNorm_le_bound` + Cauchy-Schwarz (`sq_sum_le_card_mul_sum_sq` from `Mathlib.Algebra.Order.Chebyshev`) + double-counting via `rotEquiv.sum_comp`; (2) prove `WP = P` (walk of a constant = same constant); (3) prove `‖f - Pf‖ ≤ ‖f‖` via `field_simp` + `nlinarith`; (4) factor `(W-P)f = W(f - Pf)` and chain inequalities. Handle d = 0 separately with `‖Pf‖ ≤ ‖f‖` (Cauchy-Schwarz). Key Lean pitfall: `Nat.cast_ne_zero.mpr` often has type-class mismatch issues; use `by positivity` instead.
 
+**Indicator vector pattern for combinatorial-spectral bridges.** To relate a combinatorial quantity (edge count between sets) to a spectral bound (operator norm): (1) define `indicatorVec S` via `(WithLp.equiv 2 _).symm (fun v ↦ if v ∈ S then 1 else 0)` with an `@[simp]` apply lemma that's `rfl`; (2) prove `‖indicatorVec S‖ = √↑S.card` via `EuclideanSpace.norm_sq_eq` + `sum_boole`; (3) express the combinatorial quantity as `⟨1_S, A(1_T)⟩` by unfolding inner product (`PiLp.inner_apply` + `RCLike.inner_apply` + `conj_trivial`), then using `ite_mul`/`sum_filter`/`sum_boole` to convert indicator sums to filter cardinalities; (4) apply `abs_real_inner_le_norm` (Cauchy-Schwarz) + `le_opNorm` for the spectral bound. Key tactic sequence for indicator sums: `simp_rw [ite_mul, one_mul, zero_mul]; rw [← Finset.sum_filter]; have : univ.filter (· ∈ S) = S := by ext; simp`.
+
 ## Mathlib API Reference
 
 ### Spectral Theorem
@@ -265,11 +270,11 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM` and `meanCLM` are defined CLM-first (three-layer pattern: standalone function → `LinearMap` → CLM via `toContinuousLinearMap`). `spectralGap` is now `‖walkCLM - meanCLM‖`, the operator norm of the walk operator restricted to the orthogonal complement of constants.
 
-`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean` have no `#exit` and no `sorry`. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (assembly) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The `zigzag_spectral_bound` sorry has been decomposed into 16 smaller sublemmas across three new files: `ZigZagOperators.lean` (1 sorry: walk factorization), `ZigZagSpectral.lean` (12 sorry's: algebraic + spectral properties), and `RVWBound.lean` (3 sorry's: monotonicity + abstract operator bound). The mathematical core is `rvw_operator_norm_bound` in `RVWBound.lean` — a pure operator-theory result independent of graphs. Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is proving the easier sublemmas (algebraic properties) and `expander_mixing_lemma`.
+`RegularGraph.lean`, `Square.lean`, `CompleteGraph.lean`, `Mixing.lean` have no `#exit` and no `sorry`. `expander_mixing_lemma` is fully proved via indicator vectors + Cauchy-Schwarz + operator norm. `ZigZag.lean` has 2 sorry's: `zigzag_spectral_bound` (assembly) and `explicit_expanders_exist_zigzag` (all-sizes interpolation). The `zigzag_spectral_bound` sorry has been decomposed into 16 smaller sublemmas across three new files: `ZigZagOperators.lean` (1 sorry: walk factorization), `ZigZagSpectral.lean` (12 sorry's: algebraic + spectral properties), and `RVWBound.lean` (3 sorry's: monotonicity + abstract operator bound). The mathematical core is `rvw_operator_norm_bound` in `RVWBound.lean` — a pure operator-theory result independent of graphs. Base expander is D=12 (20736 vertices, β ≤ 5/9); D=12 is minimal for the precise RVW bound to converge (β² < 1/3 + even parity). The next frontier is proving the easier sublemmas (algebraic properties).
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases), `expander_mixing_lemma`
 
 **Achievable (weeks):** `halver_convergence`
 
@@ -278,7 +283,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 - *Medium (1-2 weeks):* `withinClusterCLM_isSelfAdjoint`, `stepPermCLM_isSelfAdjoint`, `withinClusterCLM_norm_le_one`, `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — Rayleigh quotient → 2×2 matrix eigenvalue)
 
-**Substantial (months):** `expander_mixing_lemma`, `halver_composition`, `expander_gives_halver`
+**Substantial (months):** `halver_composition`, `expander_gives_halver`
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
 
