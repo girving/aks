@@ -325,31 +325,27 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
   -- Second direction: ‖A‖ ≤ sup |⟨Ax, x⟩| (harder, uses Rayleigh quotient)
   have dir2 : ‖A‖ ≤ sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
       |@inner ℝ _ _ (A x.val) x.val|) := by
-    -- Proof strategy using Mathlib's Rayleigh quotient machinery:
+    -- Key fact: spectralRadius A = ‖A‖ for self-adjoint A
+    have hrad : spectralRadius ℝ A = ‖A‖₊ := hA_sa.spectralRadius_eq_nnnorm
+
+    -- spectralRadius = sup{‖k‖ : k ∈ spectrum}
+    -- For self-adjoint A on EuclideanSpace ℝ (Fin n):
+    -- - spectrum consists of real eigenvalues (Matrix.IsHermitian.eigenvalues_mem_spectrum_real)
+    -- - eigenvalues achieved by Rayleigh quotient extrema (Rayleigh.lean)
+    -- - Therefore: ‖A‖ = spectralRadius = max |eigenvalue| = max Rayleigh extremum
     --
-    -- 1. Convert A to LinearMap for Rayleigh theory:
-    --    let A_lm := (A : EuclideanSpace ℝ (Fin n) →ₗ[ℝ] _)
-    --    have hA_sym : A_lm.IsSymmetric := hA_sa.isSymmetric
+    -- The connection requires bridging:
+    -- (a) CLM ↔ Matrix ↔ LinearMap representations
+    -- (b) spectrum ↔ eigenvalues ↔ Rayleigh extrema
     --
-    -- 2. Get extremal eigenvalues (Rayleigh.lean):
-    --    have λ_max_eigen := LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional hA_sym
-    --    have λ_min_eigen := LinearMap.IsSymmetric.hasEigenvalue_iInf_of_finiteDimensional hA_sym
-    --    where λ_max = ⨆ x≠0, ⟨Ax,x⟩/‖x‖², λ_min = ⨅ x≠0, ⟨Ax,x⟩/‖x‖²
+    -- Components in Mathlib:
+    -- - spectralRadius 𝕜 a = ⨆ k ∈ spectrum 𝕜 a, ‖k‖₊ (Normed/Algebra/Spectrum.lean)
+    -- - Matrix.spectrum_toEuclideanLin: spectrum match (Matrix/Spectrum.lean:39)
+    -- - IsHermitian.eigenvalues_mem_spectrum_real (Matrix/Spectrum.lean:77)
+    -- - hasEigenvalue_iSup_of_finiteDimensional (InnerProductSpace/Rayleigh.lean:230)
     --
-    -- 3. For unit vectors: sup_{‖x‖=1} ⟨Ax,x⟩ = λ_max, inf_{‖x‖=1} ⟨Ax,x⟩ = λ_min
-    --    So: sup_{‖x‖=1} |⟨Ax,x⟩| = max(|λ_max|, |λ_min|)
-    --
-    -- 4. Key missing piece: For self-adjoint A in finite dimensions,
-    --    ‖A‖ = max(|λ_max|, |λ_min|)
-    --
-    --    This should follow from:
-    --    - IsSelfAdjoint.spectralRadius_eq_nnnorm (CStarAlgebra/Spectrum.lean)
-    --    - spectralRadius = sup{|λ| : λ eigenvalue} (definition/theorem needed)
-    --    - max absolute eigenvalue achieved at Rayleigh extrema (Rayleigh theory)
-    --
-    -- The infrastructure is in Mathlib but needs assembly. The gap is connecting
-    -- spectralRadius (defined via Gelfand formula for C*-algebras) to the concrete
-    -- max absolute eigenvalue in the finite-dimensional setting.
+    -- Missing: explicit proof that for EuclideanSpace ℝ (Fin n):
+    --   max{|⟨Ax,x⟩| : ‖x‖=1} = max{|λ| : λ eigenvalue of A}
     sorry
 
   exact le_antisymm dir2 dir1
