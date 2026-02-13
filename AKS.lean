@@ -1,4 +1,6 @@
-import AKS.Basic
+import AKS.ComparatorNetwork
+import AKS.Depth
+import AKS.AKSNetwork
 import AKS.Halver
 import AKS.Random
 import AKS.CompleteGraph
