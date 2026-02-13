@@ -249,6 +249,16 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Indicator vector pattern for combinatorial-spectral bridges.** To relate a combinatorial quantity (edge count between sets) to a spectral bound (operator norm): (1) define `indicatorVec S` via `(WithLp.equiv 2 _).symm (fun v ↦ if v ∈ S then 1 else 0)` with an `@[simp]` apply lemma that's `rfl`; (2) prove `‖indicatorVec S‖ = √↑S.card` via `EuclideanSpace.norm_sq_eq` + `sum_boole`; (3) express the combinatorial quantity as `⟨1_S, A(1_T)⟩` by unfolding inner product (`PiLp.inner_apply` + `RCLike.inner_apply` + `conj_trivial`), then using `ite_mul`/`sum_filter`/`sum_boole` to convert indicator sums to filter cardinalities; (4) apply `abs_real_inner_le_norm` (Cauchy-Schwarz) + `le_opNorm` for the spectral bound. Key tactic sequence for indicator sums: `simp_rw [ite_mul, one_mul, zero_mul]; rw [← Finset.sum_filter]; have : univ.filter (· ∈ S) = S := by ext; simp`.
 
+**Algebraic CLM identities via `ext + simp + field_simp`.** For proving operator equalities like Q² = Q, BQ = Q, QP = P: (1) `ext f vk` to reduce to pointwise equality, (2) `simp only [operator_apply, ...]` to unfold definitions, (3) `field_simp` to clear divisions and prove via ring/linear algebra. The pattern works when both sides have the same algebraic structure after unfolding. For more complex cases, insert `rw [Finset.sum_div]` or reorganization steps between simp and field_simp. See ZigZagSpectral.lean: `clusterMeanCLM_idempotent`, `withinCluster_comp_clusterMean`, `clusterMean_comp_meanCLM`.
+
+**Sum bijection helpers for reorganizing double sums.** When proving properties involving product spaces `Fin n₁ × Fin d₁ ≃ Fin (n₁ * d₁)`: (1) Write helper lemmas using `Finset.sum_bij'` to establish `∑ v ∑ i, f(encode v i) = ∑ k, f k` (see `sum_encode_eq_sum` in ZigZagOperators.lean). (2) For grouping by first coordinate: prove `∑ j, g(cluster j) = d₁ • ∑ v, g v` using the bijection (see `sum_over_cluster`). (3) Apply via `conv_lhs => rw [bijection_lemma]` in calc-style proofs to reorganize sums at specific positions without affecting the entire context. These helpers are reusable across many proofs involving the same product structure.
+
+**Make helper definitions public when downstream proofs need them.** If multiple files need to reference encode/decode helpers (like `cluster`, `port`, `encode` for product space indexing), remove `private` and expose them with `@[simp]` lemmas. The short-term cost (slightly larger API surface) is outweighed by enabling downstream proofs that would otherwise fight opaque definitions. See ZigZagOperators.lean: making `encode`/`cluster`/`port` public enabled 6 algebraic lemmas in ZigZagSpectral.lean to use `simp` effectively.
+
+**Rotation bijection for walk/neighbor sum equality.** When proving properties of graph walks where neighbor sums appear: use `RegularGraph.sum_neighbor_eq G (fun v => f v)` to show `∑ v ∑ i, f(G.neighbor v i) = ∑ v ∑ i, f v`. This follows from G.rot being a bijection (involution). Particularly useful for proving QB = Q where the cluster mean absorbs the walk: the neighbor sum over all (i,j) pairs equals d₂ times the sum over all i. Chain with `Finset.sum_const` and `Finset.card_fin` to evaluate the d₂ factor.
+
+**Block-diagonal operator norms via calc + per-block bounds.** To prove `‖B‖ ≤ 1` for an operator B that acts block-diagonally (e.g., within-cluster walk): (1) use `opNorm_le_bound` to reduce to showing `‖Bf‖ ≤ ‖f‖`, (2) expand `‖·‖²` as `∑ vk, ‖·(vk)‖²`, (3) use calc with bijection helpers to regroup by blocks: `∑ vk, ... = ∑ v, ∑ k, ... ≤ ∑ v, ∑ k, ... = ∑ vk, ...`, (4) prove the inequality with `Finset.sum_le_sum` pushing the bound per-block, (5) inside each block, connect to the per-block operator's norm bound. See ZigZagSpectral.lean: `withinClusterCLM_norm_le_one` structure.
+
 ## Mathlib API Reference
 
 ### Spectral Theorem
@@ -294,8 +304,9 @@ No files have `#exit`. `BipartiteExpander` has been removed — `expander_gives_
 **Achievable (weeks):** `halver_convergence`
 
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
-- *Easy (days):* `clusterMeanCLM_idempotent`, `clusterMeanCLM_isSelfAdjoint`, `stepPermCLM_sq_eq_one`, `withinCluster_comp_clusterMean`, `clusterMean_comp_withinCluster`, `meanCLM_eq_clusterMean_comp`, `clusterMean_comp_meanCLM`, `rvwBound_mono_left`, `rvwBound_mono_right`
-- *Medium (1-2 weeks):* `withinClusterCLM_isSelfAdjoint`, `stepPermCLM_isSelfAdjoint`, `withinClusterCLM_norm_le_one`, `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
+- *Done (6/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P)
+- *Easy (days):* `rvwBound_mono_left`, `rvwBound_mono_right`
+- *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint), `withinClusterCLM_norm_le_one` (95% done, needs type alignment), `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — Rayleigh quotient → 2×2 matrix eigenvalue)
 
 **Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
