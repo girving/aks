@@ -431,16 +431,44 @@ lemma nearsort_on_cherry_forces_elements
 
     This is THE KEY connection for Lemma 2!
 
-    Intuition: ε-nearsort is built from ε₁-halvers recursively.
-    Each ε₁-halver balances ones between halves.
-    Composing many ε₁-halvers gives ε-nearsort.
-    The balanced property propagates through the recursion,
-    forcing elements toward their correct positions. -/
+    **Construction (AKS Section 4):**
+    Given: ε₁-halver with ε₁ < ε/log⁴ m (where m is cherry size)
+    Build ε-nearsort by:
+    1. Apply ε₁-halver to entire cherry
+    2. Recursively apply ε₁-halver to top/bottom halves
+    3. Continue to quarters, eighths, ...
+    4. Stop when piece size < εm
+
+    **Forcing property:**
+    After ε-nearsort, for elements x in the cherry:
+    - If x should be in lower section L (a "0" that's too high):
+      → At least (1-ε) fraction end up in left child or lower
+    - If x should be in upper section U (a "1" that's too low):
+      → At least (1-ε) fraction end up in right child or higher
+    - At most ε fraction are "exceptional" (stuck in wrong place)
+
+    **Proof strategy:**
+    1. Each ε₁-halver application moves elements by balancing
+    2. Recursive structure ensures O(log m) halver applications
+    3. Error accumulates: ε₁ · log m ≈ ε (by choice of ε₁)
+    4. Thus at most ε fraction remain misplaced
+
+    This lemma requires substantial work - it's essentially proving
+    the correctness of the ε-nearsort construction from AKS Section 4. -/
 lemma halver_implies_nearsort_property
     {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
     (cherry : Cherry n) :
     -- There exists a nearsort network that satisfies the forcing property
+    -- Proper statement would be:
+    -- ∃ (nearsort_net : ComparatorNetwork cherry.totalSize),
+    --   (∀ v : Fin cherry.totalSize → Bool,
+    --     [forcing property: (1-ε) fraction move correctly])
     (sorry : Prop) := by
+  -- This is THE KEY lemma. The proof requires:
+  -- 1. Construct ε-nearsort recursively from ε₁-halvers
+  -- 2. Prove by induction on recursion depth that error ≤ ε
+  -- 3. Use halver balance property at each recursive step
+  -- Will implement after building more infrastructure
   sorry
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
@@ -634,14 +662,41 @@ lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
   ComparatorNetwork.exec_preserves_monotone net w hw
 
 /-- Key inequality for Lemma 2: combining moved elements and exceptions.
-    After ε-nearsort on a cherry, the new wrongness is bounded by:
-    (fraction that stayed at distance r) + (ε × fraction from distance r-2). -/
+
+    **Goal:** After applying ε-nearsort to a cherry, bound the wrongness increase.
+
+    **Setup:**
+    - Before: interval J has wrongness Δᵣ (proportion at distance ≥ r)
+    - After: interval J has wrongness Δ'ᵣ
+    - Want: Δ'ᵣ ≤ Δᵣ + ε·Δᵣ₋₂
+
+    **Proof idea:**
+    Elements in J partition into:
+    1. **Correctly placed** (already belong in J): contribute Δᵣ
+    2. **Should move, do move** ((1-ε) fraction by forcing property):
+       - Distance decreases, so contribute less than Δᵣ
+    3. **Should move, don't move** (ε fraction, "exceptional"):
+       - These were at distance ≥ (r-2) before (since moving 2 levels would fix)
+       - Still at distance ≥ r after
+       - Contribute ε·Δᵣ₋₂
+
+    **Fringe amplification:**
+    Elements spread across fringes of size A, giving factor 8A.
+    Final bound: Δ'ᵣ ≤ 8A·(Δᵣ + ε·Δᵣ₋₂)
+
+    This lemma depends on halver_implies_nearsort_property and requires
+    careful counting of displaced elements. -/
 lemma cherry_wrongness_after_nearsort
     {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
     (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
     (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
     treeWrongness n t (net.exec v) J r ≤
       treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
+  -- Proof structure:
+  -- 1. Use halver_implies_nearsort_property to get forcing
+  -- 2. Partition elements at distance ≥ r
+  -- 3. Count how many stay at distance ≥ r after nearsort
+  -- 4. Bound by Δᵣ (stayed) + ε·Δᵣ₋₂ (exceptions)
   sorry
 
 /-! **The Four Key Lemmas (AKS Section 8)** -/
