@@ -17,8 +17,18 @@ This formalization is based on the following sources:
 **Reingold, O., Vadhan, S., and Wigderson, A.** (2002). "Entropy waves, the zig-zag product, and new constant-degree expanders."
 *Annals of Mathematics*, 155(1), 157-187.
 - [Annals of Mathematics](https://annals.math.princeton.edu/2002/155-1/p05)
+- [arXiv:math/0406038](https://arxiv.org/abs/math/0406038) (PDF: https://arxiv.org/pdf/math/0406038)
+- [McGill PDF](https://www.math.mcgill.ca/goren/667.2010/Reingold.Vadhan.Wigderson.pdf)
 
 **Key Contribution:** Zig-zag product for constructing expander graphs, providing an explicit construction route that avoids heavy algebraic machinery (Margulis/LPS).
+
+**Spectral Gap Theorem:** If G₁ is an (n, d, λ₁)-graph and G₂ is a (d, d, λ₂)-graph, then the zig-zag product G₁ ⊗z G₂ is an (nd, d², φ(λ₁, λ₂))-graph where:
+
+```
+φ(λ₁, λ₂) = (1-λ₂²)λ₁/2 + √((1-λ₂²)²λ₁²/4 + λ₂²)
+```
+
+This is the `rvwBound` function in `AKS/RVWBound.lean`. The bound is tight (achieved by tensor products of complete graphs).
 
 ## Educational Resources
 
