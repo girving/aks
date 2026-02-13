@@ -612,9 +612,94 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
 
     -- The key fact: operator norm = spectral radius = max absolute eigenvalue
     have h_norm_eq_max_eig : ‖A‖ = max |lam_max| |lam_min| := by
-      sorry -- Requires: For self-adjoint CLM on finite-dim real space,
-            -- ‖A‖ = sup{|λ| : λ eigenvalue}, and all eigenvalues are bounded by
-            -- the Rayleigh extrema lam_min, lam_max.
+      -- Strategy: Use the Rayleigh quotient characterization we've established
+      -- in dir1 and dir2. For self-adjoint operators:
+      -- ‖A‖ = sup{|⟨Ax,x⟩| : ‖x‖=1}
+      --
+      -- We've shown:
+      -- 1. All eigenvalues (hence all Rayleigh quotients) lie in [lam_min, lam_max]
+      -- 2. Both |lam_max| and |lam_min| are achieved (they're eigenvalues)
+      -- 3. Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} = max(|lam_max|, |lam_min|)
+
+      -- From dir1 we have: sup ≤ ‖A‖
+      -- From h_sup_ge_both we have: sup ≥ max(|lam_max|, |lam_min|)
+      -- We need to show sup ≤ max(|lam_max|, |lam_min|) to conclude equality
+
+      have h_sup_le_max : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
+          |⟪A x.val, x.val⟫|) ≤ max |lam_max| |lam_min| := by
+        apply Real.sSup_le
+        · intro b ⟨x, hx⟩
+          rw [← hx]
+          -- For any unit vector x, ⟨Ax,x⟩ is a Rayleigh quotient
+          -- We need: |⟨Ax,x⟩| ≤ max(|lam_max|, |lam_min|)
+
+          -- Key: the Rayleigh quotient ⟨Tx,x⟩/‖x‖² lies in [lam_min, lam_max]
+          -- For unit vectors, this means lam_min ≤ ⟨Ax,x⟩ ≤ lam_max
+
+          -- First, connect A to T
+          have hTx_eq : ⟪T x.val, x.val⟫ = ⟪A x.val, x.val⟫ := by rfl
+
+          -- The Rayleigh quotient for x.val is bounded
+          have hx_ne : x.val ≠ 0 := norm_ne_zero_iff.mp (by rw [x.prop]; norm_num)
+
+          have h_ray_x_lower : lam_min ≤ ⟪T x.val, x.val⟫ / ‖x.val‖ ^ 2 := by
+            apply ciInf_le
+            · exact ⟨_, h_rayleigh_bounded_below⟩
+            · use ⟨x.val, hx_ne⟩
+              simp [h_re_id]
+
+          have h_ray_x_upper : ⟪T x.val, x.val⟫ / ‖x.val‖ ^ 2 ≤ lam_max := by
+            apply le_ciSup
+            · exact ⟨_, h_rayleigh_bounded_above⟩
+            · use ⟨x.val, hx_ne⟩
+              simp [h_re_id]
+
+          -- For unit vector: ⟨Ax,x⟩ = ⟨Tx,x⟩ / ‖x‖² = ⟨Tx,x⟩ (since ‖x‖ = 1)
+          have h_unit_ray : ⟪T x.val, x.val⟫ = ⟪T x.val, x.val⟫ / ‖x.val‖ ^ 2 := by
+            rw [x.prop]
+            norm_num
+
+          -- So lam_min ≤ ⟨Ax,x⟩ ≤ lam_max
+          have h_bounds : lam_min ≤ ⟪A x.val, x.val⟫ ∧ ⟪A x.val, x.val⟫ ≤ lam_max := by
+            rw [← hTx_eq] at h_ray_x_lower h_ray_x_upper
+            rw [← h_unit_ray] at h_ray_x_lower h_ray_x_upper
+            exact ⟨h_ray_x_lower, h_ray_x_upper⟩
+
+          -- Therefore |⟨Ax,x⟩| ≤ max(|lam_max|, |lam_min|)
+          by_cases h_nonneg : 0 ≤ ⟪A x.val, x.val⟫
+          · -- Case: ⟨Ax,x⟩ ≥ 0
+            calc |⟪A x.val, x.val⟫|
+                = ⟪A x.val, x.val⟫ := abs_of_nonneg h_nonneg
+              _ ≤ lam_max := h_bounds.2
+              _ ≤ |lam_max| := le_abs_self _
+              _ ≤ max |lam_max| |lam_min| := le_max_left _ _
+          · -- Case: ⟨Ax,x⟩ < 0
+            have h_neg : ⟪A x.val, x.val⟫ < 0 := not_le.mp h_nonneg
+            calc |⟪A x.val, x.val⟫|
+                = -⟪A x.val, x.val⟫ := abs_of_neg h_neg
+              _ ≤ -lam_min := by linarith [h_bounds.1]
+              _ ≤ |lam_min| := by
+                  by_cases h_min_neg : lam_min < 0
+                  · simp [abs_of_neg h_min_neg]
+                  · push_neg at h_min_neg
+                    have : lam_min = 0 := by
+                      linarith [h_bounds.1, h_neg]
+                    simp [this]
+              _ ≤ max |lam_max| |lam_min| := le_max_right _ _
+        · exact norm_nonneg _
+
+      -- Now we have:
+      -- - h_sup_ge_both: sup ≥ max(|lam_max|, |lam_min|)
+      -- - h_sup_le_max: sup ≤ max(|lam_max|, |lam_min|)
+      -- Therefore sup = max(|lam_max|, |lam_min|)
+      have h_sup_eq : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
+          |⟪A x.val, x.val⟫|) = max |lam_max| |lam_min| :=
+        le_antisymm h_sup_le_max h_sup_ge_both
+
+      -- From ray_bound: ‖A‖ = sup
+      -- Therefore ‖A‖ = max(|lam_max|, |lam_min|)
+      rw [ray_bound]
+      exact h_sup_eq
 
     -- Conclude
     calc ‖A‖
