@@ -495,8 +495,14 @@ theorem withinCluster_tilde_contraction {n₁ d₁ d₂ : ℕ}
      (1 - clusterMeanCLM hd₁)‖ ≤ spectralGap G₂ := by
   -- Need hd₂ for the simplification lemma
   rcases Nat.eq_zero_or_pos d₂ with rfl | hd₂
-  · -- d₂ = 0 case: withinClusterCLM is zero since walk sums over Fin 0
-    sorry
+  · -- d₂ = 0 case: B = 0 since walk sums over Fin 0
+    have hB_zero : withinClusterCLM (n₁ := n₁) G₂ hd₁ = 0 := by
+      ext f : 1
+      apply PiLp.ext; intro vk
+      show withinClusterCLM G₂ hd₁ f vk = 0
+      simp only [withinClusterCLM_apply, Finset.univ_eq_empty, Finset.sum_empty, zero_div]
+    rw [hB_zero, zero_mul, norm_zero]
+    exact spectralGap_nonneg G₂
 
   -- Simplify B(I-Q) = B - Q
   rw [withinCluster_mul_complement_clusterMean G₂ hd₁ hd₂]
