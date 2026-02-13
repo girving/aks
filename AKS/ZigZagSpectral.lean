@@ -30,6 +30,14 @@ theorem clusterMeanCLM_idempotent {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
 /-- The cluster mean projection is self-adjoint: `Q* = Q`. -/
 theorem clusterMeanCLM_isSelfAdjoint {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     IsSelfAdjoint (clusterMeanCLM hd₁ : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) := by
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
+  intro f g
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, clusterMeanCLM_apply]
+  -- LHS: ∑ vk, g(vk) * ((∑ i, f(encode (cluster vk) i)) / d₁)
+  -- RHS: ∑ vk, ((∑ i, g(encode (cluster vk) i)) / d₁) * f(vk)
+  -- Both equal (1/d₁²) · ∑ vk, ∑ i, g(vk) * f(encode (cluster vk) i)
+  --                    = (1/d₁²) · ∑ vk, ∑ i, f(vk) * g(encode (cluster vk) i)
+  -- after reorganizing by cluster structure
   sorry
 
 
@@ -107,6 +115,10 @@ theorem stepPermCLM_sq_eq_one {n₁ d₁ : ℕ}
 theorem stepPermCLM_isSelfAdjoint {n₁ d₁ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁) :
     IsSelfAdjoint (stepPermCLM G₁ hd₁) := by
+  -- Use the fact that Σ² = 1 and Σ is a permutation
+  -- For permutations: if Σ² = 1, then Σ* = Σ⁻¹ = Σ
+  have h_sq := stepPermCLM_sq_eq_one G₁ hd₁
+  -- From Σ² = 1, we get Σ* = Σ⁻¹ = Σ
   sorry
 
 
