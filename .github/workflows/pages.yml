@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'docs/.nojekyll'
+      - 'docs/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
