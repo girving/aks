@@ -6,17 +6,27 @@
 
 ## Recent Progress (2026-02-13)
 
-**Lemma 2 Risk Reduction: SUCCESS ✅**
+**Lemma 2 Phase 1: COMPLETE ✅**
 - Created comprehensive analysis document (`docs/lemma2_analysis.md`, 320 lines)
 - **Risk reduced from MEDIUM-HIGH → MEDIUM**
 - Identified all 5 required helper lemmas with clear proof strategy
 - Implemented Cherry structure and helper lemma stubs
-- Added tree distance properties and cherry properties
+- Added tree distance properties (symmetry, reflexivity)
 - Expanded zig_step_bounded_increase with 5-step proof structure
 - **Key insight:** Halver property → ε-nearsort forcing → bounded wrongness via Δᵣ + ε·Δᵣ₋₂
 
+**Lemma 2 Phase 2: IN PROGRESS ⚙️**
+- ✅ **PROVED:** `halver_preserves_monotone` (first complete helper proof!)
+- ✅ Fixed lemma ordering issues (wrongness lemmas after definitions)
+- ✅ Added wrongness properties: proportion formula, monotonicity, global bounds
+- ✅ Added key inequality: `cherry_wrongness_after_nearsort`
+- ✅ Reorganized file with clear section structure
+- **File:** 780+ lines, all compiling cleanly
+- **Status:** Building momentum toward core proofs
+
 **Next Steps:**
-- Phase 2: Implement helper lemma proofs (focus on halver_implies_nearsort_property)
+- Continue Phase 2: Implement more helper proofs
+- Focus on: `halver_implies_nearsort_property` (KEY connection)
 - Phase 3: Complete Lemma 2 main proof assembly
 
 ## Executive Summary
