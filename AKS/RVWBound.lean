@@ -916,7 +916,42 @@ private lemma quadratic_form_bound {n : ℕ}
   -- (b) Direct calculus: substitute β = √(1-α²), differentiate, solve for maximum
   --
   -- Both approaches are straightforward but require careful algebraic manipulation.
-  sorry
+
+  -- We'll prove this by showing the quadratic form is bounded by rvwBound
+  -- through direct algebraic manipulation.
+
+  -- First, handle trivial cases
+  by_cases hlam₂_zero : lam₂ = 0
+  · -- Case lam₂ = 0: quadratic form = λ₁α², rvwBound = λ₁/2 + √(λ₁²/4) = |λ₁|
+    simp [hlam₂_zero, rvwBound]
+    by_cases hlam₁_nonneg : 0 ≤ lam₁
+    · -- lam₁ ≥ 0: rvwBound = λ₁
+      have : Real.sqrt (lam₁ ^ 2 / 4) = lam₁ / 2 := by
+        rw [Real.sqrt_div (sq_nonneg _), Real.sqrt_sq hlam₁_nonneg]
+        norm_num
+      calc lam₁ * alpha ^ 2
+          ≤ lam₁ * 1 := by nlinarith [sq_nonneg alpha, sq_nonneg beta, h_unit]
+        _ = lam₁ := by ring
+        _ = lam₁ / 2 + lam₁ / 2 := by ring
+        _ = lam₁ / 2 + Real.sqrt (lam₁ ^ 2 / 4) := by rw [this]
+    · -- lam₁ < 0: rvwBound = 0
+      push_neg at hlam₁_nonneg
+      have : Real.sqrt (lam₁ ^ 2 / 4) = -lam₁ / 2 := by
+        rw [Real.sqrt_div (sq_nonneg _), Real.sqrt_sq (le_of_lt hlam₁_nonneg)]
+        ring
+      have : lam₁ / 2 + Real.sqrt (lam₁ ^ 2 / 4) = 0 := by
+        rw [this]; ring
+      calc lam₁ * alpha ^ 2
+          ≤ 0 := by nlinarith [hlam₁_nonneg, sq_nonneg alpha]
+        _ = lam₁ / 2 + Real.sqrt (lam₁ ^ 2 / 4) := this.symm
+
+  -- Main case: lam₂ ≠ 0
+  -- Strategy: Use Cauchy-Schwarz-like inequality
+  -- The maximum of the quadratic form over the unit circle is achieved
+  -- and equals the formula given by rvwBound
+
+  sorry -- Requires: detailed algebraic manipulation or eigenvalue computation
+        -- for 2×2 matrix M = [[λ₁, λ₂], [λ₂, λ₂²]]
 
 /-- **The core RVW operator norm bound (abstract).**
 

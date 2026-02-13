@@ -242,9 +242,12 @@ const PROOF_DATA = {
     { id: "rvwBound_mono_right", file: "AKS/RVWBound.lean", line: 44, status: "proved", kind: "theorem",
       sig: "rvwBound_mono_right : b₁ ≤ b₂ → rvwBound a b₁ ≤ rvwBound a b₂",
       desc: "RVW bound is monotone in the second argument." },
-    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1010, status: "proved", kind: "theorem",
+    { id: "quadratic_form_bound", file: "AKS/RVWBound.lean", line: 888, status: "sorry", kind: "lemma",
+      sig: "quadratic_form_bound : λ₁α² + 2λ₂αβ + λ₂²β² ≤ rvwBound λ₁ λ₂",
+      desc: "Quadratic form optimization: maximum over unit circle equals rvwBound. Requires 2×2 matrix eigenvalue computation or calculus.", difficulty: "1-2 weeks" },
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1010, status: "sorry", kind: "theorem",
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
-      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Mathematical heart of the zig-zag analysis. Proved via Rayleigh quotient characterization and hat/tilde decomposition." },
+      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Mathematical heart of the zig-zag analysis. Uses hat/tilde decomposition and Rayleigh quotient characterization." },
 
     // ── Random.lean ──
     { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
@@ -396,7 +399,8 @@ const PROOF_DATA = {
     // RVW bound
     ["rvwBound", "rvwBound_mono_left"],
     ["rvwBound", "rvwBound_mono_right"],
-    ["rvwBound", "rvw_operator_norm_bound"],
+    ["rvwBound", "quadratic_form_bound"],
+    ["quadratic_form_bound", "rvw_operator_norm_bound"],
 
     // Zig-zag assembly
     ["zigzag_walkCLM_eq", "zigzag_spectral_bound"],

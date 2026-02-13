@@ -73,6 +73,8 @@ with current theorem names, statuses, and line numbers. The visualization groups
 by source file and colors them by status (green=proved, orange=sorry, red=axiom, blue=definition).
 Milestone theorems appear larger with a white border. Hover for type signatures; click to open source on GitHub.
 
+**Visualization invariant:** If all nodes in a file show as green (proved), that entire file must be complete with no `sorry`s remaining. Private lemmas with `sorry`s must be included as nodes in the visualization, unless they fall under a larger theorem that is itself marked as `sorry`. This ensures the color-coding accurately reflects completion status at the file level.
+
 ## Architecture
 
 **Entry point:** `AKS.lean` — imports all modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
