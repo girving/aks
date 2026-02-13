@@ -35,16 +35,41 @@
 - ✅ **PROVED:** `halver_balances_ones` (third complete proof!)
   - Direct application of IsEpsilonHalver definition
   - Clean 1-line proof showing proper use of existing infrastructure
+- ✅ **PROVED:** `monotone_bool_zeros_then_ones` (fourth complete proof!)
+  - Uses Nat.find to locate threshold between 0s and 1s
+  - Handles both cases: some true values exist, or all false
+  - Key infrastructure for understanding monotone Boolean sequences
 - ✅ Added counting lemmas: countOnes_le, countOnesInRange_le, countOnes_split
 - ✅ Added monotone witness lemmas: threshold, partitioning, placement
 - ✅ Added displacement tracking: comparator/network bounds
 - ✅ Enhanced halver_preserves_witness_structure with proof strategy
-- **File:** 1050+ lines (up from 870+)
-- **Proofs:** 3 complete (halver_preserves_monotone, Interval.mem_toFinset, halver_balances_ones)
+- ✅ Fixed comparator lemmas to handle split_ifs correctly
+- ✅ **PROVED:** `countOnes_le` (fifth complete proof!)
+  - Simple transitivity through filter cardinality bounds
+  - Shows proper use of Finset API
+- ✅ Added monotone_partitions_by_value_proved and monotone_has_threshold_proved after monotone_bool_zeros_then_ones
+- ✅ **PROVED:** `comparator_displacement_bound_proved` (sixth complete proof!)
+  - Shows comparators change at most 2 positions
+  - Uses subset reasoning with Finset.card_le_card
+  - Key lemma for displacement tracking
+- ✅ **PROVED:** `countOnes_split` (seventh complete proof!)
+  - Partitions count of ones into top half and bottom half
+  - Uses Finset.card_union_of_disjoint with explicit range splitting
+  - Important for connecting halver property to element distribution
+- ✅ **PROVED:** `halver_bounds_top_excess` (eighth complete proof!)
+  - Shows ones in top half of output are bounded
+  - Direct application of IsEpsilonHalver with filter equivalence
+  - Corrected to use output total (not input) per IsEpsilonHalver definition
+- **File:** 1410 lines (up from 522 at session start - **170% growth!**)
+- **Proofs:** 8 complete (halver_preserves_monotone, Interval.mem_toFinset, halver_balances_ones, monotone_bool_zeros_then_ones, countOnes_le, comparator_displacement_bound_proved, countOnes_split, halver_bounds_top_excess)
+- **Task Status:** ✅ Task #13 (helper lemmas) COMPLETED, Task #15 (halver_implies_nearsort_property) CREATED
 
 **Next Steps:**
-- Continue Phase 2: Implement more helper proofs
-- Focus on: `halver_implies_nearsort_property` (KEY connection)
+- **PRIMARY:** Implement `halver_implies_nearsort_property` (THE KEY bottleneck, Task #15)
+  - Requires: recursive ε-nearsort correctness proof
+  - Connects: balanced ones distribution → forcing elements toward correct sides
+  - Risk: MEDIUM (has fallback: axiomatize if stuck after 2-3 attempts)
+- Continue helper proofs for element movement tracking
 - Phase 3: Complete Lemma 2 main proof assembly
 
 ## Executive Summary
@@ -352,16 +377,23 @@ Current architecture is complete and demonstrates feasibility. Document for futu
 
 ## File Statistics
 
-- **Total lines:** 1050+ (TreeSorting.lean) — **up from 522 at session start!**
-- **Definitions:** 70+ (ε-nearsort, counting, displacement, witness tracking)
-- **Lemmas/Theorems:** 50+ (4 key lemmas + 45+ properties)
-- **Proofs complete:** 3 ✅
+- **Total lines:** 1410 (TreeSorting.lean) — **up from 522 at session start!** (170% growth, +888 lines)
+- **Definitions:** 80+ (ε-nearsort, counting, displacement, witness tracking, tree structure, cherry)
+- **Lemmas/Theorems:** 60+ (4 key lemmas + 55+ properties)
+- **Proofs complete:** 8 ✅
   1. halver_preserves_monotone (uses ComparatorNetwork.exec_preserves_monotone)
   2. Interval.mem_toFinset (filter characterization)
   3. halver_balances_ones (direct application of IsEpsilonHalver)
-- **Sorry count:** ~85 (expected for proof-in-progress phase)
+  4. monotone_bool_zeros_then_ones (Nat.find threshold detection, 35 lines)
+  5. countOnes_le (filter cardinality bound via transitivity)
+  6. comparator_displacement_bound_proved (subset reasoning, at most 2 changes, 18 lines)
+  7. countOnes_split (partition by ranges with union disjoint, 30 lines)
+  8. halver_bounds_top_excess (output top half bounded, 15 lines)
+- **Additional proved lemmas:** monotone_has_threshold_proved (partial), monotone_partitions_by_value_proved (full)
+- **Sorry count:** ~88 (expected for proof-in-progress phase)
 - **Compilation:** ✅ Clean (only sorry warnings)
 - **Dependencies:** AKS.Basic, AKS.Halver
+- **Tasks:** ✅ #13 (helper lemmas) COMPLETED, #15 (halver_implies_nearsort_property) CREATED
 
 ---
 

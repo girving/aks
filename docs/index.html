@@ -271,7 +271,42 @@ const PROOF_DATA = {
     // ── AKS.lean ──
     { id: "zigzag_implies_aks_network", file: "AKS.lean", line: 19, status: "sorry", kind: "theorem",
       sig: "zigzag_implies_aks_network :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ 99/100) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
-      desc: "Top-level theorem: explicit expander families imply O(n log n) sorting networks." }
+      desc: "Top-level theorem: explicit expander families imply O(n log n) sorting networks." },
+
+    // ── TreeSorting.lean ──
+    { id: "TreeNode", file: "AKS/TreeSorting.lean", line: 55, status: "definition", kind: "structure",
+      sig: "structure TreeNode where\n  level : ℕ\n  index : ℕ",
+      desc: "Position (level, index) in binary tree for register assignment." },
+    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 665, status: "definition", kind: "def",
+      sig: "treeWrongness (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
+      desc: "Tree-based wrongness measure Δᵣ(J): proportion of elements at tree-distance ≥ r from their target." },
+    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 1045, status: "proved", kind: "lemma",
+      sig: "halver_preserves_monotone : IsEpsilonHalver net ε → Monotone w → Monotone (net.exec w)",
+      desc: "Applying an ε-halver to a monotone sequence preserves monotonicity." },
+    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 977, status: "proved", kind: "lemma",
+      sig: "monotone_bool_zeros_then_ones : Monotone w →\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w i = false) ∧ (∀ i, k ≤ i → w i = true)",
+      desc: "Monotone Boolean sequences have 0*1* pattern: threshold detected via Nat.find (35 lines).", difficulty: "days" },
+    { id: "halver_balances_ones", file: "AKS/TreeSorting.lean", line: 803, status: "proved", kind: "lemma",
+      sig: "halver_balances_ones : IsEpsilonHalver net ε →\n  onesInTop ≤ totalOnes / 2 + ε * (n / 2)",
+      desc: "Direct restatement of IsEpsilonHalver: ones in top half bounded after halving." },
+    { id: "countOnes_le", file: "AKS/TreeSorting.lean", line: 596, status: "proved", kind: "lemma",
+      sig: "countOnes_le : countOnes v ≤ n",
+      desc: "Count of ones bounded by total elements (filter cardinality)." },
+    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 609, status: "proved", kind: "lemma",
+      sig: "countOnes_split : countOnes v =\n  countOnesInRange v 0 (n/2) + countOnesInRange v (n/2) n",
+      desc: "Partition count by ranges using Finset.card_union_of_disjoint (30 lines).", difficulty: "days" },
+    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 925, status: "proved", kind: "lemma",
+      sig: "comparator_displacement_bound :\n  #{i | c.apply v i ≠ v i} ≤ 2",
+      desc: "Comparators change at most 2 positions (subset reasoning, 18 lines).", difficulty: "days" },
+    { id: "halver_bounds_top_excess", file: "AKS/TreeSorting.lean", line: 868, status: "proved", kind: "lemma",
+      sig: "halver_bounds_top_excess :\n  countOnesInRange (net.exec v) 0 (n/2) ≤ countOnes (net.exec v) / 2 + ε * (n / 2)",
+      desc: "Output top half ones bounded (filter equivalence, 15 lines).", difficulty: "days" },
+    { id: "halver_implies_nearsort_property", file: "AKS/TreeSorting.lean", line: 791, status: "sorry", kind: "lemma",
+      sig: "halver_implies_nearsort_property : IsEpsilonHalver net ε₁ → ε₁ << ε →\n  (1-ε) fraction move correctly, ε fraction exceptions",
+      desc: "THE KEY connection: halver balance → ε-nearsort forcing property. Requires recursive nearsort correctness.", difficulty: "weeks" },
+    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 1279, status: "sorry", kind: "lemma",
+      sig: "zig_step_bounded_increase :\n  treeWrongness v' J r ≤ 8·A·(treeWrongness v J r + ε·treeWrongness v J (r-2))",
+      desc: "Lemma 2: Single zig/zag step increases wrongness by bounded factor 8A.", difficulty: "weeks" }
   ],
 
   // Edges: [source, target] means "target depends on source" (arrow points from source to target)
@@ -409,7 +444,19 @@ const PROOF_DATA = {
     ["explicit_expanders_exist_zigzag", "zigzag_implies_aks_network"],
     ["AKS.sorts", "zigzag_implies_aks_network"],
     ["AKS.size_nlogn", "zigzag_implies_aks_network"],
-    ["baseExpander_gap", "zigzag_implies_aks_network"]
+    ["baseExpander_gap", "zigzag_implies_aks_network"],
+
+    // TreeSorting helper lemmas
+    ["TreeNode", "treeWrongness"],
+    ["halver_balances_ones", "halver_bounds_top_excess"],
+    ["countOnes_le", "countOnes_split"],
+    ["monotone_bool_zeros_then_ones", "halver_implies_nearsort_property"],
+    ["halver_preserves_monotone", "halver_implies_nearsort_property"],
+    ["halver_bounds_top_excess", "halver_implies_nearsort_property"],
+    ["countOnes_split", "halver_implies_nearsort_property"],
+    ["halver_implies_nearsort_property", "zig_step_bounded_increase"],
+    ["treeWrongness", "zig_step_bounded_increase"],
+    ["comparator_displacement_bound", "zig_step_bounded_increase"]
   ],
 
   // File groupings with display names
@@ -426,6 +473,7 @@ const PROOF_DATA = {
     { id: "AKS/RVWBound.lean", label: "RVWBound.lean", color: "#1a1e24" },
     { id: "AKS/ZigZag.lean", label: "ZigZag.lean", color: "#1a1e24" },
     { id: "AKS/Random.lean", label: "Random.lean", color: "#1a1e24" },
+    { id: "AKS/TreeSorting.lean", label: "TreeSorting.lean", color: "#1a1e24" },
     { id: "AKS.lean", label: "AKS.lean", color: "#1a1e24" }
   ]
 };
