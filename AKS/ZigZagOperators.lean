@@ -290,6 +290,34 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
 
 /-! **Walk Factorization: W_Z = B · Σ · B** -/
 
+/-- Helper: The vertex computed by zigzag_rot equals what B·Σ·B computes.
+    This unpacks the zig-step-zag computation. -/
+private lemma zigzag_rot_vertex_eq {n₁ d₁ d₂ : ℕ}
+    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
+    (hd₁ : 0 < d₁) (hd₂ : 0 < d₂)
+    (vk : Fin (n₁ * d₁)) (a b : Fin d₂) :
+    (zigzag_rot G₁ G₂ (vk, encodePort a b)).1 =
+    encode (G₁.rot (cluster hd₁ vk, G₂.neighbor (port hd₁ vk) a)).1
+           (G₂.neighbor (G₁.rot (cluster hd₁ vk, G₂.neighbor (port hd₁ vk) a)).2 b) := by
+  -- First prove the port coordinate equalities
+  have port_fst : (⟨(a.val * d₂ + b.val) / d₂, (Nat.div_lt_iff_lt_mul hd₂).mpr
+      (Fin.pair_lt a b)⟩ : Fin d₂) = a := by
+    apply Fin.ext
+    simp
+    rw [Nat.add_comm, Nat.add_mul_div_right _ _ hd₂, Nat.div_eq_of_lt b.isLt]
+    simp
+  have port_snd : (⟨(a.val * d₂ + b.val) % d₂, Nat.mod_lt _ hd₂⟩ : Fin d₂) = b := by
+    apply Fin.ext
+    show (a.val * d₂ + b.val) % d₂ = b.val
+    rw [Nat.add_comm, Nat.add_mul_mod_self_right]
+    exact Nat.mod_eq_of_lt b.isLt
+  -- Now unfold and rewrite using simp_rw to handle dependent proofs
+  simp only [zigzag_rot, RegularGraph.neighbor, encodePort, cluster, port, encode]
+  simp_rw [port_fst, port_snd]
+
+
+/-! **Walk Factorization: W_Z = B · Σ · B** -/
+
 /-- The zig-zag walk operator factors as the composition of within-cluster
     walk, step permutation, and within-cluster walk: `W_Z = B · Σ · B`.
 
@@ -306,28 +334,40 @@ theorem zigzag_walkCLM_eq {n₁ d₁ d₂ : ℕ}
              ContinuousLinearMap.mul_apply, withinClusterCLM_apply,
              stepPermCLM_apply, cluster_encode, port_encode]
 
-  -- Goal: Show these two averages are equal:
-  -- LHS: (1/(d₂²)) ∑_{ab : Fin(d₂²)} f((zigzag_rot (vk, ab)).1)
-  -- RHS: (1/d₂) ∑_a (1/d₂) ∑_b f(encode v' k''')
-  --      where v' = (G₁.rot (v, G₂.neighbor k a)).1
-  --            k''' = G₂.neighbor (G₁.rot (v, G₂.neighbor k a)).2 b
+  -- Strategy: convert sum and match divisions, then use helper for summands
+  -- Step 1: Convert LHS sum from Fin(d₂²) to double sum
+  have sum_convert : (∑ ab, f.ofLp (zigzag_rot G₁ G₂ (vk, ab)).1) =
+                     (∑ a, ∑ b, f.ofLp (zigzag_rot G₁ G₂ (vk, encodePort a b)).1) := by
+    rw [← sum_encodePort_eq_sum hd₂]
 
-  -- Strategy:
-  -- 1. Convert LHS sum over Fin(d₂²) to ∑_a ∑_b using sum_encodePort_eq_sum
-  -- 2. Show division structures match: 1/(d₂²) = (1/d₂)·(1/d₂)
-  -- 3. Show summands match: zigzag_rot(vk, encodePort a b) computes same vertex
+  rw [sum_convert]
 
-  -- The key insight: zigzag_rot performs the same zig-step-zag as B·Σ·B:
-  --   zigzag_rot decodes port ab into (a,b), then:
-  --   - Zig: G₂.rot(k, a) → reach k'
-  --   - Step: G₁.rot(v, k') → reach (v', k'')
-  --   - Zag: G₂.rot(k'', b) → reach k'''
-  --   Result: encode(v', k''')
-  --
-  --   This matches RHS which does:
-  --   - B with port a: reach G₂.neighbor k a = k'
-  --   - Σ: reach (G₁.rot (v, k')).1 = v' and (G₁.rot (v, k')).2 = k''
-  --   - B with port b: reach G₂.neighbor k'' b = k'''
-  --   Result: encode(v', k''')
+  -- Step 2: Match division structure
+  -- LHS: (∑_a ∑_b ...) / (d₂ * d₂)
+  -- RHS: (∑_a (∑_b ...) / d₂) / d₂
+  -- These are equal by division algebra
 
-  sorry
+  -- Now use helper to show summands match, then rearrange divisions
+  have summands_eq : ∀ a b, f.ofLp (zigzag_rot G₁ G₂ (vk, encodePort a b)).1 =
+    f.ofLp (encode (G₁.rot (cluster hd₁ vk, (G₂.rot (port hd₁ vk, a)).1)).1
+                   (G₂.rot ((G₁.rot (cluster hd₁ vk, (G₂.rot (port hd₁ vk, a)).1)).2, b)).1) := by
+    intro a b
+    rw [zigzag_rot_vertex_eq G₁ G₂ hd₁ hd₂]
+    simp only [RegularGraph.neighbor]
+
+  -- Rewrite sums using the equality
+  simp_rw [summands_eq]
+
+  -- Now just need to show division structures match
+  -- LHS: (∑_x ∑_y f) / (d₂ * d₂) = (∑_x ∑_y f) / d₂ / d₂
+  -- RHS: (∑_x (∑_y f) / d₂) / d₂
+  -- These are equal by distributivity of division
+
+  -- First convert / (d₂ * d₂) to / d₂ / d₂
+  rw [show ∀ (x : ℝ), x / ↑(d₂ * d₂) = x / ↑d₂ / ↑d₂ by
+    intro x; field_simp; ring_nf; norm_cast]
+
+  -- Now both have / d₂ / d₂, but RHS has inner division distributed
+  -- Use Finset.sum_div to distribute
+  congr 1
+  rw [Finset.sum_div]

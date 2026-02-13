@@ -32,13 +32,59 @@ theorem clusterMeanCLM_isSelfAdjoint {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     IsSelfAdjoint (clusterMeanCLM hd₁ : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) := by
   rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
   intro f g
-  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, clusterMeanCLM_apply]
-  -- LHS: ∑ vk, g(vk) * ((∑ i, f(encode (cluster vk) i)) / d₁)
-  -- RHS: ∑ vk, ((∑ i, g(encode (cluster vk) i)) / d₁) * f(vk)
-  -- Both equal (1/d₁²) · ∑ vk, ∑ i, g(vk) * f(encode (cluster vk) i)
-  --                    = (1/d₁²) · ∑ vk, ∑ i, f(vk) * g(encode (cluster vk) i)
-  -- after reorganizing by cluster structure
-  sorry
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial]
+  -- Unfold clusterMeanCLM on both sides
+  show ∑ vk, g.ofLp vk * (clusterMeanCLM hd₁ f).ofLp vk =
+       ∑ vk, (clusterMeanCLM hd₁ g).ofLp vk * f.ofLp vk
+  simp only [clusterMeanCLM_apply]
+  -- Both sides equal (1/d₁) * (sum of products over cluster structure)
+  -- Transform and reorganize
+  suffices h : ∑ vk, ∑ i, g.ofLp vk * f.ofLp (encode (cluster hd₁ vk) i) =
+               ∑ vk, ∑ i, g.ofLp (encode (cluster hd₁ vk) i) * f.ofLp vk by
+    have lhs : ∑ vk, g.ofLp vk * ((∑ i, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₁) =
+               (∑ vk, ∑ i, g.ofLp vk * f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₁ := by
+      trans (∑ vk, (g.ofLp vk * ∑ i, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₁)
+      · congr; funext vk; rw [mul_div_assoc]
+      · rw [← Finset.sum_div]; congr; funext vk; rw [Finset.mul_sum]
+    have rhs : ∑ vk, ((∑ i, g.ofLp (encode (cluster hd₁ vk) i)) / ↑d₁) * f.ofLp vk =
+               (∑ vk, ∑ i, g.ofLp (encode (cluster hd₁ vk) i) * f.ofLp vk) / ↑d₁ := by
+      trans (∑ vk, ((∑ i, g.ofLp (encode (cluster hd₁ vk) i)) * f.ofLp vk) / ↑d₁)
+      · congr; funext vk; rw [div_mul_eq_mul_div]
+      · rw [← Finset.sum_div]; congr; funext vk; rw [Finset.sum_mul]
+    rw [lhs, rhs, h]
+
+  -- Show the double sums are equal by cluster reorganization
+  calc ∑ vk, ∑ i, g.ofLp vk * f.ofLp (encode (cluster hd₁ vk) i)
+      = ∑ vk, ∑ i, g.ofLp (encode (cluster hd₁ vk) (port hd₁ vk)) *
+                   f.ofLp (encode (cluster hd₁ vk) i) := by
+        congr 1; ext vk; congr 1; ext i
+        rw [encode_cluster_port hd₁]
+    _ = ∑ v, ∑ j, ∑ i, g.ofLp (encode v j) * f.ofLp (encode v i) := by
+        conv_lhs => rw [← sum_encode_eq_sum hd₁]
+        congr 1; ext v; congr 1; ext j
+        simp only [cluster_encode, port_encode]
+    _ = ∑ v, ∑ i, ∑ j, g.ofLp (encode v j) * f.ofLp (encode v i) := by
+        congr 1; ext v; rw [Finset.sum_comm]
+    _ = ∑ v, ∑ i, ∑ j, g.ofLp (encode v i) * f.ofLp (encode v j) := by
+        -- Relabel: swap dummy variables i ↔ j
+        congr 1; funext v
+        trans (∑ j, ∑ i, g.ofLp (encode v j) * f.ofLp (encode v i))
+        · rw [Finset.sum_comm]
+        · -- Now relabel j→i and i→j (just renaming dummies)
+          show ∑ j, ∑ i, g.ofLp (encode v j) * f.ofLp (encode v i) =
+               ∑ i, ∑ j, g.ofLp (encode v i) * f.ofLp (encode v j)
+          -- These are literally the same (j and i are just dummy variable names)
+          rfl
+    _ = ∑ v, ∑ j, ∑ i, g.ofLp (encode v i) * f.ofLp (encode v j) := by
+        congr 1; ext v; rw [Finset.sum_comm]
+    _ = ∑ vk, ∑ i, g.ofLp (encode (cluster hd₁ vk) i) *
+                   f.ofLp (encode (cluster hd₁ vk) (port hd₁ vk)) := by
+        conv_rhs => rw [← sum_encode_eq_sum hd₁]
+        congr 1; ext v; congr 1; ext j
+        simp only [cluster_encode, port_encode]
+    _ = ∑ vk, ∑ i, g.ofLp (encode (cluster hd₁ vk) i) * f.ofLp vk := by
+        congr 1; ext vk; congr 1; ext i
+        rw [encode_cluster_port hd₁]
 
 
 /-! **Within-Cluster Walk Properties** -/
