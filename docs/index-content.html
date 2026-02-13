@@ -242,9 +242,9 @@ const PROOF_DATA = {
     { id: "rvwBound_mono_right", file: "AKS/RVWBound.lean", line: 44, status: "proved", kind: "theorem",
       sig: "rvwBound_mono_right : b₁ ≤ b₂ → rvwBound a b₁ ≤ rvwBound a b₂",
       desc: "RVW bound is monotone in the second argument." },
-    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 71, status: "sorry", kind: "theorem",
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1010, status: "proved", kind: "theorem",
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
-      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Mathematical heart of the zig-zag analysis.", difficulty: "2-4 weeks" },
+      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Mathematical heart of the zig-zag analysis. Proved via Rayleigh quotient characterization and hat/tilde decomposition." },
 
     // ── Random.lean ──
     { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
