@@ -310,6 +310,53 @@ theorem withinCluster_minus_clusterMean_cluster_action {n₁ d₁ d₂ : ℕ}
   rfl
 
 
+/-! **Cluster Quotient Helpers** -/
+
+/-- Extract the cluster-constant part of a function as a function on Fin n₁.
+    This is the "quotient map" that sends f ↦ (v ↦ mean of f on cluster v). -/
+def clusterQuotient {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) : EuclideanSpace ℝ (Fin n₁) :=
+  (WithLp.equiv 2 _).symm (fun v ↦ (∑ k : Fin d₁, f.ofLp (encode v k)) / d₁)
+
+@[simp] lemma clusterQuotient_apply {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) (v : Fin n₁) :
+    (clusterQuotient hd₁ f).ofLp v = (∑ k : Fin d₁, f.ofLp (encode v k)) / d₁ := by
+  simp [clusterQuotient]
+
+/-- Lift a function on Fin n₁ to a cluster-constant function on Fin (n₁ * d₁). -/
+def clusterLift {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (g : EuclideanSpace ℝ (Fin n₁)) : EuclideanSpace ℝ (Fin (n₁ * d₁)) :=
+  (WithLp.equiv 2 _).symm (fun vk ↦ g.ofLp (cluster hd₁ vk))
+
+@[simp] lemma clusterLift_apply {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (g : EuclideanSpace ℝ (Fin n₁)) (vk : Fin (n₁ * d₁)) :
+    (clusterLift hd₁ g).ofLp vk = g.ofLp (cluster hd₁ vk) := by
+  simp [clusterLift]
+
+/-- The cluster mean projection factors as lift ∘ quotient. -/
+theorem clusterMeanCLM_eq_lift_quotient {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) :
+    clusterMeanCLM hd₁ f = clusterLift hd₁ (clusterQuotient hd₁ f) := by
+  apply PiLp.ext; intro vk
+  simp only [clusterMeanCLM_apply, clusterLift_apply, clusterQuotient_apply]
+
+/-- **Key identity:** On cluster-constant functions (via lift/quotient),
+    the step permutation Σ acts like the walk operator W_{G₁}.
+
+    This shows: quotient ∘ Σ ∘ lift = W_{G₁}. -/
+theorem stepPerm_quotient_lift {n₁ d₁ : ℕ}
+    (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁)
+    (g : EuclideanSpace ℝ (Fin n₁)) :
+    clusterQuotient hd₁ (stepPermCLM G₁ hd₁ (clusterLift hd₁ g)) =
+    G₁.walkCLM g := by
+  apply PiLp.ext; intro v
+  simp only [clusterQuotient_apply, stepPermCLM_apply, clusterLift_apply,
+             RegularGraph.walkCLM_apply, RegularGraph.neighbor]
+  -- LHS: (∑ k, g((G₁.rot(cluster(encode v k), port(encode v k))).1)) / d₁
+  -- RHS: (∑ k, g((G₁.rot(v, k)).1)) / d₁
+  congr 1; refine Finset.sum_congr rfl fun k _ ↦ ?_
+  simp [cluster_encode, port_encode]
+
 /-! **Cluster Restriction Helpers** -/
 
 /-- Extract cluster v from a function on the product space. -/
@@ -401,6 +448,18 @@ theorem hat_block_norm {n₁ d₁ : ℕ}
     ‖clusterMeanCLM (n₁ := n₁) hd₁ * stepPermCLM G₁ hd₁ * clusterMeanCLM hd₁ -
      (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _)‖ ≤
     spectralGap G₁ := by
+  -- Abbreviations
+  set Q := clusterMeanCLM (n₁ := n₁) hd₁
+  set Σ := stepPermCLM G₁ hd₁
+  set P := (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _)
+
+  -- Factor using QP = P and PQ = P
+  have hQP : Q * P = P := clusterMean_comp_meanCLM hd₁
+  have hPQ : P * Q = P := meanCLM_eq_clusterMean_comp hd₁
+
+  -- The key insight: QΣQ - P = Q(ΣQ - P) = Q(Σ - P)Q
+  -- On cluster-constant functions (range of Q), this acts like (W_{G₁} - P_{n₁})
+
   sorry
 
 
