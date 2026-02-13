@@ -643,4 +643,14 @@ theorem hat_block_norm {n₁ d₁ : ℕ}
             _ = ‖f‖ := one_mul _
 
 
+/-- The step permutation preserves the global mean: Σ · P = P.
+    Since P maps everything to a constant, applying any permutation preserves it. -/
+theorem stepPermCLM_comp_meanCLM {n₁ d₁ : ℕ}
+    (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁) :
+    stepPermCLM G₁ hd₁ *
+    (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) =
+    meanCLM (n₁ * d₁) := by
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, stepPermCLM_apply, meanCLM_apply]
+
 -- (moved meanCLM_eq_clusterMean_comp and clusterMean_comp_meanCLM before hat_block_norm)

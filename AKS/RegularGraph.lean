@@ -170,6 +170,27 @@ theorem meanCLM_apply (n : ℕ) (f : EuclideanSpace ℝ (Fin n)) (v : Fin n) :
   rfl
 
 
+theorem meanCLM_idempotent (n : ℕ) :
+    meanCLM n * meanCLM n = meanCLM n := by
+  ext f : 1; apply PiLp.ext; intro v
+  show meanCLM n (meanCLM n f) v = meanCLM n f v
+  simp only [meanCLM_apply]
+  rw [Finset.sum_div, Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  rcases Nat.eq_zero_or_pos n with rfl | hn
+  · simp
+  · have hne : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (by omega)
+    rw [mul_div_cancel₀ _ hne]
+
+theorem meanCLM_isSelfAdjoint (n : ℕ) :
+    IsSelfAdjoint (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
+  intro f g
+  change @inner ℝ _ _ (meanCLM n f) g = @inner ℝ _ _ f (meanCLM n g)
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, meanCLM_apply]
+  rw [← Finset.mul_sum, ← Finset.sum_mul]
+  ring
+
+
 /-! **Operator Norm Helpers** -/
 
 /-- The rotation map as an equivalence (since it's an involution). -/

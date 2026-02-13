@@ -67,9 +67,19 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 **When the user says "commit", always push immediately after committing.** The standard workflow is: commit → pull if needed → push. Don't wait for explicit permission to push.
 
+### Resource Constraints
+
+**Never increase precision or memory usage without explicit permission.** If the user asks for f32, use f32. If they ask for low memory, keep it low. Do not silently switch from f32 to f64 or allocate larger buffers "because the margin is better." OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.
+
+**Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'compute-certificate|lake build' | grep -v grep` and kill any stale ones before launching new heavy jobs.
+
 ### Proof Visualization (`docs/index.html`)
 
-Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
+Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, and line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
+
+**Update the visualization every time you prove something.** When a `sorry` is resolved, change its status in `PROOF_DATA` from `"sorry"` to `"proved"` and update its description. Then run `scripts/update-viz-lines` to sync line numbers. Do this proactively — don't wait for the user to ask.
+
+**Line number maintenance:** `scripts/update-viz-lines` auto-syncs line numbers from source files. Run it after any code changes. Use `--check` mode to verify without modifying. The script greps each node's source file for its declaration keyword and updates the `line:` field in `PROOF_DATA`.
 
 **Visualization invariant:** If all nodes in a file are green, the file must have no `sorry`s. Private lemmas with `sorry`s must be included as nodes unless they fall under a larger `sorry` theorem.
 
@@ -82,19 +92,24 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 ### `AKS/Fin.lean` — `Fin` Arithmetic Helpers
 Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product indexing: `Fin.pair_lt`, `fin_encode_fst`, `fin_encode_snd`, `fin_div_add_mod`.
 
-### `AKS/Basic.lean` — Sorting Network Theory
-Sections build on each other sequentially:
+### `AKS/ComparatorNetwork.lean` — Comparator Network Theory
+Foundational theory of comparator networks:
 1. **Comparator networks** — `Comparator`, `ComparatorNetwork` (flat list of comparators), execution model
-2. **0-1 principle** — reduces sorting correctness to Boolean inputs
-3. **AKS construction** — recursive build: split → recurse → merge with halvers
-4. **Complexity analysis** — `IsBigO` notation, O(n log n) size
-5. **Correctness** — `AKS.sorts`
+2. **Monotonicity preservation** — helper lemmas for comparator operations
+3. **0-1 principle** — reduces sorting correctness to Boolean inputs
+4. **Complexity notation** — `IsBigO` for stating asymptotic bounds
+
+### `AKS/AKSNetwork.lean` — AKS Sorting Network Construction
+The Ajtai–Komlós–Szemerédi construction and analysis:
+1. **AKS construction** — recursive build: split → recurse → merge with halvers
+2. **Size analysis** — `AKS.size_nlogn` (O(n log n) comparators)
+3. **Correctness** — `AKS.sorts` (network correctly sorts all inputs)
 
 ### `AKS/Halver.lean` — ε-Halver Theory
-ε-halvers and their composition properties, the engine driving AKS correctness.
-Imports `RegularGraph.lean` for the expander → halver bridge:
-1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (takes `RegularGraph`), `epsHalverMerge`
-2. **Halver composition** — `IsEpsilonSorted`, `halver_composition` (geometric decrease), `halver_convergence`
+ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
+1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (proved), `epsHalverMerge`
+2. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
+Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here.
 
 ### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
@@ -156,7 +171,7 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
                               → CompleteGraph.lean              ↓
                               → Mixing.lean               AKS.lean
                               → ZigZagOperators.lean ──→      ↑
-                                  ZigZagSpectral.lean ─↗  Basic.lean ─→ Halver.lean
+                                  ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean ─→ Halver.lean
            Random.lean ────────────────────────────↗          ↑
            RVWBound.lean ─────────────────────────↗  RegularGraph.lean
 ```
@@ -178,10 +193,11 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 - **Avoid `native_decide`** — sidesteps the kernel's trust boundary. Prefer `decide +kernel` when `decide` is too slow. Only use `native_decide` as a last resort.
+- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
 
 ## Proof Workflow
 
-**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., `halver_composition` was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential. Read primary sources at the design stage.
+**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., the original single-halver composition approach was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential (now in `TreeSorting.lean`). Read primary sources at the design stage.
 
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
@@ -306,25 +322,27 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is decomposed into 16 sublemmas across `ZigZagOperators.lean` (1 sorry), `ZigZagSpectral.lean` (1 sorry — only d₂=0 degenerate case in `withinCluster_tilde_contraction`), `RVWBound.lean` (3 sorry's). Mathematical core: `reflection_quadratic_bound` in `RVWBound.lean` (RVW Section 4.2, cos(2θ) geometry, NOT triangle inequality). **Key:** tilde contraction hypothesis is `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖` (not `‖B(I-Q)‖ ≤ λ₂`). Base expander: D=12, 20736 vertices, β ≤ 5/9.
+No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGraph` directly, no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: D=12, 20736 vertices, β ≤ 5/9. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases), `expander_mixing_lemma`
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all ZigZagOperators + ZigZagSpectral sublemmas (0 sorry each), `expander_gives_halver`, `displacement_from_wrongness`
 
-**Achievable (weeks):** `halver_convergence`
+**Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`
 
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
 - *Done (11/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`, `hat_block_norm` (‖QΣQ - P‖ ≤ spectralGap G₁), `withinCluster_tilde_contraction` (‖B(I-Q)‖ ≤ spectralGap G₂, 1 sorry in d₂=0 degenerate case)
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`). **Status doc:** `scripts/RVW_QUADRATIC_PROOF_STATUS.md` — documents LP infeasibility of nlinarith, numerical analysis, and viable proof paths. Key finding: scalar multiplier nlinarith is PROVEN infeasible (LP, twice); need mathematical proof via variable elimination + case analysis or full SOS Positivstellensatz.
 
-**Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
+**Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
 
-**Substantial (months):** `halver_composition` (combinatorial witness construction for approximate sortedness)
+**Next task: Reformulate TreeSorting.lean** — Several lemma statements are mathematically incorrect (e.g., `exception_distance_bound` is provably false, `halver_implies_nearsort_property` conflates aggregate balance with positional damage). Full plan with code snippets: [`docs/plan-treesorting-reformulation.md`](docs/plan-treesorting-reformulation.md). Key idea: introduce `HasBoundedDamage` as the interface between halver world and tree-sorting world.
 
-**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
+**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
-### Base expander certificate: open approaches
+### Base expander certificate pipeline (implemented)
 
-Certifying a specific 12-regular graph on 20736 vertices has spectral gap ≤ 5/9. All O(n)-data approaches are infeasible (see `Random.lean`). Ideas: (1) **Sharded LDL^T** — O(n²) data, but verification parallelizable across ~10K subfiles with `decide +kernel`. (2) **Eigenspace sparsity** — if second eigenvalue has high multiplicity, sparse eigenvectors + complement bound. Both need feasibility analysis.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `CertificateBridge.lean` (sorry'd bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for the bridge theorem proof plan.
+
+**Bridge proof plan** (`docs/bridge-proof-plan.md`): Factor into three lemmas: (1) certificate → walk bound on mean-zero vectors [sorry'd, needs checker augmentation], (2) walk bound → `spectralGap` bound via `opNorm_le_bound` [provable, LOW risk], (3) coefficient arithmetic via `√` monotonicity [provable, LOW risk]. Key insight: avoid eigenvalue decomposition entirely — use quadratic forms on `1⊥` where `J` vanishes.

@@ -32,18 +32,69 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
     (lam₁ lam₂ : ℝ)
     (hG₁ : spectralGap G₁ ≤ lam₁)
-    (hG₂ : spectralGap G₂ ≤ lam₂) :
+    (hG₂ : spectralGap G₂ ≤ lam₂)
+    (hd₂ : 0 < d₂) :
     spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂ := by
-  -- Assembly proof: plugs the sublemmas from ZigZagOperators, ZigZagSpectral,
-  -- and RVWBound together.
-  --
-  -- Step 1: Handle degenerate cases (d₁ = 0 or d₂ = 0).
-  -- Step 2: Rewrite walkCLM using zigzag_walkCLM_eq: W_Z = B · Σ · B.
-  -- Step 3: Apply rvw_operator_norm_bound with:
-  --   B = withinClusterCLM G₂, Σ = stepPermCLM G₁, Q = clusterMeanCLM, P = meanCLM
-  --   feeding in all the algebraic properties from ZigZagSpectral.lean.
-  -- Step 4: Chain with rvwBound_mono_left/right to pass from spectralGap to lam₁/lam₂.
-  sorry
+  -- Derive non-negativity of bounds
+  have hlam₁ : 0 ≤ lam₁ := le_trans (spectralGap_nonneg G₁) hG₁
+  have hlam₂ : 0 ≤ lam₂ := le_trans (spectralGap_nonneg G₂) hG₂
+  -- Degenerate case: n₁ * d₁ = 0 (trivial space, all norms are 0)
+  rcases Nat.eq_zero_or_pos (n₁ * d₁) with h0 | hpos
+  · haveI : IsEmpty (Fin (n₁ * d₁)) := by rw [h0]; exact Fin.isEmpty
+    have hsg : spectralGap (G₁.zigzag G₂) = 0 := by
+      apply le_antisymm _ (spectralGap_nonneg _)
+      unfold spectralGap
+      apply ContinuousLinearMap.opNorm_le_bound _ le_rfl
+      intro x; simp [Subsingleton.elim x 0]
+    rw [hsg]
+    -- rvwBound ≥ 0: a + √(a² + b²) ≥ 0 since √(a² + b²) ≥ √(a²) = |a| ≥ -a
+    unfold rvwBound
+    have hsq : ((1 - lam₂ ^ 2) * lam₁ / 2) ^ 2 ≤
+        (1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2 := by nlinarith [sq_nonneg lam₂]
+    have h1 : |(1 - lam₂ ^ 2) * lam₁ / 2| ≤
+        √((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2) := by
+      rw [← Real.sqrt_sq_eq_abs]; exact Real.sqrt_le_sqrt hsq
+    linarith [neg_abs_le ((1 - lam₂ ^ 2) * lam₁ / 2)]
+  -- Main case: n₁ * d₁ > 0, so d₁ > 0
+  have hd₁ : 0 < d₁ := pos_of_mul_pos_right hpos (Nat.zero_le n₁)
+  -- Abbreviate operators
+  set B := withinClusterCLM (n₁ := n₁) G₂ hd₁
+  set Sig := stepPermCLM G₁ hd₁
+  set Q := clusterMeanCLM (n₁ := n₁) hd₁
+  set P := (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _)
+  -- Derive h_tilde from withinCluster_tilde_contraction
+  have h_tilde : ∀ x, Q x = 0 → ‖B x‖ ≤ lam₂ * ‖x‖ := by
+    intro x hQx
+    have h1 : (1 - Q) x = x := by
+      simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply, hQx, sub_zero]
+    calc ‖B x‖
+        = ‖(B * (1 - Q)) x‖ := by rw [ContinuousLinearMap.mul_apply, h1]
+      _ ≤ ‖B * (1 - Q)‖ * ‖x‖ := (B * (1 - Q)).le_opNorm x
+      _ ≤ spectralGap G₂ * ‖x‖ := by
+          exact mul_le_mul_of_nonneg_right
+            (withinCluster_tilde_contraction G₂ hd₁) (norm_nonneg x)
+      _ ≤ lam₂ * ‖x‖ := mul_le_mul_of_nonneg_right hG₂ (norm_nonneg x)
+  -- Apply the abstract RVW operator norm bound
+  show ‖(G₁.zigzag G₂).walkCLM - meanCLM (n₁ * d₁)‖ ≤ rvwBound lam₁ lam₂
+  exact rvw_operator_norm_bound hpos
+    ((G₁.zigzag G₂).walkCLM) B Sig Q P
+    (zigzag_walkCLM_eq G₁ G₂ hd₁ hd₂)
+    (clusterMeanCLM_idempotent hd₁)
+    (clusterMeanCLM_isSelfAdjoint hd₁)
+    (withinCluster_comp_clusterMean G₂ hd₁ hd₂)
+    (clusterMean_comp_withinCluster G₂ hd₁ hd₂)
+    (withinClusterCLM_isSelfAdjoint G₂ hd₁)
+    (withinClusterCLM_norm_le_one G₂ hd₁)
+    (stepPermCLM_sq_eq_one G₁ hd₁)
+    (stepPermCLM_isSelfAdjoint G₁ hd₁)
+    (stepPermCLM_comp_meanCLM G₁ hd₁)
+    (meanCLM_idempotent (n₁ * d₁))
+    (meanCLM_isSelfAdjoint (n₁ * d₁))
+    (meanCLM_eq_clusterMean_comp hd₁)
+    (clusterMean_comp_meanCLM hd₁)
+    lam₁ lam₂ hlam₁ hlam₂
+    h_tilde
+    ((hat_block_norm G₁ hd₁).trans hG₁)
 
 
 /-! **The Iterated Construction** -/
@@ -85,7 +136,7 @@ noncomputable def zigzagFamily {D : ℕ} (H₀ : RegularGraph ((D * D) * (D * D)
     `rvwBound (c²) β ≤ c` (i.e., c is a fixed point of x ↦ rvwBound(x², β)).
     The fixed point exists when β² < 1/3, which holds for D ≥ 12. -/
 theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
-    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
+    {β c : ℝ} (hD : 0 < D) (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
     (hiter : rvwBound (c ^ 2) β ≤ c) (k : ℕ) :
     spectralGap (zigzagFamily H₀ k).2 ≤ c := by
   induction k with
@@ -98,7 +149,7 @@ theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
     have h₁ : spectralGap (zigzagFamily H₀ k).2.square ≤ c ^ 2 := by
       rw [spectralGap_square]
       exact pow_le_pow_left₀ (spectralGap_nonneg _) ih 2
-    exact (zigzag_spectral_bound _ _ _ _ h₁ hβ).trans hiter
+    exact (zigzag_spectral_bound _ _ _ _ h₁ hβ hD).trans hiter
 
 
 /-! **The Main Result** -/
@@ -123,7 +174,7 @@ theorem explicit_expanders_exist_zigzag {D : ℕ}
   -- (Subgraph spectral gap can only improve: fewer paths = less mixing,
   --  but formally this needs the Cauchy interlacing theorem.)
   --
-  -- The family `zigzagFamily H₀ k` satisfies `zigzagFamily_gap hβ hbase hiter k`.
+  -- The family `zigzagFamily H₀ k` satisfies `zigzagFamily_gap hD hβ hbase hiter k`.
   sorry
 
 -- The `zigzag_implies_aks_network` theorem connecting this to the AKS
