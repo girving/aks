@@ -962,20 +962,6 @@ def elementsCorrectlyPlaced (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : 
 def elementsAtDistanceExactly (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n) :=
   (elementsAtDistance n t v J r) \ (elementsAtDistance n t v J (r + 1))
 
-/-- After ε-nearsort on a cherry, elements at distance r either:
-    1. Move closer (distance becomes < r), or
-    2. Stay at distance ≥ r (exceptions, bounded by ε·Δᵣ₋₂)
-
-    This lemma formalizes the partition of elements for the Lemma 2 proof. -/
-lemma elements_partition_by_movement {n t : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
-    (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
-    -- TODO: Most elements move closer (1-ε) fraction
-    -- Exceptions stay far (ε fraction, bounded by Δᵣ₋₂)
-    -- Needs full tree structure + nearsort forcing property
-    True := trivial
-
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     elementsToLower n t v J ∪ elementsToUpper n t v J ∪ elementsCorrectlyPlaced n t v J = J.toFinset ∧
@@ -1036,16 +1022,6 @@ lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     (by simp [elementsToLower])
     (by simp [elementsToUpper]))
 
-/-- After applying ε-nearsort to a cherry, elements are pushed toward
-    correct sides. This is the key property we need for Lemma 2. -/
-lemma nearsort_on_cherry_forces_elements
-    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) (v v' : Fin n → Bool)
-    (h_apply : v' = net.exec v)  -- v' is v after applying ε-nearsort to cherry
-    :
-    -- TODO: At least (1-ε) fraction of "wrong" elements move toward correct sections
-    True := trivial
-
 /-- The halver property (balanced ones) implies the nearsort property
     (elements pushed toward correct sides).
 
@@ -1076,15 +1052,13 @@ lemma nearsort_on_cherry_forces_elements
     This lemma requires substantial work - it's essentially proving
     the correctness of the ε-nearsort construction from AKS Section 4. -/
 lemma halver_implies_nearsort_property
-    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) :
-    -- TODO: This is THE KEY lemma. Proper statement:
-    -- ∃ (nearsort_net : ComparatorNetwork cherry.totalSize),
-    --   (∀ v : Fin cherry.totalSize → Bool,
-    --     [forcing property: (1-ε) fraction move correctly])
-    -- Proof requires: recursive ε-nearsort from ε₁-halvers,
-    -- induction on recursion depth, halver balance at each step.
-    True := trivial
+    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hε : 0 < ε)
+    (hnet : IsEpsilonHalver net ε)
+    (cherry : Cherry n) (v : Fin n → Bool) (r : ℕ) :
+    ((elementsAtDistance n 0 (net.exec v) cherry.parent r).card : ℝ) ≤
+      (elementsAtDistance n 0 v cherry.parent r).card +
+        ε * (elementsAtDistance n 0 v cherry.parent (if r ≥ 2 then r - 2 else 0)).card := by
+  sorry
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
 
@@ -1116,11 +1090,6 @@ lemma sections_disjoint {n t : ℕ} (J : Interval n) :
   -- I.a ≤ I.b and J.a ≤ J.b give contradiction with hL and hU
   have hI := I.h; have hJ := J.h
   omega
-
-/-- Helper: An element belongs to at most one interval at a given tree level.
-    TODO: Proper statement once `intervalsAt` properties are developed. -/
-lemma element_unique_interval_at_level {n t : ℕ} (i : Fin n) (level : ℕ) :
-    True := trivial
 
 /-- Tree distance is bounded by the sum of levels. -/
 lemma treeDistance_le_sum_levels {node₁ node₂ : TreeNode} :
@@ -1718,14 +1687,14 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
     are displaced beyond their target sections.
 
     This is the correctness theorem for the ε-nearsort construction. -/
-lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
+lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (hε : 0 < ε)
+    (halver : ComparatorNetwork m)
     (hε₁ : ε₁ < ε / (Nat.log 2 m) ^ 4)  -- AKS condition: ε₁ << ε
     (hhalver : IsEpsilonHalver halver ε₁)
-    (depth : ℕ) (hdepth : depth ≥ Nat.log 2 m) :
-    -- TODO: The constructed network satisfies ε-nearsort property.
-    -- Proof by induction on depth: base case trivial,
-    -- inductive case: halver gives ε₁-error, recursion gives ε each, total ≈ ε.
-    True := trivial
+    (depth : ℕ) (hdepth : depth ≥ Nat.log 2 m)
+    (v : Fin m → Bool) :
+    IsEpsilonSorted ((epsilonNearsort m ε ε₁ halver depth).exec v) ε := by
+  sorry
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
 private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
@@ -2399,50 +2368,20 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
   4. ⚠️ halver_implies_nearsort_property (THE KEY - requires AKS Section 4 ε-nearsort construction)
-  5. ⚠️ cherry_nearsort_moves_elements (builds on #4)
-  6. ⚠️ cherry_wrongness_after_nearsort (core inequality, builds on #5)
-  7. ⚠️ zig_step_bounded_increase (main proof, assembles #6 with fringe amplification)
+  5. ⚠️ cherry_wrongness_after_nearsort (core inequality, builds on #4)
+  6. ⚠️ zig_step_bounded_increase (main proof, assembles #5 with fringe amplification)
 
   The bottleneck is #4 (halver_implies_nearsort_property), which requires:
   - Understanding recursive ε-nearsort construction (AKS Section 4)
   - Showing ε₁-halver → ε-nearsort with ε₁ << ε
   - Connecting balanced property to forcing elements toward correct sides
 
-  Infrastructure now includes:
+  Infrastructure:
   - Element counting: countOnes, countOnesInRange
   - Element tracking: elementsAtDistance, elementsToLower/Upper, correctlyPlaced
-  - Movement tracking: elements_partition_by_movement
   - Halver connections: halver_balances_ones, halver_bounds_top_excess
   - Witness preservation: halver_preserves_witness_structure
-
-  Current status: 1000+ lines, 2 proofs complete, comprehensive infrastructure ready.
 -/
-
-/-- For a cherry with ε-nearsort applied, most elements move toward their correct sections.
-
-    This is the key forcing property that comes from halver_implies_nearsort_property.
-
-    Given:
-    - A cherry with intervals (parent, leftChild, rightChild)
-    - An ε-nearsort network built from ε₁-halvers
-    - Input v : Fin n → Bool
-
-    After applying the nearsort:
-    - Elements that should be in leftChild (elementsToLower):
-      → At least (1-ε) fraction actually move to leftChild or lower
-    - Elements that should be in rightChild (elementsToUpper):
-      → At least (1-ε) fraction actually move to rightChild or higher
-    - At most ε fraction are "exceptional" (stuck in wrong place)
-
-    This lemma connects the halver balance property to actual element movement. -/
-lemma cherry_nearsort_moves_elements
-    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) (v : Fin n → Bool) :
-    -- TODO: After applying net to v on the cherry:
-    -- - At least (1-ε) fraction of elements in wrong positions move toward correct sections
-    -- - At most ε fraction remain in wrong positions (exceptions)
-    -- Depends on halver_implies_nearsort_property.
-    True := trivial
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
     This follows from comparators preserving monotonicity (already proved in Basic.lean). -/
@@ -2512,55 +2451,36 @@ lemma register_reassignment_increases_wrongness
 
 /-- **Helper: Fringe Amplification Factor**
 
-    Elements at interval J can spread across fringes of size proportional to A.
-    This gives an amplification factor in the wrongness calculation.
+    When elements at interval J spread across fringes (the overlapping regions
+    between a cherry's parent and children), the wrongness can be amplified
+    by a factor proportional to `A`. From AKS Section 5: fringe sizes are
+    determined by the Y_t(i) formulas involving powers of A.
 
-    From AKS Section 5 (page 5-6): The fringe sizes are determined by
-    the Y_t(i) formulas, which involve powers of A.
-    TODO: Proper statement bounding amplification by 8*A. -/
-lemma fringe_amplification_bound {n t : ℕ} (J : Interval n) :
-    True := trivial
-
-/-- **Helper: Moving Toward Target Reduces Distance**
-
-    If an element moves from interval J toward a target interval K,
-    its tree distance to K decreases (or stays the same if it was in K).
-
-    More precisely: if an element at position i moves to position j,
-    and j is in an interval closer to K than the interval containing i,
-    then the tree distance decreases. -/
-lemma moving_reduces_tree_distance
-    {n t : ℕ} (i j : Fin n) (K : Interval n)
-    (node_i node_j : TreeNode)
-    (J_i J_j : Interval n)
-    (h_i_in : J_i ∈ intervalsAt n t node_i ∧ i ∈ J_i.toFinset)
-    (h_j_in : J_j ∈ intervalsAt n t node_j ∧ j ∈ J_j.toFinset)
-    -- TODO: h_closer should compare distances to the node containing K
-    :
-    True := trivial
-
--- Simplified helper for the core idea
-/-- If an element in a child interval should be in the parent,
-    moving it to the parent reduces its wrongness distance.
-    TODO: Proper statement once tree distance infrastructure is complete. -/
-lemma child_to_parent_reduces_distance
-    {n : ℕ} (cherry : Cherry n) (targetNode : TreeNode) :
-    True := trivial
+    Concretely: for a cherry with parent P and children L, R, the number of
+    elements at distance ≥ r in P is bounded by the sum of elements at
+    distance ≥ r in L, R, and the fringe regions, with amplification ≤ 8A. -/
+lemma fringe_amplification_bound {n : ℕ} (cherry : Cherry n)
+    (v : Fin n → Bool) (r : ℕ) :
+    (elementsAtDistance n 0 v cherry.parent r).card ≤
+      8 * A * ((elementsAtDistance n 0 v cherry.leftChild r).card +
+               (elementsAtDistance n 0 v cherry.rightChild r).card + 1) := by
+  sorry
 
 /-- **Helper: Exception Elements Were at Distance r-2**
 
-    If an element remains at distance ≥ r after ε-nearsort, but the
-    nearsort should have moved it closer (it's an "exception"),
-    then it must have been at distance ≥ (r-2) before.
+    If an element becomes displaced at distance ≥ r after ε-nearsort
+    (applied to a cherry), but was at distance < r before, then it must
+    have been at distance ≥ r-2. This is because ε-nearsort moves elements
+    at most 2 tree levels within the cherry.
 
-    Reasoning: ε-nearsort moves elements at most 2 tree levels.
-    If still at distance ≥ r after moving ≤ 2 levels,
-    must have been at distance ≥ (r-2) originally.
-    TODO: Proper statement once tree distance infrastructure is complete. -/
+    More precisely: elements newly appearing in `elementsAtDistance ... r`
+    after the halver must have been in `elementsAtDistance ... (r-2)` before. -/
 lemma exception_distance_bound
-    {n t : ℕ} (v v' : Fin n → Bool) (J : Interval n) (r : ℕ)
-    (x : Fin n) (hx : x ∈ J.toFinset) :
-    True := trivial
+    {n : ℕ} (v : Fin n → Bool) (net : ComparatorNetwork n)
+    (J : Interval n) (r : ℕ) (hr : r ≥ 2) :
+    elementsAtDistance n 0 (net.exec v) J r \ elementsAtDistance n 0 v J r ⊆
+      elementsAtDistance n 0 v J (r - 2) := by
+  sorry
 
 /-- **Lemma 2: Single Zig or Zag Step** (AKS page 8)
 
