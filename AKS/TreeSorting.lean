@@ -538,9 +538,12 @@ structure Cherry (n : ℕ) where
   rightChild : Interval n
   -- The children should be adjacent and together span part of parent's range
   children_adjacent : leftChild.b.val + 1 ≤ rightChild.a.val ∨ rightChild.size = 0
-  -- Parent frames the children (has intervals on both sides)
-  -- Will formalize: parent intervals surround children
-  parent_frames : True := trivial
+  -- Children fit within parent's range
+  left_in_parent : parent.a.val ≤ leftChild.a.val
+  right_in_parent : rightChild.b.val ≤ parent.b.val
+  -- Children come after parent start and before parent end (disjointness with parent fringes)
+  left_after_parent_start : parent.a.val ≤ leftChild.a.val
+  right_before_parent_end : rightChild.b.val ≤ parent.b.val
 
 /-- Find the cherry containing a given interval J at time t.
     Returns None if J is not part of any cherry (e.g., if at wrong level).
@@ -560,9 +563,8 @@ noncomputable def cherry_containing (n t : ℕ) (J : Interval n) : Option (Cherr
     property needs formalization. -/
 lemma Cherry.children_in_parent_range {n : ℕ} (cherry : Cherry n) :
     cherry.leftChild.a.val ≥ cherry.parent.a.val ∧
-    cherry.rightChild.b.val ≤ cherry.parent.b.val := by
-  -- This should follow from cherry.parent_frames once that's properly defined
-  sorry
+    cherry.rightChild.b.val ≤ cherry.parent.b.val :=
+  ⟨cherry.left_in_parent, cherry.right_in_parent⟩
 
 /-- The total size of a cherry is parent + left child + right child. -/
 noncomputable def Cherry.totalSize {n : ℕ} (cherry : Cherry n) : ℕ :=
@@ -577,11 +579,23 @@ def Cherry.isNonTrivial {n : ℕ} (cherry : Cherry n) : Prop :=
     Note: This is a simplification. In AKS, the parent interval has TWO parts
     (framing the children), so the partition is more complex. -/
 lemma cherry_elements_partition {n : ℕ} (cherry : Cherry n) :
-    -- Parent, left, right are disjoint and cover the cherry's range
-    Disjoint cherry.parent.toFinset cherry.leftChild.toFinset ∧
-    Disjoint cherry.parent.toFinset cherry.rightChild.toFinset ∧
+    -- Left and right children are disjoint (from children_adjacent).
+    -- Parent overlaps both (it "frames" them), so parent-child disjointness is NOT claimed.
     Disjoint cherry.leftChild.toFinset cherry.rightChild.toFinset := by
-  sorry
+  rcases cherry.children_adjacent with hadj | hempty
+  · -- Left child ends before right child starts
+    rw [Finset.disjoint_iff_ne]
+    intro a ha b hb hab
+    subst hab
+    rw [Interval.mem_toFinset_iff] at ha hb
+    omega
+  · -- Right child is empty (size 0)
+    unfold Interval.size at hempty
+    rw [Finset.disjoint_iff_ne]
+    intro a ha b hb hab
+    subst hab
+    rw [Interval.mem_toFinset_iff] at hb
+    omega
 
 /-! **Count Ones and Sorted Version (needed for element classification)** -/
 
@@ -1381,11 +1395,41 @@ lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (halver : ComparatorNet
     -- inductive case: halver gives ε₁-error, recursion gives ε each, total ≈ ε.
     True := trivial
 
+/-- The length of `epsilonNearsort` is `depth * |halver|`. -/
+private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
+    (depth : ℕ) :
+    (epsilonNearsort m ε ε₁ halver depth).comparators.length =
+      (if m < 2 then 0 else depth * halver.comparators.length) := by
+  induction depth with
+  | zero =>
+    simp [epsilonNearsort]
+  | succ d ih =>
+    unfold epsilonNearsort
+    by_cases hm : d + 1 = 0 ∨ m < 2
+    · -- base case: d+1 = 0 is impossible, so m < 2
+      have hm2 : m < 2 := by omega
+      simp [epsilonNearsort, hm2]
+    · simp only [dif_neg hm]
+      push_neg at hm
+      have hm2 : ¬(m < 2) := by omega
+      have hd1 : d + 1 - 1 = d := by omega
+      simp only [List.length_append, hm2, ↓reduceIte, hd1] at ih ⊢
+      rw [ih]
+      ring
+  termination_by depth
+
 /-- Recursion depth for ε-nearsort is logarithmic. -/
 lemma epsilonNearsort_depth_bound (m : ℕ) (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1) :
     ∃ depth : ℕ, depth ≤ 2 * Nat.log 2 m ∧
       (∀ ε₁ halver, (epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth) := by
-  sorry
+  refine ⟨2 * Nat.log 2 m, le_refl _, fun ε₁ halver => ?_⟩
+  rw [epsilonNearsort_length]
+  split_ifs with hm
+  · omega
+  · -- depth * |halver| ≤ m * depth follows from |halver| ≤ m (each comparator uses indices < m)
+    -- This bound actually needs |halver| ≤ m which isn't necessarily true
+    -- For any reasonable halver, this holds, but we can't prove it generically
+    sorry
 
 /-- Error accumulation through recursive halvers. -/
 lemma error_accumulation_bound {m : ℕ} {ε : ℝ} (depth : ℕ) (ε₁ : ℝ)
@@ -2313,9 +2357,9 @@ lemma displacement_from_wrongness
 theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1/2)
     (net : ComparatorNetwork n) (hnet : IsEpsilonHalver net ε)
     (v : Fin n → Bool) :
-    ∃ (k : ℕ) (v_final : Fin n → Bool),
+    -- After O(log n) applications of the tree-based sorting network,
+    -- the output is sorted (monotone).
+    ∃ (k : ℕ),
       (k ≤ 100 * Nat.log 2 n) ∧  -- O(log n) cycles
-      Monotone v_final ∧  -- Fully sorted
-      sorry  -- v_final obtained by applying tree-based sorting k times
-   := by
+      Monotone (Nat.iterate (fun w => net.exec w) k v) := by
   sorry
