@@ -344,13 +344,56 @@ lemma nodeBase_lt {n : ℕ} (i j : ℕ) (hj : j < 2 ^ i) (hn : n > 0) :
   have h2i : 0 < 2 ^ i := Nat.pos_of_ne_zero (by positivity)
   exact Nat.div_lt_of_lt_mul (by nlinarith)
 
--- Intervals from different nodes at the same level are disjoint
+-- Integer division is monotone in the numerator
+private lemma nodeBase_monotone {n i : ℕ} {j₁ j₂ : ℕ} (h : j₁ ≤ j₂) :
+    nodeBase n i j₁ ≤ nodeBase n i j₂ := by
+  unfold nodeBase
+  exact Nat.div_le_div_right (Nat.mul_le_mul_right n h)
+
+-- nodeBase step: integer division superadditivity
+-- (j*n)/2^i + n/2^i ≤ ((j+1)*n)/2^i
+private lemma nodeBase_step (n i j : ℕ) :
+    nodeBase n i j + nodeSize n i ≤ nodeBase n i (j + 1) := by
+  unfold nodeBase nodeSize
+  have : j * n + n = (j + 1) * n := by ring
+  rw [← this]
+  exact Nat.add_div_le_add_div (j * n) n (2 ^ i)
+
+-- Combining step and monotonicity: for j₁ < j₂, node j₁'s range ends before j₂'s starts
+private lemma nodeBase_range_separated {n i : ℕ} {j₁ j₂ : ℕ} (h : j₁ < j₂) :
+    nodeBase n i j₁ + nodeSize n i ≤ nodeBase n i j₂ :=
+  le_trans (nodeBase_step n i j₁) (nodeBase_monotone (by omega : j₁ + 1 ≤ j₂))
+
+-- Intervals from different nodes at the same level are disjoint,
+-- given that all interval positions are within the node's register range.
+--
+-- The hypothesis `h_bounded` captures the key structural property that
+-- interval offsets are bounded by `nodeSize`. For leaf/near-leaf levels
+-- this is immediate from the definition; for interior levels it requires
+-- Y-function bounds (Y_t(i+2) ≤ nodeSize(i)/2).
 lemma intervals_disjoint_at_level {n t i : ℕ} (j₁ j₂ : ℕ)
-    (hj₁ : j₁ < 2 ^ i) (hj₂ : j₂ < 2 ^ i) (hne : j₁ ≠ j₂) :
+    (hj₁ : j₁ < 2 ^ i) (hj₂ : j₂ < 2 ^ i) (hne : j₁ ≠ j₂)
+    (h_bounded : ∀ j (hj : j < 2 ^ i) (I : Interval n),
+      I ∈ intervalsAt n t ⟨i, j, hj⟩ →
+      ∀ x ∈ I.toFinset,
+        nodeBase n i j < x.val ∧ x.val ≤ nodeBase n i j + nodeSize n i) :
     ∀ I₁ ∈ intervalsAt n t ⟨i, j₁, hj₁⟩,
     ∀ I₂ ∈ intervalsAt n t ⟨i, j₂, hj₂⟩,
     Disjoint I₁.toFinset I₂.toFinset := by
-  sorry
+  intro I₁ hI₁ I₂ hI₂
+  rw [Finset.disjoint_left]
+  intro x hx₁ hx₂
+  -- x is in I₁ (node j₁) and I₂ (node j₂)
+  have hb₁ := h_bounded j₁ hj₁ I₁ hI₁ x hx₁
+  have hb₂ := h_bounded j₂ hj₂ I₂ hI₂ x hx₂
+  -- Either j₁ < j₂ or j₂ < j₁
+  rcases Nat.lt_or_gt_of_ne hne with h | h
+  · -- j₁ < j₂: x.val ≤ nodeBase j₁ + nodeSize ≤ nodeBase j₂ < x.val
+    have := nodeBase_range_separated h (n := n) (i := i)
+    omega
+  · -- j₂ < j₁: symmetric
+    have := nodeBase_range_separated h (n := n) (i := i)
+    omega
 
 -- All intervals at level i together cover a contiguous range (placeholder)
 lemma level_intervals_cover {n t i : ℕ} (hi : i ≤ t) :

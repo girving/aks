@@ -94,16 +94,23 @@ lemma topHalf_disjoint_bottomHalf (n : ℕ) :
 
 /-- Cardinality of top half -/
 lemma card_topHalf (n : ℕ) : (topHalf n).card = n / 2 := by
-  -- Use the fact that filtering gives exactly the first n/2 elements
-  have : topHalf n = Finset.filter (fun i ↦ i.val < n / 2) Finset.univ := rfl
-  rw [this]
-  -- Count elements with val < n / 2
-  sorry
+  by_cases hn : n = 0
+  · subst hn; simp [topHalf]
+  · have hn2 : n / 2 < n := Nat.div_lt_self (Nat.pos_of_ne_zero hn) one_lt_two
+    have : topHalf n = Finset.Iio ⟨n / 2, hn2⟩ := by
+      ext ⟨i, hi⟩
+      simp only [topHalf, Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_Iio,
+        Fin.lt_iff_val_lt_val]
+    rw [this, Fin.card_Iio]
 
 /-- Cardinality of bottom half -/
 lemma card_bottomHalf (n : ℕ) : (bottomHalf n).card = n - n / 2 := by
-  -- Use complementary counting
-  sorry
+  have h_union := topHalf_union_bottomHalf n
+  have h_disj : Disjoint (topHalf n) (bottomHalf n) :=
+    Finset.disjoint_iff_inter_eq_empty.mpr (topHalf_disjoint_bottomHalf n)
+  have h_card := Finset.card_union_of_disjoint h_disj
+  rw [h_union, Finset.card_univ, Fintype.card_fin, card_topHalf] at h_card
+  omega
 
 /-! **Halver Composition** -/
 
@@ -126,11 +133,61 @@ lemma IsEpsilonSorted.exists_witness {n : ℕ} {v : Fin n → Bool} {ε : ℝ}
 lemma Monotone.bool_pattern {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
     ∃ k : ℕ, (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
              (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
-  -- Proof: For monotone Boolean sequences, false < true in the ordering.
-  -- So if w i = true and i ≤ j, then w j = true (by monotonicity).
-  -- This means all trues cluster at high indices, all falses at low indices.
-  -- The transition point is characterized by the cardinality of the false set.
-  sorry
+  -- k = number of false values = size of the downward-closed false set
+  use (Finset.univ.filter (fun i : Fin n ↦ w i = false)).card
+  set k := (Finset.univ.filter (fun i : Fin n ↦ w i = false)).card
+  constructor
+  · -- For i.val < k: w i = false
+    intro ⟨i, hi⟩ h_lt
+    by_contra h_not
+    have h_true : w ⟨i, hi⟩ = true := by
+      match h : w ⟨i, hi⟩ with
+      | true => rfl
+      | false => exact absurd h h_not
+    -- Every j ≥ i has w j = true (by monotonicity)
+    have h_above : ∀ j : Fin n, i ≤ j.val → w j = true := by
+      intro ⟨j, hj⟩ h_ij
+      have := hw (show (⟨i, hi⟩ : Fin n) ≤ ⟨j, hj⟩ from h_ij)
+      rw [h_true] at this
+      match h : w ⟨j, hj⟩ with
+      | true => rfl
+      | false => rw [h] at this; exact absurd this (by decide)
+    -- So false set ⊆ {j | j.val < i}
+    have h_sub : Finset.univ.filter (fun j : Fin n ↦ w j = false) ⊆
+        Finset.Iio ⟨i, hi⟩ := by
+      intro ⟨j, hj⟩ hm
+      simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hm
+      simp only [Finset.mem_Iio, Fin.lt_iff_val_lt_val]
+      by_contra h_ge; push_neg at h_ge
+      exact absurd (h_above ⟨j, hj⟩ h_ge) (by simp [hm])
+    -- Card of false set ≤ card of Iio = i
+    have := Finset.card_le_card h_sub
+    rw [Fin.card_Iio] at this; omega
+  · -- For k ≤ i.val: w i = true
+    intro ⟨i, hi⟩ h_ge
+    by_contra h_not
+    have h_false : w ⟨i, hi⟩ = false := by
+      match h : w ⟨i, hi⟩ with
+      | false => rfl
+      | true => exact absurd h h_not
+    -- Every j ≤ i has w j = false (by monotonicity)
+    have h_below : ∀ j : Fin n, j.val ≤ i → w j = false := by
+      intro ⟨j, hj⟩ h_ji
+      have := hw (show (⟨j, hj⟩ : Fin n) ≤ ⟨i, hi⟩ from h_ji)
+      rw [h_false] at this
+      match h : w ⟨j, hj⟩ with
+      | false => rfl
+      | true => rw [h] at this; exact absurd this (by decide)
+    -- So Iic ⟨i, hi⟩ ⊆ false set
+    have h_sub : Finset.Iic ⟨i, hi⟩ ⊆
+        Finset.univ.filter (fun j : Fin n ↦ w j = false) := by
+      intro ⟨j, hj⟩ hm
+      simp only [Finset.mem_Iic, Fin.le_iff_val_le_val] at hm
+      simp only [Finset.mem_filter, Finset.mem_univ, true_and]
+      exact h_below ⟨j, hj⟩ hm
+    -- Card of Iic = i + 1 ≤ card of false set = k
+    have := Finset.card_le_card h_sub
+    rw [Fin.card_Iic] at this; omega
 
 /-- Relaxation: if ε₁ ≤ ε₂, then ε₁-sorted implies ε₂-sorted -/
 lemma IsEpsilonSorted.mono {n : ℕ} {v : Fin n → Bool} {ε₁ ε₂ : ℝ}
