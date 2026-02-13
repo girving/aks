@@ -1,5 +1,5 @@
 {
-  "model": "claude-opus-4-6",
+  "model": "opus",
   "permissions": {
     "ask": [
       "Edit(.claude/settings.json)",
