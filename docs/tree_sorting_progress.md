@@ -1,8 +1,8 @@
 # Tree-Based AKS Sorting: Implementation Progress
 
 **Date:** 2026-02-13
-**Status:** Architecture COMPLETE, Lemma 2 helpers in progress
-**File:** `AKS/TreeSorting.lean` (660+ lines, fully compiling)
+**Status:** Architecture COMPLETE, stubs cleaned up, core proofs pending
+**File:** `AKS/TreeSorting.lean` (2,615 lines, fully compiling)
 
 ## Recent Progress (2026-02-13)
 
@@ -84,8 +84,46 @@
 - **Total proofs:** 14 complete + 1 framework lemma (network_preserves_countOnes)
 - **File size:** 1,579 lines (+66 lines in extended session, +1,057 total from session start)
 
+**Sorry Reduction Session (continued 2026-02-13):**
+Starting from 55 sorry's, reduced to 49 (6 more eliminated):
+- ✅ **PROVED:** `raiseToLevel_level` — helper proving `raiseToLevel` preserves target level
+  - Proved by well-founded recursion on `node.level - targetLevel`
+  - Eliminated 2 sorry's in `commonAncestor` definition
+- ✅ **PROVED:** `sections_partition` — classical logic tautology `(P ∨ Q ∨ R) ∨ (¬P ∧ ¬Q ∧ ¬R)`
+- ✅ **PROVED:** `network_displacement_bound` — network changes ≤ 2×length positions
+  - Induction on comparator list with subset + card reasoning
+- ✅ **PROVED:** `commonAncestorSameLevel_comm` — commutativity of same-level ancestor finding
+  - Key insight: at level 0, index must be 0 (only one node), so TreeNode.ext applies
+  - Required adding `TreeNode.ext` lemma
+- ✅ **PROVED:** `commonAncestor_comm` + `treeDistance_comm` — tree distance symmetry
+  - Uses `conv_lhs/rhs` for clean branch matching on asymmetric definition
+- ✅ **PROVED:** `comparator_disagreements_le` — comparators don't increase disagreements
+  - Major infrastructure lemma: partition into {c.i,c.j} and rest, filter_pair counting
+  - 16-case Bool analysis reduced via `cases ... <;> simp`
+- ✅ **PROVED:** `network_disagreements_le` — networks don't increase disagreements
+  - Induction using comparator_disagreements_le
+- ✅ **PROVED:** `halver_preserves_witness_structure` — halving preserves monotone witness
+  - Uses network_disagreements_le for δ·n bound, then derives ε ≥ 0 from halver property
+  - Interesting sub-proof: all-false input stays all-false through network (countOnes=0)
+- **File:** 2,140+ lines, 49 sorry warnings, 0 errors
+- **Total proofs this session:** 9 substantial lemmas eliminated
+
+**Stub Cleanup (2026-02-13):**
+- ✅ Deleted 7 `True := trivial` stubs (dead code and organizational placeholders):
+  - `elements_partition_by_movement`, `nearsort_on_cherry_forces_elements`,
+    `element_unique_interval_at_level`, `cherry_nearsort_moves_elements`,
+    `moving_reduces_tree_distance`, `child_to_parent_reduces_distance`,
+    `epsilonNearsort_correct` (organizational)
+- ✅ Replaced 4 `True := trivial` stubs with proper statements + sorry:
+  - `halver_implies_nearsort_property` — THE KEY: bounds displaced elements after nearsort
+  - `epsilonNearsort_correct` — recursive nearsort produces ε-sorted output
+  - `exception_distance_bound` — exceptions are subset of closer elements
+  - `fringe_amplification_bound` — parent wrongness ≤ 8A × children wrongness
+- Net: deleted 80 lines, all stubs now have meaningful statements or are removed
+- **File:** 2,615 lines, 9 sorry's in TreeSorting.lean, 0 errors
+
 **Next Steps:**
-- **PRIMARY:** Implement `halver_implies_nearsort_property` (THE KEY bottleneck, Task #15)
+- **PRIMARY:** Prove `halver_implies_nearsort_property` (THE KEY bottleneck)
   - Requires: recursive ε-nearsort correctness proof
   - Connects: balanced ones distribution → forcing elements toward correct sides
   - Risk: MEDIUM (has fallback: axiomatize if stuck after 2-3 attempts)

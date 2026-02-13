@@ -18,6 +18,8 @@
       "Bash(lake clean)",
       "Bash(ls *)",
       "Bash(mkdir *)",
+      "Bash(chmod *)",
+      "Bash(scripts/extract-history)",
       "Bash(scripts/lean-check *)",
       "Bash(scripts/sorries)",
       "Bash(test *)",

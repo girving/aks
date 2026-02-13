@@ -134,29 +134,6 @@ private theorem walkCLM_isSelfAdjoint {n d : ℕ} (G : RegularGraph n d) :
     simp_rw [Finset.mul_sum, Finset.sum_mul]
     exact (G.sum_neighbor_swap (fun v ↦ g v) (fun v ↦ f v)).symm
 
-/-- The mean projection is self-adjoint: ⟪Pf, g⟫ = ⟪f, Pg⟫. -/
-private theorem meanCLM_isSelfAdjoint (n : ℕ) :
-    IsSelfAdjoint (meanCLM n) := by
-  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
-  intro f g
-  change @inner ℝ _ _ (meanCLM n f) g = @inner ℝ _ _ f (meanCLM n g)
-  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, meanCLM_apply]
-  -- ∑ v, g v * ((∑ i, f i)/n) = ∑ v, ((∑ i, g i)/n) * f v
-  simp_rw [mul_div_assoc', div_mul_eq_mul_div, ← Finset.sum_div]
-  congr 1
-  simp_rw [Finset.mul_sum, Finset.sum_mul]
-  conv_rhs => rw [Finset.sum_comm]
-
-/-- The mean projection is idempotent: P(Pf) = Pf. -/
-private theorem meanCLM_idempotent (n : ℕ) :
-    meanCLM n * meanCLM n = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
-  ext f v
-  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, Finset.sum_const,
-    Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-  rcases n.eq_zero_or_pos with rfl | hn
-  · simp
-  · exact mul_div_cancel_left₀ _ (by positivity)
-
 /-- The mean projection absorbs the walk operator: P ∘ W = P (for d > 0). -/
 private theorem meanCLM_comp_walkCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
     meanCLM n * G.walkCLM = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by

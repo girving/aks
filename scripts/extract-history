@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""Extract theorem status history from git for the proof visualization.
+
+Reads git history for all commits touching Lean files, parses each file at each
+commit to determine theorem/definition/axiom status, and writes docs/history.json.
+
+Idempotent: re-running processes only new commits (appends to existing history).
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+# Files to track (from PROOF_DATA groups in docs/index.html)
+LEAN_FILES = [
+    "AKS/Fin.lean",
+    "AKS/RegularGraph.lean",
+    "AKS/Square.lean",
+    "AKS/CompleteGraph.lean",
+    "AKS/Mixing.lean",
+    "AKS/Basic.lean",
+    "AKS/Halver.lean",
+    "AKS/ZigZagOperators.lean",
+    "AKS/ZigZagSpectral.lean",
+    "AKS/RVWBound.lean",
+    "AKS/ZigZag.lean",
+    "AKS/Random.lean",
+    "AKS/TreeSorting.lean",
+    "AKS.lean",
+]
+
+# Node IDs to track (from PROOF_DATA in docs/index.html)
+TRACKED_IDS = {
+    "Fin.pair_lt",
+    "RegularGraph", "walkCLM", "meanCLM", "spectralGap",
+    "spectralGap_nonneg", "spectralGap_le_one",
+    "RegularGraph.square", "spectralGap_square",
+    "completeGraph", "spectralGap_complete",
+    "indicatorVec", "expander_mixing_lemma",
+    "Comparator", "ComparatorNetwork", "IsSortingNetwork",
+    "zero_one_principle",
+    "AKS", "AKS.size_nlogn", "AKS.sorts",
+    "IsEpsilonHalver", "expander_gives_halver", "epsHalverMerge",
+    "IsEpsilonSorted", "halver_composition", "halver_convergence",
+    "RegularGraph.zigzag", "withinClusterCLM", "stepPermCLM",
+    "clusterMeanCLM", "zigzag_walkCLM_eq",
+    "clusterMeanCLM_idempotent", "clusterMeanCLM_isSelfAdjoint",
+    "withinClusterCLM_isSelfAdjoint", "withinCluster_comp_clusterMean",
+    "clusterMean_comp_withinCluster", "withinClusterCLM_norm_le_one",
+    "stepPermCLM_sq_eq_one", "stepPermCLM_isSelfAdjoint",
+    "withinCluster_tilde_contraction", "hat_block_norm",
+    "meanCLM_eq_clusterMean_comp", "clusterMean_comp_meanCLM",
+    "rvwBound", "rvwBound_mono_left", "rvwBound_mono_right",
+    "quadratic_form_bound", "rvw_operator_norm_bound",
+    "baseExpander", "baseExpander_gap",
+    "zigzag_spectral_bound", "zigzagFamily", "zigzagFamily_gap",
+    "explicit_expanders_exist_zigzag", "zigzag_implies_aks_network",
+    "TreeNode", "treeWrongness", "halver_preserves_monotone",
+    "monotone_bool_zeros_then_ones", "halver_balances_ones",
+    "countOnes_le", "countOnes_split", "comparator_displacement_bound",
+    "halver_bounds_top_excess", "halver_implies_nearsort_property",
+    "zig_step_bounded_increase",
+}
+
+# Aliases: Lean declaration name → PROOF_DATA ID (when they differ)
+ALIASES = {
+    "reflection_quadratic_bound": "quadratic_form_bound",
+}
+
+
+def get_tracked_id(full_name):
+    """Return the PROOF_DATA ID for a declaration, or None."""
+    # Check aliases (by full name and by short name)
+    if full_name in ALIASES:
+        return ALIASES[full_name]
+    short = full_name.split('.')[-1]
+    if short in ALIASES:
+        return ALIASES[short]
+    # Direct match
+    if full_name in TRACKED_IDS:
+        return full_name
+    # Suffix match: RegularGraph.walkCLM → walkCLM
+    parts = full_name.split('.')
+    for i in range(1, len(parts)):
+        suffix = '.'.join(parts[i:])
+        if suffix in TRACKED_IDS:
+            return suffix
+    return None
+
+
+def strip_comments(text):
+    """Remove Lean 4 comments (line -- and nested block /- -/) from text."""
+    result = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if i + 1 < n and text[i] == '-' and text[i + 1] == '-':
+            # Line comment: skip to end of line
+            while i < n and text[i] != '\n':
+                i += 1
+        elif i + 1 < n and text[i] == '/' and text[i + 1] == '-':
+            # Block comment (possibly nested)
+            depth = 1
+            i += 2
+            while i < n and depth > 0:
+                if i + 1 < n and text[i] == '/' and text[i + 1] == '-':
+                    depth += 1
+                    i += 2
+                elif i + 1 < n and text[i] == '-' and text[i + 1] == '/':
+                    depth -= 1
+                    i += 2
+                else:
+                    i += 1
+        else:
+            result.append(text[i])
+            i += 1
+    return ''.join(result)
+
+
+def parse_declarations(text):
+    """Parse Lean 4 text and return dict {id: status} for tracked IDs found."""
+    stripped = strip_comments(text)
+
+    # Handle #exit: ignore everything after it
+    exit_match = re.search(r'^#exit\b', stripped, re.MULTILINE)
+    if exit_match:
+        stripped = stripped[:exit_match.start()]
+
+    lines = stripped.split('\n')
+    namespace_stack = []
+    results = {}
+
+    decl_re = re.compile(
+        r"^(?:private\s+|protected\s+|noncomputable\s+|unsafe\s+|partial\s+|@\[.*?\]\s*)*"
+        r"(theorem|lemma|def|structure|axiom)\s+"
+        r"(\w[\w'.]*)"
+    )
+    ns_re = re.compile(r"^namespace\s+(\S+)")
+    end_re = re.compile(r"^end\s+(\S+)")
+
+    # Collect events: (line_index, type, data)
+    events = []
+    for i, line in enumerate(lines):
+        m = ns_re.match(line)
+        if m:
+            events.append((i, 'ns', m.group(1)))
+            continue
+        m = end_re.match(line)
+        if m:
+            events.append((i, 'end', m.group(1)))
+            continue
+        m = decl_re.match(line)
+        if m:
+            events.append((i, 'decl', (m.group(1), m.group(2))))
+
+    # Process events in order
+    for idx, (line_idx, etype, data) in enumerate(events):
+        if etype == 'ns':
+            namespace_stack.append(data)
+        elif etype == 'end':
+            if namespace_stack and namespace_stack[-1] == data:
+                namespace_stack.pop()
+        elif etype == 'decl':
+            kind, name = data
+            prefix = '.'.join(namespace_stack)
+            full_name = f"{prefix}.{name}" if prefix else name
+
+            tracked_id = get_tracked_id(full_name)
+            if tracked_id:
+                # Body: from this line to next event or EOF
+                next_line = events[idx + 1][0] if idx + 1 < len(events) else len(lines)
+                body = '\n'.join(lines[line_idx:next_line])
+
+                if kind == 'axiom':
+                    status = 'axiom'
+                elif kind in ('def', 'structure'):
+                    status = 'sorry' if re.search(r'\bsorry\b', body) else 'definition'
+                else:
+                    status = 'sorry' if re.search(r'\bsorry\b', body) else 'proved'
+
+                results[tracked_id] = status
+
+    return results
+
+
+def get_file_at_commit(repo_root, commit_hash, filepath):
+    """Get file contents at a specific commit, or None if file doesn't exist."""
+    result = subprocess.run(
+        ['git', 'show', f'{commit_hash}:{filepath}'],
+        capture_output=True, text=True, cwd=repo_root
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def extract_state(repo_root, commit_hash):
+    """Extract all tracked theorem statuses at a given commit."""
+    nodes = {}
+    for filepath in LEAN_FILES:
+        content = get_file_at_commit(repo_root, commit_hash, filepath)
+        if content is not None:
+            found = parse_declarations(content)
+            nodes.update(found)
+    return nodes
+
+
+def get_commits(repo_root):
+    """Get all commits touching Lean files, oldest first."""
+    result = subprocess.run(
+        ['git', 'log', '--format=%H %aI %s', '--reverse', '--',
+         'AKS/*.lean', 'AKS.lean'],
+        capture_output=True, text=True, cwd=repo_root
+    )
+    commits = []
+    for line in result.stdout.strip().split('\n'):
+        if not line.strip():
+            continue
+        parts = line.split(' ', 2)
+        if len(parts) < 3:
+            continue
+        commits.append({
+            'hash': parts[0],
+            'date': parts[1],
+            'message': parts[2],
+        })
+    return commits
+
+
+def main():
+    repo_root = subprocess.check_output(
+        ['git', 'rev-parse', '--show-toplevel'], text=True
+    ).strip()
+
+    history_path = os.path.join(repo_root, 'docs', 'history.json')
+
+    # Load existing history (idempotent: skip already-processed commits)
+    if os.path.exists(history_path):
+        with open(history_path) as f:
+            history = json.load(f)
+    else:
+        history = {"snapshots": []}
+
+    processed = {s["hash"] for s in history["snapshots"]}
+
+    # Get all commits touching Lean files
+    commits = get_commits(repo_root)
+    new_commits = [c for c in commits if c["hash"] not in processed]
+
+    if not new_commits:
+        print("No new commits to process.", file=sys.stderr)
+        return
+
+    print(f"Processing {len(new_commits)} new commits...", file=sys.stderr)
+
+    for i, commit in enumerate(new_commits):
+        nodes = extract_state(repo_root, commit["hash"])
+        history["snapshots"].append({
+            "hash": commit["hash"],
+            "date": commit["date"],
+            "message": commit["message"],
+            "nodes": nodes,
+        })
+        if (i + 1) % 10 == 0 or i + 1 == len(new_commits):
+            print(f"  {i + 1}/{len(new_commits)}", file=sys.stderr)
+
+    # Sort by date to maintain chronological order
+    history["snapshots"].sort(key=lambda s: s["date"])
+
+    with open(history_path, 'w') as f:
+        json.dump(history, f, separators=(',', ':'))
+
+    total = len(history["snapshots"])
+    size = os.path.getsize(history_path)
+    print(f"Saved {total} snapshots to {history_path} ({size:,} bytes)", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()

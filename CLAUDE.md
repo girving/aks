@@ -75,7 +75,11 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 ### Proof Visualization (`docs/index.html`)
 
-Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
+Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, and line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
+
+**Update the visualization every time you prove something.** When a `sorry` is resolved, change its status in `PROOF_DATA` from `"sorry"` to `"proved"` and update its description. Then run `scripts/update-viz-lines` to sync line numbers. Do this proactively — don't wait for the user to ask.
+
+**Line number maintenance:** `scripts/update-viz-lines` auto-syncs line numbers from source files. Run it after any code changes. Use `--check` mode to verify without modifying. The script greps each node's source file for its declaration keyword and updates the `line:` field in `PROOF_DATA`.
 
 **Visualization invariant:** If all nodes in a file are green, the file must have no `sorry`s. Private lemmas with `sorry`s must be included as nodes unless they fall under a larger `sorry` theorem.
 
@@ -102,10 +106,10 @@ The Ajtai–Komlós–Szemerédi construction and analysis:
 3. **Correctness** — `AKS.sorts` (network correctly sorts all inputs)
 
 ### `AKS/Halver.lean` — ε-Halver Theory
-ε-halvers and their composition properties, the engine driving AKS correctness.
-Imports `RegularGraph.lean` for the expander → halver bridge:
-1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (takes `RegularGraph`), `epsHalverMerge`
-2. **Halver composition** — `IsEpsilonSorted`, `halver_composition` (geometric decrease), `halver_convergence`
+ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
+1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (proved), `epsHalverMerge`
+2. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
+Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here.
 
 ### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
@@ -193,7 +197,7 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
 
 ## Proof Workflow
 
-**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., `halver_composition` was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential. Read primary sources at the design stage.
+**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., the original single-halver composition approach was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential (now in `TreeSorting.lean`). Read primary sources at the design stage.
 
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
@@ -247,7 +251,13 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Star instance diamond on CLMs.** `IsSelfAdjoint` for CLMs uses a different `Star` instance than `IsSelfAdjoint.sub`/`.norm_mul_self` expect (propositionally but not definitionally equal). **Workaround for `.sub`:** go through `LinearMap.IsSymmetric.sub` via `isSelfAdjoint_iff_isSymmetric` + `ContinuousLinearMap.coe_sub`. **Workaround for `.norm_mul_self`:** use `rw` instead of `exact` — `rw` is more lenient about instance matching.
 
-**`Finset.sum_comm` loops in `simp_rw`.** `simp_rw` applies under binders, so `simp_rw [Finset.sum_comm]` endlessly rewrites nested sums. Use `conv_rhs => rw [Finset.sum_comm]` (or `conv_lhs`) to apply it exactly once at the desired position.
+**`Finset.sum_comm` loops in `simp`/`simp_rw`.** `sum_comm` is symmetric, so `simp` applies it back and forth forever. NEVER use `simp only [Finset.sum_comm]` or `simp_rw [Finset.sum_comm]`. Always use `rw [Finset.sum_comm]` (applies exactly once) or `conv_rhs => rw [Finset.sum_comm]` for positional control.
+
+**`Finset.sum_const` produces `#univ •`, not `Fintype.card •`.** After `rw [Finset.sum_const]`, the goal contains `Finset.univ.card • c` (displayed as `#univ • c`), but `Fintype.card_fin` expects `Fintype.card (Fin d₁)`. Bridge with `Finset.card_univ`: chain `rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]`.
+
+**`set` abbreviations hide names from `rw`.** After `set Q := someOp`, `rw [lemma_about_someOp]` fails because the goal shows `Q`, not `someOp`. Lean's `rw` can't see through `set` abbreviations to match patterns. **Fix:** Create function-level helpers that work with the abbreviation: `have hQ_app : ∀ x, Q (Q x) = Q x := by intro x; change (Q * Q) x = Q x; rw [idempotent_lemma]`. The `change` tactic converts function application `Q (Q x)` back to operator form `(Q * Q) x` where `rw` can match. This is essential when proofs use `set` for readability but need to apply external operator algebra lemmas.
+
+**Non-CLM definitions and `map_sub`.** When a definition like `clusterLift` is a plain `def` (not a `ContinuousLinearMap`), `map_sub` won't work for `lift(a) - lift(b) = lift(a - b)`. Go pointwise instead: `apply PiLp.ext; intro vk; simp only [myDef_apply, WithLp.ofLp_sub, Pi.sub_apply]`. The key lemma is `WithLp.ofLp_sub` which distributes `.ofLp` over `PiLp` subtraction.
 
 **CLM self-adjointness via inner products.** (1) `rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]; intro f g; change @inner ℝ _ _ (A f) g = @inner ℝ _ _ f (A g)` (2) `simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, myCLM_apply]` (3) rearrange sums. Handle d=0 separately. For `IsSelfAdjoint (A - B)`: use the Star diamond workaround (`IsSymmetric.sub`).
 
@@ -312,24 +322,19 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is decomposed into 16 sublemmas across `ZigZagOperators.lean` (1 sorry), `ZigZagSpectral.lean` (12 sorry's), `RVWBound.lean` (2 sorry's). Mathematical core: `reflection_quadratic_bound` in `RVWBound.lean` (RVW Section 4.2, cos(2θ) geometry, NOT triangle inequality). **Key:** tilde contraction hypothesis is `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖` (not `‖B(I-Q)‖ ≤ λ₂`). Base expander: D=12, 20736 vertices, β ≤ 5/9.
+No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGraph` directly, no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: D=12, 20736 vertices, β ≤ 5/9. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases), `expander_mixing_lemma`
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all ZigZagOperators + ZigZagSpectral sublemmas (0 sorry each), `expander_gives_halver`, `displacement_from_wrongness`
 
-**Achievable (weeks):** `halver_convergence`
+**Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`
 
-**Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
-- *Done (9/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`
-- *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
-- *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`), `withinCluster_tilde_contraction` (must provide `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖`, not `‖B(I-Q)‖ ≤ λ₂`)
+**Achievable (days-weeks):** `rvw_quadratic_ineq` in RVWBound.lean (pure polynomial inequality, nlinarith exceeds heartbeat limit — needs manual factoring or polyrith)
 
-**Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
+**Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
 
-**Substantial (months):** `halver_composition` (combinatorial witness construction for approximate sortedness)
-
-**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
+**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
 ### Base expander certificate pipeline (implemented)
 
