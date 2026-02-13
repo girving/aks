@@ -32,7 +32,7 @@
   Larger A means smaller fringes, slower but more reliable sorting.
 -/
 
-import AKS.Basic
+import AKS.ComparatorNetwork
 import AKS.Halver
 
 open Finset BigOperators

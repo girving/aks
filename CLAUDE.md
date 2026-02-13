@@ -67,6 +67,12 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 **When the user says "commit", always push immediately after committing.** The standard workflow is: commit → pull if needed → push. Don't wait for explicit permission to push.
 
+### Resource Constraints
+
+**Never increase precision or memory usage without explicit permission.** If the user asks for f32, use f32. If they ask for low memory, keep it low. Do not silently switch from f32 to f64 or allocate larger buffers "because the margin is better." OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.
+
+**Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'compute-certificate|lake build' | grep -v grep` and kill any stale ones before launching new heavy jobs.
+
 ### Proof Visualization (`docs/index.html`)
 
 Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
@@ -82,13 +88,18 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 ### `AKS/Fin.lean` — `Fin` Arithmetic Helpers
 Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product indexing: `Fin.pair_lt`, `fin_encode_fst`, `fin_encode_snd`, `fin_div_add_mod`.
 
-### `AKS/Basic.lean` — Sorting Network Theory
-Sections build on each other sequentially:
+### `AKS/ComparatorNetwork.lean` — Comparator Network Theory
+Foundational theory of comparator networks:
 1. **Comparator networks** — `Comparator`, `ComparatorNetwork` (flat list of comparators), execution model
-2. **0-1 principle** — reduces sorting correctness to Boolean inputs
-3. **AKS construction** — recursive build: split → recurse → merge with halvers
-4. **Complexity analysis** — `IsBigO` notation, O(n log n) size
-5. **Correctness** — `AKS.sorts`
+2. **Monotonicity preservation** — helper lemmas for comparator operations
+3. **0-1 principle** — reduces sorting correctness to Boolean inputs
+4. **Complexity notation** — `IsBigO` for stating asymptotic bounds
+
+### `AKS/AKSNetwork.lean` — AKS Sorting Network Construction
+The Ajtai–Komlós–Szemerédi construction and analysis:
+1. **AKS construction** — recursive build: split → recurse → merge with halvers
+2. **Size analysis** — `AKS.size_nlogn` (O(n log n) comparators)
+3. **Correctness** — `AKS.sorts` (network correctly sorts all inputs)
 
 ### `AKS/Halver.lean` — ε-Halver Theory
 ε-halvers and their composition properties, the engine driving AKS correctness.
@@ -156,7 +167,7 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
                               → CompleteGraph.lean              ↓
                               → Mixing.lean               AKS.lean
                               → ZigZagOperators.lean ──→      ↑
-                                  ZigZagSpectral.lean ─↗  Basic.lean ─→ Halver.lean
+                                  ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean ─→ Halver.lean
            Random.lean ────────────────────────────↗          ↑
            RVWBound.lean ─────────────────────────↗  RegularGraph.lean
 ```
@@ -178,6 +189,7 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 - **Avoid `native_decide`** — sidesteps the kernel's trust boundary. Prefer `decide +kernel` when `decide` is too slow. Only use `native_decide` as a last resort.
+- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
 
 ## Proof Workflow
 
@@ -319,6 +331,8 @@ No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
 
-### Base expander certificate: open approaches
+### Base expander certificate pipeline (implemented)
 
-Certifying a specific 12-regular graph on 20736 vertices has spectral gap ≤ 5/9. All O(n)-data approaches are infeasible (see `Random.lean`). Ideas: (1) **Sharded LDL^T** — O(n²) data, but verification parallelizable across ~10K subfiles with `decide +kernel`. (2) **Eigenspace sparsity** — if second eigenvalue has high multiplicity, sparse eigenvectors + complement bound. Both need feasibility analysis.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `CertificateBridge.lean` (sorry'd bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for the bridge theorem proof plan.
+
+**Bridge proof plan** (`docs/bridge-proof-plan.md`): Factor into three lemmas: (1) certificate → walk bound on mean-zero vectors [sorry'd, needs checker augmentation], (2) walk bound → `spectralGap` bound via `opNorm_le_bound` [provable, LOW risk], (3) coefficient arithmetic via `√` monotonicity [provable, LOW risk]. Key insight: avoid eigenvalue decomposition entirely — use quadratic forms on `1⊥` where `J` vanishes.

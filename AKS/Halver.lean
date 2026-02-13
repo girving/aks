@@ -10,7 +10,7 @@
   proof iteration on `halver_composition`.
 -/
 
-import AKS.Basic
+import AKS.ComparatorNetwork
 import AKS.RegularGraph
 
 open Finset BigOperators

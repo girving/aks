@@ -22,7 +22,10 @@
       "Bash(scripts/sorries)",
       "Bash(test *)",
       "Bash(uv run *)",
-      "Bash(wc *)"
+      "Bash(wc *)",
+      "Bash(lake env lean *)",
+      "Bash(cargo *)",
+      "Bash(rg *)"
     ]
   }
 }

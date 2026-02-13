@@ -8,6 +8,24 @@ Formal verification of the Ajtai–Komlós–Szemerédi (1983) O(n log n) sortin
 - **[References](REFERENCES.md)** — Papers and educational materials
 - **[CLAUDE.md](CLAUDE.md)** — Development guide for Claude Code
 
+## Setup
+
+Requires [elan](https://github.com/leanprover/elan) (Lean), [rustup](https://rustup.rs/) (Rust), and optionally [uv](https://github.com/astral-sh/uv) (Python scripts).
+
+**Linux (Ubuntu/Debian):**
+```bash
+curl https://elan.dev/install.sh -sSf | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  # system cargo is too old
+curl -LsSf https://astral.sh/uv/install.sh | sh  # optional
+```
+
+**macOS:**
+```bash
+brew install elan-init rust uv
+```
+
+Restart your shell after installing.
+
 ## Main Results
 
 - `AKS.size_nlogn` : The network has size O(n log n)

@@ -173,40 +173,62 @@ def format_diagnostic(d: dict) -> str:
 
 
 def check_file(filepath: str):
-    """Check a file and print results. Auto-starts daemon if needed."""
-    if not daemon_running():
-        if not start_daemon():
-            sys.exit(2)
-
+    """Check a single file. Returns (output_lines, error_count)."""
+    lines = []
     t0 = time.time()
     result = send_command({"command": "check", "file": filepath})
     wall_time = time.time() - t0
 
     if "error" in result:
-        print(f"Error: {result['error']}")
-        sys.exit(2)
+        lines.append(f"Error: {result['error']}")
+        return (lines, 1)
 
     diagnostics = result.get("diagnostics", [])
     server_time = result.get("time_seconds", "?")
     errors = [d for d in diagnostics if d.get("severity", 0) == 1]
     warnings = [d for d in diagnostics if d.get("severity", 0) == 2]
 
-    print(f"Checked {filepath} in {server_time}s (wall: {wall_time:.1f}s)")
+    lines.append(f"Checked {filepath} in {server_time}s (wall: {wall_time:.1f}s)")
 
     if errors:
-        print(f"\n{len(errors)} error(s):")
+        lines.append(f"\n{len(errors)} error(s):")
         for d in errors:
-            print(format_diagnostic(d))
+            lines.append(format_diagnostic(d))
 
     if warnings:
-        print(f"\n{len(warnings)} warning(s):")
+        lines.append(f"\n{len(warnings)} warning(s):")
         for d in warnings:
-            print(format_diagnostic(d))
+            lines.append(format_diagnostic(d))
 
     if not errors and not warnings:
-        print("No errors or warnings.")
+        lines.append("No errors or warnings.")
 
-    sys.exit(1 if errors else 0)
+    return (lines, len(errors))
+
+
+def check_files(filepaths: list):
+    """Check one or more files in parallel. Auto-starts daemon if needed."""
+    if not daemon_running():
+        if not start_daemon():
+            sys.exit(2)
+
+    if len(filepaths) == 1:
+        lines, errs = check_file(filepaths[0])
+        print("\n".join(lines))
+        sys.exit(1 if errs else 0)
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(filepaths)) as pool:
+        results = list(pool.map(check_file, filepaths))
+
+    total_errors = 0
+    for lines, errs in results:
+        print("\n".join(lines))
+        print()
+        total_errors += errs
+
+    sys.exit(1 if total_errors else 0)
 
 
 def find_project_files():
@@ -292,12 +314,14 @@ def main():
             sys.exit(2)
     elif arg == "--all":
         check_all()
-    elif arg.endswith(".lean"):
-        check_file(arg)
     else:
-        print(f"Unknown argument: {arg}")
-        print(__doc__)
-        sys.exit(1)
+        lean_files = [a for a in sys.argv[1:] if a.endswith(".lean")]
+        if lean_files:
+            check_files(lean_files)
+        else:
+            print(f"Unknown argument: {arg}")
+            print(__doc__)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
