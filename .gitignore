@@ -5,3 +5,5 @@ lake-manifest.json
 /tmp/lean-daemon.*
 .claude/*
 !.claude/settings.json
+data/
+scripts/compute-certificate/target/

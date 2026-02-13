@@ -13,7 +13,7 @@
   composition.
 -/
 
-import AKS.Basic
+import AKS.ComparatorNetwork
 import AKS.RegularGraph
 import AKS.Mixing
 

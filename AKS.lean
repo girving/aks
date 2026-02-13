@@ -9,6 +9,9 @@ import AKS.ZigZagOperators
 import AKS.ZigZagSpectral
 import AKS.RVWBound
 import AKS.ZigZag
+import AKS.Certificate
+import AKS.CertificateBridge
+import AKS.NpyReader
 
 
 /-- **Connection to AKS:** This result plugs directly into the
