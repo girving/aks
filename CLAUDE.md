@@ -322,6 +322,8 @@ No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGr
 
 **Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
 
+**Next task: Reformulate TreeSorting.lean** — Several lemma statements are mathematically incorrect (e.g., `exception_distance_bound` is provably false, `halver_implies_nearsort_property` conflates aggregate balance with positional damage). Full plan with code snippets: [`docs/plan-treesorting-reformulation.md`](docs/plan-treesorting-reformulation.md). Key idea: introduce `HasBoundedDamage` as the interface between halver world and tree-sorting world.
+
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
 ### Base expander certificate: open approaches
