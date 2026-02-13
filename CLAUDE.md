@@ -95,10 +95,10 @@ Sections build on each other sequentially:
 5. **Correctness** — `AKS.sorts`
 
 ### `AKS/Halver.lean` — ε-Halver Theory
-ε-halvers and their composition properties, the engine driving AKS correctness.
-Imports `RegularGraph.lean` for the expander → halver bridge:
-1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (takes `RegularGraph`), `epsHalverMerge`
-2. **Halver composition** — `IsEpsilonSorted`, `halver_composition` (geometric decrease), `halver_convergence`
+ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
+1. **ε-halvers** — `IsEpsilonHalver`, `expander_gives_halver` (proved), `epsHalverMerge`
+2. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
+Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here.
 
 ### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
@@ -185,7 +185,7 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
 
 ## Proof Workflow
 
-**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., `halver_composition` was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential. Read primary sources at the design stage.
+**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., the original single-halver composition approach was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential (now in `TreeSorting.lean`). Read primary sources at the design stage.
 
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
@@ -310,21 +310,19 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is now proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` — unused dead code, and `rvw_quadratic_ineq` — nlinarith exceeds heartbeat limit, needs manual polynomial factoring). Base expander: D=12, 20736 vertices, β ≤ 5/9.
+No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGraph` directly, no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: D=12, 20736 vertices, β ≤ 5/9. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all 16 ZigZagSpectral sublemmas, `meanCLM_idempotent`, `meanCLM_isSelfAdjoint`, `stepPermCLM_comp_meanCLM`
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all ZigZagOperators + ZigZagSpectral sublemmas (0 sorry each), `expander_gives_halver`, `displacement_from_wrongness`
 
-**Achievable (weeks):** `halver_convergence`
+**Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`
 
 **Achievable (days-weeks):** `rvw_quadratic_ineq` in RVWBound.lean (pure polynomial inequality, nlinarith exceeds heartbeat limit — needs manual factoring or polyrith)
 
-**Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
+**Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
 
-**Substantial (months):** `halver_composition` (combinatorial witness construction for approximate sortedness)
-
-**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, all-sizes interpolation in `explicit_expanders_exist_zigzag`
+**Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
 ### Base expander certificate: open approaches
 

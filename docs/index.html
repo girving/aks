@@ -183,33 +183,23 @@ const PROOF_DATA = {
       desc: "The AKS construction produces a valid sorting network." },
 
     // ── Halver.lean ──
-    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 30, status: "definition", kind: "def",
+    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 33, status: "definition", kind: "def",
       sig: "IsEpsilonHalver (net : ComparatorNetwork n) (ε : ℝ) : Prop",
       desc: "ε-halver: ones in top half ≤ totalOnes/2 + ε·(n/2)." },
-    { id: "expander_gives_halver", file: "AKS/Halver.lean", line: 247, status: "proved", kind: "theorem",
+    { id: "expander_gives_halver", file: "AKS/Halver.lean", line: 250, status: "proved", kind: "theorem",
       sig: "expander_gives_halver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d",
       desc: "An expander with spectral gap ≤ β yields a β-halver. Bridge from spectral to combinatorial. Proved via bipartite comparator construction + expander mixing lemma." },
-    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 363, status: "definition", kind: "def",
+    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 366, status: "definition", kind: "def",
       sig: "epsHalverMerge (n ε : ℝ) (k : ℕ) (halver : ComparatorNetwork n) : ComparatorNetwork n",
       desc: "Iterated halver merge: apply halver k times for geometric convergence." },
-    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 415, status: "definition", kind: "def",
+    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 418, status: "definition", kind: "def",
       sig: "IsEpsilonSorted (v : Fin n → Bool) (ε : ℝ) : Prop",
       desc: "ε-sortedness: at most ε·n elements are out of place." },
-    { id: "Monotone.bool_pattern", file: "AKS/Halver.lean", line: 429, status: "proved", kind: "lemma",
+    { id: "Monotone.bool_pattern", file: "AKS/Halver.lean", line: 432, status: "proved", kind: "lemma",
       sig: "Monotone.bool_pattern (w : Fin n → Bool) (hw : Monotone w) :\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w ⟨i, ·⟩ = false) ∧ (∀ i, k ≤ i → w ⟨i, ·⟩ = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: a prefix of falses followed by trues. Threshold found via Nat.find." },
-    { id: "wrongness", file: "AKS/Halver.lean", line: 606, status: "definition", kind: "def",
-      sig: "wrongness (v w : Fin n → Bool) (hw : Monotone w) : ℝ",
-      desc: "Wrongness measure: fraction of positions where v disagrees with monotone witness w." },
-    { id: "halver_decreases_wrongness", file: "AKS/Halver.lean", line: 662, status: "sorry", kind: "lemma",
-      sig: "halver_decreases_wrongness : wrongness (net.exec v) w₂ hw₂ ≤ 2 * ε * wrongness v w₁ hw₁ + ε",
-      desc: "Applying an ε-halver decreases the wrongness measure. NOTE: likely unprovable as stated for single halver application (counterexample: alternating sequence).", difficulty: "weeks" },
-    { id: "halver_composition", file: "AKS/Halver.lean", line: 689, status: "sorry", kind: "theorem",
-      sig: "halver_composition : IsEpsilonSorted (net.exec v) (δ * 2 * ε)",
-      desc: "Composing an ε-halver with a δ-sorted input gives (2εδ)-sorted output. NOTE: likely unprovable for single application; AKS uses iterated tree-based approach instead.", difficulty: "months" },
-    { id: "halver_convergence", file: "AKS/Halver.lean", line: 734, status: "sorry", kind: "theorem",
-      sig: "halver_convergence : ∀ v, ∃ net, Monotone (net.exec v)",
-      desc: "Repeated halving converges to a sorting network when 2ε < 1.", difficulty: "weeks" },
+    // NOTE: wrongness, halver_decreases_wrongness, halver_composition, halver_convergence
+    // have been deleted — superseded by tree-based approach in TreeSorting.lean
 
     // ── ZigZagOperators.lean ──
     { id: "RegularGraph.zigzag", file: "AKS/ZigZagOperators.lean", line: 284, status: "definition", kind: "def",
@@ -403,15 +393,7 @@ const PROOF_DATA = {
     ["IsEpsilonHalver", "epsHalverMerge"],
     ["ComparatorNetwork", "epsHalverMerge"],
     ["IsEpsilonSorted", "Monotone.bool_pattern"],
-    ["IsEpsilonSorted", "wrongness"],
-    ["Monotone.bool_pattern", "halver_decreases_wrongness"],
-    ["wrongness", "halver_decreases_wrongness"],
-    ["IsEpsilonHalver", "halver_decreases_wrongness"],
-    ["halver_decreases_wrongness", "halver_composition"],
-    ["IsEpsilonSorted", "halver_composition"],
-    ["IsEpsilonHalver", "halver_composition"],
-    ["halver_composition", "halver_convergence"],
-    ["epsHalverMerge", "halver_convergence"],
+    // Edges to deleted nodes (wrongness, halver_composition, etc.) removed
 
     // Zig-zag operators
     ["RegularGraph", "RegularGraph.zigzag"],
@@ -496,10 +478,10 @@ const PROOF_DATA = {
 
     // Top-level AKS construction
     ["zero_one_principle", "AKS.sorts"],
-    ["halver_convergence", "AKS.sorts"],
+    ["aks_tree_sorting", "AKS.sorts"],
     ["AKS", "AKS.sorts"],
     ["IsSortingNetwork", "AKS.sorts"],
-    ["halver_convergence", "AKS"],
+    ["aks_tree_sorting", "AKS"],
     ["expander_gives_halver", "AKS"],
     ["epsHalverMerge", "AKS"],
     ["AKS", "AKS.size_nlogn"],
@@ -528,8 +510,8 @@ const PROOF_DATA = {
     ["treeWrongness", "zig_step_bounded_increase"],
     ["comparator_displacement_bound", "zig_step_bounded_increase"],
 
-    // TreeSorting — edges TO main proof chain (tree sorting proves convergence)
-    ["zig_step_bounded_increase", "halver_convergence"]
+    // TreeSorting — edges TO main proof chain
+    ["aks_tree_sorting", "AKS.sorts"]
   ],
 
   // File groupings with display names
