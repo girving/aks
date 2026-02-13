@@ -70,13 +70,16 @@ theorem clusterMean_comp_withinCluster {n₁ d₁ d₂ : ℕ}
   ext f vk
   simp only [ContinuousLinearMap.mul_apply, clusterMeanCLM_apply,
              withinClusterCLM_apply, cluster_encode, port_encode]
-  -- LHS: ∑ i, ((∑ j, f (encode (cluster vk) (G₂.neighbor i j))) / d₂) / d₁
-  rw [Finset.sum_div, Finset.sum_div]
-  congr 1
-  -- Show: ∑ i, ∑ j, f (encode (cluster vk) (G₂.neighbor i j)) = d₂ · ∑ i, f (encode (cluster vk) i)
-  -- By rotation bijection: varying (i,j) ∈ Fin d₁ × Fin d₂,
-  -- {G₂.neighbor i j} covers each port exactly d₂ times
-  sorry
+  -- LHS: (∑ i, (∑ j, f (encode (cluster vk) (G₂.neighbor i j))) / d₂) / d₁
+  -- RHS: (∑ i, f (encode (cluster vk) i)) / d₁
+  -- Use rotation bijection to show inner sums equal full sum
+  have h := RegularGraph.sum_neighbor_eq G₂ (fun k => f.ofLp (encode (cluster hd₁ vk) k))
+  calc (∑ i, (∑ j, f.ofLp (encode (cluster hd₁ vk) (G₂.neighbor i j))) / ↑d₂) / ↑d₁
+      = (∑ i, (∑ j, f.ofLp (encode (cluster hd₁ vk) (G₂.neighbor i j)))) / ↑d₂ / ↑d₁ := by rw [← Finset.sum_div]
+    _ = (∑ i, ∑ _j, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₂ / ↑d₁ := by rw [h]
+    _ = (∑ i, d₂ • f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₂ / ↑d₁ := by simp [Finset.sum_const]
+    _ = (d₂ • ∑ i, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₂ / ↑d₁ := by rw [Finset.smul_sum]
+    _ = (∑ i, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₁ := by simp; field_simp
 
 /-- The within-cluster walk is a contraction: `‖B‖ ≤ 1`. -/
 theorem withinClusterCLM_norm_le_one {n₁ d₁ d₂ : ℕ}
@@ -148,11 +151,17 @@ theorem meanCLM_eq_clusterMean_comp {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
   ext f vk
   simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, clusterMeanCLM_apply]
   -- LHS: (∑ j, ((∑ i, f (encode (cluster j) i)) / d₁)) / (n₁ * d₁)
-  -- Reorganize the double sum
-  rw [Finset.sum_div]
-  -- Show: ∑ j, ∑ i, f (encode (cluster j) i) = ∑ k, f k
-  -- This follows from encode being a bijection from (v, i) to the product space
-  sorry
+  -- RHS: (∑ k, f k) / (n₁ * d₁)
+  -- Key: as j ranges over Fin (n₁ * d₁), cluster j takes each value in Fin n₁ exactly d₁ times
+  congr 1
+  calc ∑ j, (∑ i, f.ofLp (encode (cluster hd₁ j) i)) / ↑d₁
+      = (∑ j, ∑ i, f.ofLp (encode (cluster hd₁ j) i)) / ↑d₁ := by rw [← Finset.sum_div]
+    _ = (d₁ • ∑ v, ∑ i, f.ofLp (encode v i)) / ↑d₁ := by
+        congr 1
+        -- Group by cluster: ∑ j ... = d₁ · ∑ v ...
+        exact sum_over_cluster hd₁ (fun v => ∑ i, f.ofLp (encode v i))
+    _ = ∑ v, ∑ i, f.ofLp (encode v i) := by simp; field_simp
+    _ = ∑ k, f.ofLp k := sum_encode_eq_sum hd₁ _
 
 theorem clusterMean_comp_meanCLM {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     clusterMeanCLM (n₁ := n₁) hd₁ *

@@ -45,6 +45,33 @@ theorem encode_cluster_port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁
     encode (cluster hd₁ vk) (port hd₁ vk) = vk :=
   fin_div_add_mod vk _
 
+/-- Summing over the product space via encode equals summing over all indices.
+    This is the bijection between Fin n₁ × Fin d₁ and Fin (n₁ * d₁). -/
+theorem sum_encode_eq_sum {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (f : Fin (n₁ * d₁) → ℝ) :
+    ∑ v : Fin n₁, ∑ i : Fin d₁, f (encode v i) = ∑ k : Fin (n₁ * d₁), f k := by
+  simp_rw [← Fintype.sum_prod_type']
+  -- Use Finset.sum_bij' to show bijection
+  refine Finset.sum_bij' (fun (p : Fin n₁ × Fin d₁) _ => encode p.1 p.2)
+    (fun k _ => (cluster hd₁ k, port hd₁ k))
+    (fun _ _ => Finset.mem_univ _)
+    (fun _ _ => Finset.mem_univ _)
+    (fun p _ => ?_)
+    (fun k _ => encode_cluster_port hd₁ k)
+    (fun p _ => ?_)
+  · simp [cluster_encode, port_encode]
+  · rfl
+
+/-- Summing a function of cluster over all product indices counts each cluster d₁ times. -/
+theorem sum_over_cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (g : Fin n₁ → ℝ) :
+    ∑ j : Fin (n₁ * d₁), g (cluster hd₁ j) = d₁ • ∑ v : Fin n₁, g v := by
+  -- Rewrite using encode/cluster/port bijection
+  conv_lhs => rw [← sum_encode_eq_sum hd₁ (fun j => g (cluster hd₁ j))]
+  simp only [cluster_encode]
+  -- Now LHS = ∑ v, ∑ i, g v
+  rw [show ∑ v, ∑ _i : Fin d₁, g v = ∑ v, d₁ • g v by
+    congr 1; ext v; rw [Finset.sum_const, Finset.card_fin]]
+  rw [Finset.smul_sum]
+
 
 /-! **Within-Cluster Walk Operator (B = I ⊗ W_{G₂})** -/
 
