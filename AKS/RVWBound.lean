@@ -858,6 +858,208 @@ private lemma tilde_contraction_bound {n : ℕ}
     rw [mul_sub, mul_one, hQ_proj, sub_self, ContinuousLinearMap.zero_apply]
   exact h_tilde ((1 - Q) x) hker
 
+/-- For a self-adjoint involution Σ, `|⟨Σv, v⟩| ≤ ‖v‖²`. -/
+private lemma reflection_rayleigh_le_norm_sq {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (v : EuclideanSpace ℝ (Fin n)) :
+    |@inner ℝ _ _ (Sig v) v| ≤ ‖v‖ ^ 2 := by
+  calc |@inner ℝ _ _ (Sig v) v|
+      ≤ ‖Sig v‖ * ‖v‖ := abs_real_inner_le_norm _ _
+    _ ≤ ‖Sig‖ * ‖v‖ * ‖v‖ := by gcongr; exact ContinuousLinearMap.le_opNorm _ _
+    _ ≤ 1 * ‖v‖ * ‖v‖ := by gcongr; exact involution_norm_le_one Sig hSig_inv hSig_sa
+    _ = ‖v‖ ^ 2 := by ring
+
+/-- Bilinear expansion of `⟨Σ(u+w), u+w⟩` using `Σ* = Σ`. -/
+private lemma reflection_bilinear_expand {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_sa : IsSelfAdjoint Sig)
+    (u w : EuclideanSpace ℝ (Fin n)) :
+    @inner ℝ _ _ (Sig (u + w)) (u + w) =
+      @inner ℝ _ _ (Sig u) u + 2 * @inner ℝ _ _ (Sig u) w +
+      @inner ℝ _ _ (Sig w) w := by
+  rw [map_add, inner_add_left, inner_add_right, inner_add_right]
+  -- ⟨Σw, u⟩ = ⟨w, Σu⟩ = ⟨Σu, w⟩ by self-adjointness (real space)
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hSig_sa
+  have h_symm : @inner ℝ _ _ (Sig w) u = @inner ℝ _ _ (Sig u) w :=
+    (hSig_sa w u).trans (real_inner_comm _ _)
+  rw [h_symm]; ring
+
+/-- Helper: `Σ²v = v` from `Σ * Σ = 1`. -/
+private lemma involution_apply_twice {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_inv : Sig * Sig = 1)
+    (v : EuclideanSpace ℝ (Fin n)) : Sig (Sig v) = v := by
+  have := ContinuousLinearMap.ext_iff.mp hSig_inv v
+  simpa using this
+
+/-- Helper: `‖Σv‖ = ‖v‖` from `Σ² = I` and `Σ* = Σ`. -/
+private lemma involution_norm_eq {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (v : EuclideanSpace ℝ (Fin n)) : ‖Sig v‖ = ‖v‖ := by
+  have h := involution_norm_le_one Sig hSig_inv hSig_sa
+  have h1 : ‖Sig v‖ ≤ ‖v‖ := by
+    calc ‖Sig v‖ ≤ ‖Sig‖ * ‖v‖ := ContinuousLinearMap.le_opNorm _ _
+      _ ≤ 1 * ‖v‖ := by gcongr
+      _ = ‖v‖ := one_mul _
+  have h2 : ‖v‖ ≤ ‖Sig v‖ := by
+    calc ‖v‖ = ‖Sig (Sig v)‖ := by rw [involution_apply_twice Sig hSig_inv]
+      _ ≤ ‖Sig‖ * ‖Sig v‖ := ContinuousLinearMap.le_opNorm _ _
+      _ ≤ 1 * ‖Sig v‖ := by gcongr
+      _ = ‖Sig v‖ := one_mul _
+  exact le_antisymm h1 h2
+
+/-- Cauchy-Schwarz via `(I+Σ)`: `q² ≤ (‖u‖²+p)(‖w‖²+r)` for orthogonal u, w.
+
+    **Proof sketch:** Expand `⟨u+Σu, w+Σw⟩` using `⟨u,w⟩ = 0` and
+    `⟨Σu,Σw⟩ = ⟨u,Σ²w⟩ = ⟨u,w⟩ = 0` to get `2q`. Expand `‖u+Σu‖²`
+    using `‖Σu‖² = ‖u‖²` to get `2(a²+p)`. Apply Cauchy-Schwarz. -/
+private lemma reflection_cs_plus {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (u w : EuclideanSpace ℝ (Fin n)) (h_orth : @inner ℝ _ _ u w = 0) :
+    (@inner ℝ _ _ (Sig u) w) ^ 2 ≤
+      (‖u‖ ^ 2 + @inner ℝ _ _ (Sig u) u) *
+      (‖w‖ ^ 2 + @inner ℝ _ _ (Sig w) w) := by
+  set q := @inner ℝ _ _ (Sig u) w
+  set p := @inner ℝ _ _ (Sig u) u
+  set r := @inner ℝ _ _ (Sig w) w
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hSig_sa
+  have hSS := involution_apply_twice Sig hSig_inv
+  have h_uSw : @inner ℝ _ _ u (Sig w) = q := (hSig_sa u w).symm
+  have h_sig_orth : @inner ℝ _ _ (Sig u) (Sig w) = 0 := by
+    calc @inner ℝ _ _ (Sig u) (Sig w)
+        = @inner ℝ _ _ u (Sig (Sig w)) := hSig_sa u (Sig w)
+      _ = @inner ℝ _ _ u w := by rw [hSS]
+      _ = 0 := h_orth
+  -- ⟨u+Σu, w+Σw⟩ = 0 + q + q + 0 = 2q
+  have h_inner : @inner ℝ _ _ (u + Sig u) (w + Sig w) = 2 * q := by
+    simp only [inner_add_left, inner_add_right]
+    rw [h_orth, h_uSw, h_sig_orth]; ring
+  -- ‖u+Σu‖² = 2(a² + p)
+  have h_norm_u : ‖u + Sig u‖ ^ 2 = 2 * (‖u‖ ^ 2 + p) := by
+    rw [norm_add_sq_real]
+    have h1 : @inner ℝ _ _ u (Sig u) = p := by rw [real_inner_comm]
+    have h2 : ‖Sig u‖ = ‖u‖ := involution_norm_eq Sig hSig_inv
+      (by rwa [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]) u
+    rw [h1, h2]; ring
+  -- ‖w+Σw‖² = 2(c² + r)
+  have h_norm_w : ‖w + Sig w‖ ^ 2 = 2 * (‖w‖ ^ 2 + r) := by
+    rw [norm_add_sq_real]
+    have h1 : @inner ℝ _ _ w (Sig w) = r := by rw [real_inner_comm]
+    have h2 : ‖Sig w‖ = ‖w‖ := involution_norm_eq Sig hSig_inv
+      (by rwa [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]) w
+    rw [h1, h2]; ring
+  -- Cauchy-Schwarz: |⟨u+Σu, w+Σw⟩|² ≤ ‖u+Σu‖² · ‖w+Σw‖²
+  have hCS := abs_real_inner_le_norm (u + Sig u) (w + Sig w)
+  rw [h_inner] at hCS
+  -- From |2q| ≤ M: both M - 2q ≥ 0 and M + 2q ≥ 0
+  set M := ‖u + Sig u‖ * ‖w + Sig w‖ with hM_def
+  have hM_nonneg : 0 ≤ M := mul_nonneg (norm_nonneg _) (norm_nonneg _)
+  have hCS_le := (abs_le.mp hCS)
+  -- (M - 2q)(M + 2q) = M² - 4q² ≥ 0
+  have h_prod_nonneg : 0 ≤ M ^ 2 - (2 * q) ^ 2 := by
+    have : 0 ≤ (M - 2 * q) * (M + 2 * q) :=
+      mul_nonneg (by linarith [hCS_le.2]) (by linarith [hCS_le.1])
+    nlinarith
+  -- M² = ‖u+Σu‖² · ‖w+Σw‖² = 2(a²+p) · 2(c²+r)
+  have hM_sq : M ^ 2 = 2 * (‖u‖ ^ 2 + p) * (2 * (‖w‖ ^ 2 + r)) := by
+    rw [hM_def, mul_pow, h_norm_u, h_norm_w]
+  rw [hM_sq] at h_prod_nonneg
+  -- 0 ≤ 4(a²+p)(c²+r) - 4q², hence q² ≤ (a²+p)(c²+r)
+  nlinarith
+
+/-- Cauchy-Schwarz via `(I-Σ)`: `q² ≤ (‖u‖²-p)(‖w‖²-r)` for orthogonal u, w. -/
+private lemma reflection_cs_minus {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (u w : EuclideanSpace ℝ (Fin n)) (h_orth : @inner ℝ _ _ u w = 0) :
+    (@inner ℝ _ _ (Sig u) w) ^ 2 ≤
+      (‖u‖ ^ 2 - @inner ℝ _ _ (Sig u) u) *
+      (‖w‖ ^ 2 - @inner ℝ _ _ (Sig w) w) := by
+  set q := @inner ℝ _ _ (Sig u) w
+  set p := @inner ℝ _ _ (Sig u) u
+  set r := @inner ℝ _ _ (Sig w) w
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hSig_sa
+  have hSS := involution_apply_twice Sig hSig_inv
+  -- ⟨u, Σw⟩ = q and ⟨Σu, Σw⟩ = 0 (same as cs_plus)
+  have h_uSw : @inner ℝ _ _ u (Sig w) = q := (hSig_sa u w).symm
+  have h_sig_orth : @inner ℝ _ _ (Sig u) (Sig w) = 0 := by
+    calc @inner ℝ _ _ (Sig u) (Sig w)
+        = @inner ℝ _ _ u (Sig (Sig w)) := hSig_sa u (Sig w)
+      _ = @inner ℝ _ _ u w := by rw [hSS]
+      _ = 0 := h_orth
+  -- ⟨u-Σu, w-Σw⟩ = 0 - (-q) + (-q) + 0 = -2q (note the sign!)
+  -- Actually: ⟨u-Σu, w-Σw⟩ = ⟨u,w⟩ - ⟨u,Σw⟩ - ⟨Σu,w⟩ + ⟨Σu,Σw⟩ = 0 - q - q + 0 = -2q
+  have h_inner : @inner ℝ _ _ (u - Sig u) (w - Sig w) = -(2 * q) := by
+    simp only [inner_sub_left, inner_sub_right]
+    rw [h_orth, h_uSw, h_sig_orth]; ring
+  -- ‖u-Σu‖² = ‖u‖² - 2⟨u,Σu⟩ + ‖Σu‖² = 2(a² - p)
+  have h_norm_u : ‖u - Sig u‖ ^ 2 = 2 * (‖u‖ ^ 2 - p) := by
+    rw [norm_sub_sq_real]
+    have h1 : @inner ℝ _ _ u (Sig u) = p := by rw [real_inner_comm]
+    have h2 : ‖Sig u‖ = ‖u‖ := involution_norm_eq Sig hSig_inv
+      (by rwa [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]) u
+    rw [h1, h2]; ring
+  -- ‖w-Σw‖² = 2(c² - r)
+  have h_norm_w : ‖w - Sig w‖ ^ 2 = 2 * (‖w‖ ^ 2 - r) := by
+    rw [norm_sub_sq_real]
+    have h1 : @inner ℝ _ _ w (Sig w) = r := by rw [real_inner_comm]
+    have h2 : ‖Sig w‖ = ‖w‖ := involution_norm_eq Sig hSig_inv
+      (by rwa [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]) w
+    rw [h1, h2]; ring
+  -- Cauchy-Schwarz on (u-Σu, w-Σw)
+  have hCS := abs_real_inner_le_norm (u - Sig u) (w - Sig w)
+  rw [h_inner] at hCS
+  set M := ‖u - Sig u‖ * ‖w - Sig w‖ with hM_def
+  have hM_nonneg : 0 ≤ M := mul_nonneg (norm_nonneg _) (norm_nonneg _)
+  have hCS_le := (abs_le.mp hCS)
+  have h_prod_nonneg : 0 ≤ M ^ 2 - (-(2 * q)) ^ 2 := by
+    have : 0 ≤ (M - -(2 * q)) * (M + -(2 * q)) :=
+      mul_nonneg (by linarith [hCS_le.2]) (by linarith [hCS_le.1])
+    nlinarith
+  have hM_sq : M ^ 2 = 2 * (‖u‖ ^ 2 - p) * (2 * (‖w‖ ^ 2 - r)) := by
+    rw [hM_def, mul_pow, h_norm_u, h_norm_w]
+  rw [hM_sq] at h_prod_nonneg
+  nlinarith
+
+/-- **Pure real-analysis optimization bound** (RVW Section 4.2, algebraic core).
+
+Given real numbers `a, b, c, p, q, r` representing:
+- `a = ‖û‖`, `b = ‖x̃‖`, `c = ‖w‖` where `w = Bx̃`
+- `p = ⟨Σû, û⟩`, `q = ⟨Σû, w⟩`, `r = ⟨Σw, w⟩`
+
+The constraints come from the reflection geometry of `Σ` (Σ² = I, Σ* = Σ):
+- `a² + b² = 1` (Pythagorean decomposition of unit vector)
+- `c ≤ λ₂ · b` (tilde contraction)
+- `|p| ≤ λ₁ · a²` (hat block spectral gap)
+- `|p| ≤ a²` and `|r| ≤ c²` (reflection Rayleigh bounds: `|⟨Σv,v⟩| ≤ ‖v‖²`)
+- `q² ≤ (a²+p)(c²+r)` (Cauchy-Schwarz on `(I+Σ)` applied to orthogonal u, w)
+- `q² ≤ (a²-p)(c²-r)` (Cauchy-Schwarz on `(I-Σ)` applied to orthogonal u, w)
+
+The two Cauchy-Schwarz constraints together prevent the cross term `q` from being
+large simultaneously with `p`, which is why the bound is tighter than `λ₁ + λ₂`.
+
+The proof is a two-case trigonometric optimization (RVW Section 4.2). -/
+private lemma rvw_optimization_bound
+    (a b c p q r lam₁ lam₂ : ℝ)
+    (ha : 0 ≤ a) (hb : 0 ≤ b) (hc : 0 ≤ c)
+    (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (h_unit : a ^ 2 + b ^ 2 = 1)
+    (h_tilde : c ≤ lam₂ * b)
+    (h_hat : |p| ≤ lam₁ * a ^ 2)
+    (h_refl_u : |p| ≤ a ^ 2)
+    (h_refl_w : |r| ≤ c ^ 2)
+    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
+    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
+    |p + 2 * q + r| ≤ rvwBound lam₁ lam₂ := by
+  -- This is a pure real-analysis optimization problem.
+  -- The RVW paper solves it via a two-case trigonometric argument
+  -- (Case I: φ' ≤ min(ψ, π/2-ψ); Case II: otherwise).
+  -- Both cases yield a bound ≤ rvwBound(λ₁, λ₂).
+  sorry
+
 /-- The reflection–Rayleigh quotient bound (RVW section 4.2).
 
 For a self-adjoint involution `Σ` (a reflection: `Σ² = I`, `Σ* = Σ`) and orthogonal
@@ -874,15 +1076,16 @@ cannot simultaneously achieve their maxima because `Σ` is a reflection:
 `⟨Σv, v⟩ = cos(2θ) · ‖v‖²` for some angle `θ`. The cross terms are
 constrained by the hat term through the reflection geometry.
 
-**RVW proof strategy (section 4.2):**
-1. Since `Σ² = I` and `Σ* = Σ`, the space decomposes into `±1`-eigenspaces
-   `S ⊕ S⊥`. For any `v`: `⟨Σv, v⟩ = cos(2θ) · ‖v‖²` where `θ` is
-   the angle of `v` from `S`.
-2. Express the Rayleigh quotient as `|cos 2θ| · cos²φ / cos²φ'` where
-   `φ`, `φ'` are angles related to `u/(u+w̃)` and `u/(u+w)`.
-3. The constraints translate to `tan φ'/tan φ ≤ λ₂` and `|cos 2ψ| ≤ λ₁`.
-4. Two-case optimization (depending on whether `|cos 2x|` achieves 1 in
-   `[ψ-φ', ψ+φ']`) yields `rvwBound` in both cases.
+**Proof strategy (algebraic, avoiding trigonometry):**
+1. Bilinear expansion: `⟨Σ(u+w), u+w⟩ = p + 2q + r` where `p = ⟨Σu,u⟩`,
+   `q = ⟨Σu,w⟩`, `r = ⟨Σw,w⟩` (using `Σ* = Σ`).
+2. Reflection bounds: `|p| ≤ ‖u‖²`, `|r| ≤ ‖w‖²` (from `‖Σ‖ ≤ 1`).
+3. Key Cauchy-Schwarz constraints from the reflection structure:
+   - `q² ≤ (‖u‖²+p)(‖w‖²+r)` via `(I+Σ)`: expand `⟨(I+Σ)u, (I+Σ)w⟩ = 2q`
+   - `q² ≤ (‖u‖²-p)(‖w‖²-r)` via `(I-Σ)`: expand `⟨(I-Σ)u, (I-Σ)w⟩ = -2q`
+   These two constraints together prevent `q` from being large simultaneously
+   with `p`, which is the key geometric insight.
+4. Reduce to `rvw_optimization_bound`: a pure real-analysis optimization.
 -/
 private lemma reflection_quadratic_bound {n : ℕ}
     (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
@@ -894,10 +1097,26 @@ private lemma reflection_quadratic_bound {n : ℕ}
     (h_hat : |@inner ℝ _ _ (Sig u) u| ≤ lam₁ * ‖u‖ ^ 2)
     (h_tilde_norm : ‖w‖ ≤ lam₂ * b) :
     |@inner ℝ _ _ (Sig (u + w)) (u + w)| ≤ rvwBound lam₁ lam₂ := by
-  -- This is the mathematical core of RVW (2002) Section 4.2.
-  -- The proof uses the reflection structure of Σ and a geometric
-  -- two-case optimization over angles. See the paper for details.
-  sorry
+  -- Set up the real variables for the optimization bound
+  set a := ‖u‖
+  set c := ‖w‖
+  set p := @inner ℝ _ _ (Sig u) u
+  set q := @inner ℝ _ _ (Sig u) w
+  set r := @inner ℝ _ _ (Sig w) w
+  -- Step 1: Bilinear expansion ⟨Σ(u+w), u+w⟩ = p + 2q + r
+  have h_expand := reflection_bilinear_expand Sig hSig_sa u w
+  rw [h_expand]
+  -- Step 2: Gather all constraints
+  have ha : 0 ≤ a := norm_nonneg _
+  have hc : 0 ≤ c := norm_nonneg _
+  have h_refl_u := reflection_rayleigh_le_norm_sq Sig hSig_inv hSig_sa u
+  have h_refl_w := reflection_rayleigh_le_norm_sq Sig hSig_inv hSig_sa w
+  have h_cs_plus := reflection_cs_plus Sig hSig_inv hSig_sa u w h_orth
+  have h_cs_minus := reflection_cs_minus Sig hSig_inv hSig_sa u w h_orth
+  -- Step 3: Apply the pure real optimization bound
+  exact rvw_optimization_bound a b c p q r lam₁ lam₂
+    ha hb hc hlam₁ hlam₂ h_unit h_tilde_norm h_hat h_refl_u h_refl_w
+    h_cs_plus h_cs_minus
 
 /-- **The core RVW operator norm bound (abstract).**
 
