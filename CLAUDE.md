@@ -197,6 +197,8 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 **When a user suggests an approach or lesson, rephrase it for CLAUDE.md** rather than copying verbatim. Lessons should be concise, actionable, and fit the existing style. This also applies to self-generated lessons: distill the insight before recording it.
 
+**Work autonomously on low-risk tasks once the path is clear.** Once a problem has been reduced to well-understood, low-failure-risk work (e.g., "pure Mathlib interfacing", "straightforward type bridging", "standard matrix computation"), continue working autonomously rather than checking in frequently for approval. Check in less on the margin. Signs that autonomous work is appropriate: (1) the mathematical content is complete and only engineering remains, (2) you have a clear strategy with low risk of fundamental blockers, (3) the task involves assembling existing components rather than creating new theory, (4) failure modes are recoverable (e.g., finding the right Mathlib lemma vs. proving something potentially false). Still check in when: hitting unexpected fundamental obstacles, discovering the approach won't work, or completing major milestones. The user prefers progress over permission when risk is low.
+
 ## Proof Tactics
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here (not in auto memory). This file is the single source of truth for accumulated lessons, so they persist across machines.
