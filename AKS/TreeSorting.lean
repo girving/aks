@@ -273,12 +273,43 @@ lemma parent_of_child {node : TreeNode} (hi : node.level > 0) :
 
 /-! **Tree Distance** -/
 
+/-- Helper: bring a node up to a target level by going to ancestors. -/
+def raiseToLevel (node : TreeNode) (targetLevel : ℕ) (h : targetLevel ≤ node.level) : TreeNode :=
+  if heq : targetLevel = node.level then node
+  else
+    if hgt : node.level > 0 then
+      -- Go up one level and recurse
+      have : node.level - 1 - targetLevel < node.level - targetLevel := by sorry
+      raiseToLevel (node.parent hgt) targetLevel (by sorry)
+    else
+      -- Can't go higher, return current node (shouldn't happen with h)
+      node
+  termination_by node.level - targetLevel
+
+/-- Find common ancestor of two nodes.
+    First bring both to same level, then go up together. -/
+def commonAncestor (node₁ node₂ : TreeNode) : TreeNode :=
+  -- Bring both to same level
+  if node₁.level < node₂.level then
+    let node₂' := raiseToLevel node₂ node₁.level (by sorry)
+    -- Now both at node₁.level, find common ancestor
+    sorry
+  else if node₂.level < node₁.level then
+    let node₁' := raiseToLevel node₁ node₂.level (by sorry)
+    sorry
+  else
+    -- Same level, check if same node
+    if node₁.index = node₂.index then
+      node₁
+    else
+      -- Go up until indices match
+      sorry
+
 /-- Distance between two tree nodes (minimum path length in the tree).
-    This is the sum of levels needed to reach common ancestor. -/
+    This is the sum of steps from each node to their common ancestor. -/
 def treeDistance (node₁ node₂ : TreeNode) : ℕ :=
-  -- Find common ancestor and sum distances
-  -- For now, placeholder implementation
-  sorry
+  let ancestor := commonAncestor node₁ node₂
+  (node₁.level - ancestor.level) + (node₂.level - ancestor.level)
 
 /-- Distance from a node to an interval (minimum distance to any node containing
     a part of the interval). -/
@@ -368,4 +399,124 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (v : Fin n → Bool) (J : Int
 lemma tree_wrongness_implies_sorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ)
     (h : ∀ J : Interval n, simpleDisplacement v J ≤ ε) :
     IsEpsilonSorted v ε := by
+  sorry
+
+/-! **The Four Key Lemmas (AKS Section 8)** -/
+
+/-- **Lemma 1: Register Reassignment** (AKS page 8)
+
+    When time advances from t to t+1 and registers are reassigned to new
+    intervals, the wrongness can increase. This lemma bounds the increase.
+
+    Δ'ᵣ < 6A·Δᵣ₋₄  (for wrongness)
+    δ' < 6A·(δ + ε)  (for displacement)
+
+    Intuition: Register intervals move at most 2 levels down the tree,
+    so distance-r wrongness becomes at most distance-(r-4) wrongness after
+    reassignment (since 2 level moves = at most 4 distance change). -/
+lemma register_reassignment_increases_wrongness
+    {n t : ℕ} (v v' : Fin n → Bool) (J J' : Interval n) (r : ℕ) (ε : ℝ)
+    (h_reassign : sorry)  -- v' is v after reassignment from time t to t+1
+    (hr : r ≥ 4) :
+    treeWrongness n (t+1) v' J' r ≤ 6 * A * treeWrongness n t v J (r - 4) := by
+  sorry
+
+/-- **Lemma 2: Single Zig or Zag Step** (AKS page 8)
+
+    Applying ε-nearsort to a cherry (parent + two children intervals)
+    increases wrongness slightly but bounded by ε.
+
+    Δ'ᵣ < 8A·(Δᵣ + ε·Δᵣ₋₂)  (for r ≥ 3)
+    Δ'ᵣ < 8A·(Δᵣ + ε)      (for r = 1,2)
+    δ' < 4A·(δ + ε)
+
+    Intuition: ε-nearsort forces elements toward correct sides. Most
+    elements move correctly (bounded by Δᵣ), except ε fraction which
+    are "exceptional" and contribute the ε·Δᵣ₋₂ or ε terms.
+
+    This is where the halver property connects to wrongness decrease! -/
+lemma zig_step_bounded_increase
+    {n t : ℕ} (v v' : Fin n → Bool) (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (r : ℕ) (J : Interval n)
+    (h_zig : sorry)  -- v' = net.exec v on cherry containing J
+    :
+    treeWrongness n t v' J r ≤
+      8 * A * (treeWrongness n t v J r +
+               if r ≥ 3 then ε * treeWrongness n t v J (r - 2)
+               else ε) := by
+  sorry
+
+/-- **Lemma 3: ZigZag Combined Step** (AKS page 8)
+
+    Combining a Zig step and a Zag step (alternating even/odd levels)
+    gives STRICT DECREASE in wrongness.
+
+    Δ'ᵣ < 64A²·(Δᵣ₊₁ + 3ε·Δᵣ₋₄)  (for r ≥ 5)
+    Δ'ᵣ < 64A²·(Δᵣ₊₁ + 3ε)      (for r = 1,2,3,4)
+    δ' < 16A²·(δ + 2ε)
+
+    KEY INSIGHT: If interval J was closest to section L in Zig step,
+    then it will NOT be nearest in Zag step (due to alternation).
+    Thus wrongness strictly decreases, not just stays bounded!
+
+    This is the geometric decrease mechanism! -/
+lemma zigzag_decreases_wrongness
+    {n t : ℕ} (v v'' : Fin n → Bool) (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (r : ℕ) (J : Interval n)
+    (h_zigzag : sorry)  -- v'' is v after full Zig-Zag cycle
+    :
+    treeWrongness n t v'' J r ≤
+      64 * A^2 * (treeWrongness n t v J (r + 1) +
+                  if r ≥ 5 then 3 * ε * treeWrongness n t v J (r - 4)
+                  else 3 * ε) := by
+  sorry
+
+/-- **Lemma 4: Displacement from Wrongness** (AKS page 8-9, Equation 4)
+
+    Simple displacement δ(J) is bounded by sum over all wrongness levels:
+
+    δ < 10·(Δ₀·ε + Σᵣ≥₁ (4A)ʳ·Δᵣ)
+
+    This connects the tree-based wrongness measure (Δᵣ) back to
+    simple positional displacement (δ).
+
+    Intuition: Elements at wrong levels r accumulate at interval fringes.
+    The (4A)ʳ factor comes from how much wrong elements at distance r
+    can contribute to overall displacement. -/
+lemma displacement_from_wrongness
+    {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (ε : ℝ) :
+    simpleDisplacement v J ≤
+      10 * (treeWrongness n t v J 0 * ε +
+            (Finset.range 50).sum (fun r =>
+              (4 * A : ℝ) ^ (r + 1) * treeWrongness n t v J (r + 1))) := by
+  sorry
+
+/-! **Main Theorem Assembly** -/
+
+/-- **Main Theorem**: Tree-based AKS sorting works.
+
+    After O(log n) cycles of Zig-Zag-Zig with ε-nearsort on cherries,
+    starting from arbitrary input:
+    - Tree wrongness: Δᵣ < α^(3r+40)  for all r
+    - Simple displacement: δ < α^30
+    - Therefore: SORTED
+
+    This assembles Lemmas 1-4 via induction on time cycles.
+
+    The proof:
+    1. Start with arbitrary v (trivially Δᵣ ≤ 1 for all r)
+    2. Each cycle: reassign → ZigZag → ZigZag → ... → ZigZag (a times)
+    3. Lemma 1: reassignment multiplies by 6A but shifts distance
+    4. Lemma 3: each ZigZag decreases wrongness geometrically
+    5. After many cycles: Δᵣ → 0 exponentially
+    6. Lemma 4: δ → 0 as well
+    7. When δ < 1/n: must be sorted (discrete) -/
+theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1/2)
+    (net : ComparatorNetwork n) (hnet : IsEpsilonHalver net ε)
+    (v : Fin n → Bool) :
+    ∃ (k : ℕ) (v_final : Fin n → Bool),
+      (k ≤ 100 * Nat.log 2 n) ∧  -- O(log n) cycles
+      Monotone v_final ∧  -- Fully sorted
+      sorry  -- v_final obtained by applying tree-based sorting k times
+   := by
   sorry
