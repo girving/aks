@@ -15,14 +15,21 @@
 - Expanded zig_step_bounded_increase with 5-step proof structure
 - **Key insight:** Halver property → ε-nearsort forcing → bounded wrongness via Δᵣ + ε·Δᵣ₋₂
 
-**Lemma 2 Phase 2: IN PROGRESS ⚙️**
+**Lemma 2 Phase 2: IN PROGRESS ⚙️** (continued 2026-02-13)
 - ✅ **PROVED:** `halver_preserves_monotone` (first complete helper proof!)
 - ✅ Fixed lemma ordering issues (wrongness lemmas after definitions)
 - ✅ Added wrongness properties: proportion formula, monotonicity, global bounds
-- ✅ Added key inequality: `cherry_wrongness_after_nearsort`
-- ✅ Reorganized file with clear section structure
-- **File:** 780+ lines, all compiling cleanly
-- **Status:** Building momentum toward core proofs
+- ✅ Added Interval helper lemmas (size bounds, membership)
+- ✅ Documented complete proof strategy with detailed comments:
+  - halver_implies_nearsort_property: THE KEY (requires AKS Section 4)
+  - cherry_wrongness_after_nearsort: core inequality
+  - Proof chain roadmap with 6 steps identified
+- ✅ **Added ε-nearsort construction infrastructure:**
+  - `epsilonNearsort`: recursive construction from ε₁-halvers
+  - `epsilonNearsort_correct`: correctness theorem (error ≤ ε)
+  - Element displacement helpers (toUpper, toLower, correctlyPlaced)
+- **File:** 870+ lines, all compiling cleanly
+- **Status:** Infrastructure complete, ready for core proof implementation
 
 **Next Steps:**
 - Continue Phase 2: Implement more helper proofs
@@ -240,12 +247,18 @@ Break into phases with risk levels. Document fallbacks (axiomatize, defer, refor
 - **Phase T.1:** Tree structure with interval assignments (250 lines)
 - **Phase T.2:** Tree-based wrongness measure Δᵣ(J) (150 lines)
 - **Phases T.3-T.8:** Complete lemma architecture (122 lines)
-- **Lemma 2 Phase 1:** Cherry structure + helper lemma stubs (completed 2026-02-13)
+- **Lemma 2 Phase 1:** Cherry structure + helper lemma stubs ✅
   - Cherry structure fixed and compiling
   - 9 helper lemmas stubbed with clear signatures
   - Tree distance properties (symmetry, reflexivity, triangle inequality)
   - Proof structure skeleton in place
-- **Total:** 660+ lines, fully compiling, clear proof structure
+- **Lemma 2 Phase 2:** Core infrastructure IN PROGRESS ⚙️
+  - 1 complete proof (halver_preserves_monotone)
+  - ε-nearsort construction added (epsilonNearsort, correctness theorem)
+  - Element displacement tracking (toUpper, toLower, correctlyPlaced)
+  - Detailed proof strategy documented for all key lemmas
+  - Roadmap: 6-step proof chain identified
+- **Total:** 870+ lines, fully compiling, clear proof structure
 
 ### Pending ⚠️
 - **Helper lemmas:** treeDistance, sections, distanceToInterval (1-2 days, LOW-MEDIUM risk)
@@ -328,10 +341,11 @@ Current architecture is complete and demonstrates feasibility. Document for futu
 
 ## File Statistics
 
-- **Total lines:** 522 (TreeSorting.lean)
-- **Definitions:** 45+
-- **Lemmas/Theorems:** 23 (4 key lemmas + 19 properties)
-- **Sorry count:** ~35 (expected for architecture phase)
+- **Total lines:** 870+ (TreeSorting.lean)
+- **Definitions:** 60+ (added ε-nearsort, element displacement helpers)
+- **Lemmas/Theorems:** 35+ (4 key lemmas + 30+ properties)
+- **Proofs complete:** 1 (halver_preserves_monotone)
+- **Sorry count:** ~70 (expected for proof-in-progress phase)
 - **Compilation:** ✅ Clean (only sorry warnings)
 - **Dependencies:** AKS.Basic, AKS.Halver
 
