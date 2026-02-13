@@ -415,6 +415,21 @@ def elementsAtDistance (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : �
   -- Elements in J that belong at tree-distance ≥ r from J
   sorry
 
+/-- Elements that should move to lower sections (left/bottom). -/
+def elementsToLower (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (Fin n) :=
+  -- Elements in J that belong in some lower section L(K)
+  sorry
+
+/-- Elements that should move to upper sections (right/top). -/
+def elementsToUpper (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (Fin n) :=
+  -- Elements in J that belong in some upper section U(K)
+  sorry
+
+/-- Elements correctly placed in J. -/
+def elementsCorrectlyPlaced (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (Fin n) :=
+  -- Elements in J that belong in J
+  J.toFinset \ (elementsToLower n t v J ∪ elementsToUpper n t v J)
+
 /-- After applying ε-nearsort to a cherry, elements are pushed toward
     correct sides. This is the key property we need for Lemma 2. -/
 lemma nearsort_on_cherry_forces_elements
@@ -551,7 +566,7 @@ lemma treeWrongness_le_one {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r 
   unfold treeWrongness
   split_ifs with h
   · -- J.size = 0 case: 0 ≤ 1
-    omega
+    norm_num
   · -- J.size > 0 case: (max s1 s2) / J.size ≤ 1
     -- Since s1, s2 count elements in J, they're at most J.size
     -- So max s1 s2 ≤ J.size, thus (max s1 s2) / J.size ≤ 1
@@ -605,6 +620,53 @@ lemma treeWrongness_monotone {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (
 /-- Global wrongness is the supremum over all intervals. -/
 lemma globalWrongness_ge {n t : ℕ} (v : Fin n → Bool) (r : ℕ) (J : Interval n) :
     treeWrongness n t v J r ≤ globalWrongness n t v r := by
+  sorry
+
+/-! **ε-Nearsort Construction (AKS Section 4)** -/
+
+/-- Recursive ε-nearsort construction from AKS Section 4.
+
+    Given an ε₁-halver, construct an ε-nearsort by:
+    - Applying ε₁-halver to the entire range
+    - Recursively applying to top/bottom halves
+    - Continuing until pieces are smaller than εm
+
+    Parameters:
+    - m: size of the region to sort
+    - ε: target nearsort parameter
+    - ε₁: halver parameter (must be << ε)
+    - depth: recursion depth (for termination)
+
+    The construction ensures that at most ε fraction of elements
+    remain out of place relative to their target sections. -/
+noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
+    (depth : ℕ) : ComparatorNetwork m :=
+  if depth = 0 ∨ m < 2 then
+    -- Base case: no sorting needed or recursion limit reached
+    { comparators := [] }
+  else
+    -- Apply halver, then recurse on halves
+    -- This is a sketch - actual implementation needs careful index handling
+    sorry
+
+/-- The recursive nearsort satisfies the ε-nearsort property.
+
+    After applying epsilonNearsort, at most ε fraction of elements
+    are displaced beyond their target sections.
+
+    This is the correctness theorem for the ε-nearsort construction. -/
+lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
+    (hε₁ : ε₁ < ε / (Nat.log 2 m) ^ 4)  -- AKS condition: ε₁ << ε
+    (hhalver : IsEpsilonHalver halver ε₁)
+    (depth : ℕ) (hdepth : depth ≥ Nat.log 2 m) :
+    -- The constructed network satisfies ε-nearsort property
+    (sorry : Prop) := by
+  -- Proof by induction on depth
+  -- Base case: depth 0 or m < 2, trivial
+  -- Inductive case:
+  --   - Halver gives ε₁-error
+  --   - Recursion on halves gives ε-error each (by IH)
+  --   - Total error: ε₁ + ε ≈ ε (since ε₁ << ε)
   sorry
 
 /-! **Helper Lemmas for Lemma 2** -/
