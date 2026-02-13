@@ -213,6 +213,21 @@ structure RegisterAssignment (n : ℕ) (t : ℕ) where
 
 /-! **Basic Properties** -/
 
+-- Interval size is bounded
+lemma Interval.size_le {n : ℕ} (I : Interval n) : I.size ≤ n := by
+  unfold Interval.size
+  have : I.b.val < n := I.b.isLt
+  omega
+
+-- Non-empty intervals have positive size
+lemma Interval.size_pos_of_nonempty {n : ℕ} (I : Interval n) (h : I.size > 0) :
+    I.a.val ≤ I.b.val := I.h
+
+-- Interval membership
+lemma Interval.mem_toFinset {n : ℕ} (I : Interval n) (i : Fin n) :
+    i ∈ I.toFinset ↔ I.a.val ≤ i.val ∧ i.val ≤ I.b.val := by
+  sorry
+
 -- Y_t(i) is monotone in i
 lemma Y_monotone {n t : ℕ} : Monotone (Y n t) := by
   sorry
@@ -374,10 +389,15 @@ noncomputable def cherry_containing (n t : ℕ) (J : Interval n) : Option (Cherr
   -- If found, construct the cherry from parent intervals and child intervals
   sorry
 
-/-- A cherry's child intervals fit within the parent's range. -/
+/-- A cherry's child intervals fit within the parent's range.
+
+    Note: This should follow from the AKS construction where parent intervals
+    "frame" the children. For now we stub it since the precise parent_frames
+    property needs formalization. -/
 lemma Cherry.children_in_parent_range {n : ℕ} (cherry : Cherry n) :
     cherry.leftChild.a.val ≥ cherry.parent.a.val ∧
     cherry.rightChild.b.val ≤ cherry.parent.b.val := by
+  -- This should follow from cherry.parent_frames once that's properly defined
   sorry
 
 /-- The total size of a cherry is parent + left child + right child. -/
@@ -500,12 +520,25 @@ noncomputable def simpleDisplacement {n : ℕ} (v : Fin n → Bool) (J : Interva
 -- Tree wrongness is bounded by 1
 lemma treeWrongness_le_one {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
     treeWrongness n t v J r ≤ 1 := by
-  sorry
+  unfold treeWrongness
+  split_ifs with h
+  · -- J.size = 0 case: 0 ≤ 1
+    omega
+  · -- J.size > 0 case: (max s1 s2) / J.size ≤ 1
+    -- Since s1, s2 count elements in J, they're at most J.size
+    -- So max s1 s2 ≤ J.size, thus (max s1 s2) / J.size ≤ 1
+    sorry
 
 -- Tree wrongness is non-negative
 lemma treeWrongness_nonneg {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
     0 ≤ treeWrongness n t v J r := by
-  sorry
+  unfold treeWrongness
+  split_ifs
+  · -- J.size = 0 case
+    rfl
+  · -- J.size > 0 case
+    -- max s1 s2 / J.size is non-negative since division of non-neg by positive
+    sorry
 
 -- Tree wrongness at distance 0 equals simple displacement
 lemma treeWrongness_zero_eq_displacement {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -548,11 +581,38 @@ lemma globalWrongness_ge {n t : ℕ} (v : Fin n → Bool) (r : ℕ) (J : Interva
 
 /-! **Helper Lemmas for Lemma 2** -/
 
-/-- Monotone Boolean sequences have the 0*1* pattern: all 0s before all 1s. -/
+/-
+  ROADMAP FOR LEMMA 2 PROOFS:
+
+  The key challenge is connecting the halver property (balanced ones distribution)
+  to the wrongness decrease (Δᵣ + ε·Δᵣ₋₂).
+
+  Proof chain:
+  1. ✅ halver_preserves_monotone (PROVED)
+  2. ⚠️ monotone_bool_zeros_then_ones (needs Nat.find machinery)
+  3. ⚠️ halver_implies_nearsort_property (THE KEY - requires AKS Section 4 ε-nearsort construction)
+  4. ⚠️ cherry_nearsort_moves_elements (builds on #3)
+  5. ⚠️ cherry_wrongness_after_nearsort (core inequality, builds on #4)
+  6. ⚠️ zig_step_bounded_increase (main proof, assembles #5 with fringe amplification)
+
+  The bottleneck is #3 (halver_implies_nearsort_property), which requires:
+  - Understanding recursive ε-nearsort construction (AKS Section 4)
+  - Showing ε₁-halver → ε-nearsort with ε₁ << ε
+  - Connecting balanced property to forcing elements toward correct sides
+
+  Current status: Infrastructure complete, first proof done, building toward core proofs.
+-/
+
+/-- Monotone Boolean sequences have the 0*1* pattern: all 0s before all 1s.
+
+    Proof strategy: Find the smallest index where w is true (if any exists).
+    By monotonicity, everything before is false, everything after is true. -/
 lemma monotone_bool_zeros_then_ones {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
     ∃ k : ℕ, k ≤ n ∧
       (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
       (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
+  -- For now, use sorry and come back to this
+  -- The proof requires careful handling of Nat.find and Bool cases
   sorry
 
 /-- For a cherry with ε-nearsort applied, most elements move toward their correct sections. -/
