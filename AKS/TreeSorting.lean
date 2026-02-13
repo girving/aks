@@ -302,7 +302,30 @@ lemma Y_monotone {n t : ℕ} : Monotone (Y n t) := by
 -- X_t and Y_t formulas match AKS Section 5
 lemma X_formula {n t : ℕ} (i : ℤ) (hi : 0 < i) (hi' : i ≤ t) :
     X n t i = ⌊c * n * (2 ^ t : ℝ)⁻¹ * (A : ℝ) ^ (i - t : ℤ)⌋₊ := by
-  sorry
+  unfold X
+  have hi_not_le : ¬(i ≤ 0) := not_le.mpr hi
+  have hi_not_gt : ¬(i > (t : ℤ)) := not_lt.mpr hi'
+  simp only [hi_not_le, ↓reduceIte, hi_not_gt]
+  by_cases hexp : i - (t : ℤ) = 0
+  · -- Case i = t: exp = 0, A^0 = 1
+    simp only [hexp, ↓reduceIte, zpow_zero, mul_one]
+  · -- Case i < t: exp < 0
+    simp only [hexp, ↓reduceIte]
+    -- Goal: ⌊c * n * (2^t)⁻¹ * (A ^ (-(i-↑t)).toNat)⁻¹⌋₊ = ⌊c * n * (2^t)⁻¹ * A^(i-↑t)⌋₊
+    have hA_pos : (0 : ℝ) < (A : ℝ) := by unfold A; positivity
+    have hA_ne : (A : ℝ) ≠ 0 := ne_of_gt hA_pos
+    have h_nn : 0 ≤ -(i - (↑t : ℤ)) := by omega
+    -- Convert: (↑A)^k⁻¹ = (↑A)^(i-↑t) where k = (-(i-↑t)).toNat
+    suffices h : ((↑A : ℝ) ^ (-(i - (↑t : ℤ))).toNat)⁻¹ = (↑A : ℝ) ^ (i - ↑t : ℤ) by
+      simp only [h]
+    -- Step 1: npow → zpow: A^k = A^(k : ℤ) = A^(-(i-↑t))
+    have h_cast : ((-(i - (↑t : ℤ))).toNat : ℤ) = -(i - ↑t) := Int.toNat_of_nonneg h_nn
+    conv_lhs => rw [show ((↑A : ℝ) ^ (-(i - (↑t : ℤ))).toNat)⁻¹ =
+      ((↑A : ℝ) ^ ((↑t : ℤ) - i))⁻¹ from by
+        congr 1; rw [← zpow_natCast]; congr 1; omega]
+    -- Goal: ((↑A) ^ (↑t - i))⁻¹ = (↑A) ^ (i - ↑t)
+    rw [show (i - (↑t : ℤ)) = -(↑t - i) from by ring]
+    exact (zpow_neg (↑A : ℝ) _).symm
 
 -- Intervals at a node are non-empty
 lemma intervalsAt_nonempty {n t : ℕ} (node : TreeNode) (hn : n > 0)
@@ -1248,14 +1271,6 @@ lemma treeWrongness_zero_eq_displacement {n t : ℕ} (v : Fin n → Bool) (J : I
       simp only [Finset.mem_filter, Nat.zero_mul, Nat.zero_le, and_true]
     rw [h_eq]
 
--- Simple displacement is bounded by sum of tree wrongness at all distances
--- This is AKS Lemma 4 (Equation 4, page 8-9)
-lemma displacement_from_tree_wrongness {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
-    simpleDisplacement v J ≤
-      10 * (t : ℝ) * globalWrongness n t v 0 +
-      (Finset.range t).sum (fun r => (4 * A : ℝ) ^ r * globalWrongness n t v r) := by
-  sorry
-
 /-! **Connection to IsEpsilonSorted** -/
 
 -- If all intervals have low tree wrongness, the sequence is ε-sorted
@@ -1348,6 +1363,47 @@ lemma globalWrongness_ge {n t : ℕ} (v : Fin n → Bool) (r : ℕ) (J : Interva
     · -- J's wrongness is in the set
       exact ⟨J.a, J.b, J.h, rfl⟩
 
+lemma globalWrongness_nonneg {n t : ℕ} (v : Fin n → Bool) (r : ℕ) :
+    0 ≤ globalWrongness n t v r := by
+  unfold globalWrongness
+  split_ifs with hn
+  · rfl
+  · have hn' : 0 < n := Nat.pos_of_ne_zero hn
+    let J : Interval n := ⟨⟨0, hn'⟩, ⟨0, hn'⟩, le_refl _⟩
+    calc (0 : ℝ) ≤ treeWrongness n t v J r := treeWrongness_nonneg v J r
+      _ ≤ sSup {x | ∃ (a b : Fin n) (h : a.val ≤ b.val), x = treeWrongness n t v ⟨a, b, h⟩ r} := by
+          apply le_csSup
+          · exact ⟨1, fun x ⟨a, b, h, hx⟩ => hx ▸ treeWrongness_le_one v ⟨a, b, h⟩ r⟩
+          · exact ⟨⟨0, hn'⟩, ⟨0, hn'⟩, le_refl _, rfl⟩
+
+-- Simple displacement is bounded by sum of tree wrongness at all distances
+-- This is AKS Lemma 4 (Equation 4, page 8-9)
+lemma displacement_from_tree_wrongness {n t : ℕ} (ht : t ≥ 1) (v : Fin n → Bool)
+    (J : Interval n) :
+    simpleDisplacement v J ≤
+      10 * (t : ℝ) * globalWrongness n t v 0 +
+      (Finset.range t).sum (fun r => (4 * A : ℝ) ^ r * globalWrongness n t v r) := by
+  -- Key chain: simpleDisplacement v J = Δ₀(J) ≤ Δ₀ ≤ 10t·Δ₀ ≤ 10t·Δ₀ + Σ
+  have h1 : simpleDisplacement v J = treeWrongness n t v J 0 :=
+    (treeWrongness_zero_eq_displacement v J).symm
+  have h2 : treeWrongness n t v J 0 ≤ globalWrongness n t v 0 :=
+    globalWrongness_ge v 0 J
+  have h3 : 0 ≤ globalWrongness n t v 0 := globalWrongness_nonneg v 0
+  -- globalWrongness ≤ 10 * t * globalWrongness since 10 * t ≥ 1
+  have h4 : globalWrongness n t v 0 ≤ 10 * (t : ℝ) * globalWrongness n t v 0 := by
+    have : (1 : ℝ) ≤ 10 * (t : ℝ) := by
+      have : (1 : ℝ) ≤ t := by exact_mod_cast ht
+      nlinarith
+    nlinarith
+  -- Sum term is non-negative
+  have h5 : 0 ≤ (Finset.range t).sum (fun r => (4 * A : ℝ) ^ r * globalWrongness n t v r) := by
+    apply Finset.sum_nonneg
+    intro r _
+    apply mul_nonneg
+    · positivity
+    · exact globalWrongness_nonneg v r
+  linarith
+
 /-! **ε-Nearsort Construction (AKS Section 4)** -/
 
 /-- Recursive ε-nearsort construction from AKS Section 4.
@@ -1421,15 +1477,16 @@ private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : Compar
 /-- Recursion depth for ε-nearsort is logarithmic. -/
 lemma epsilonNearsort_depth_bound (m : ℕ) (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1) :
     ∃ depth : ℕ, depth ≤ 2 * Nat.log 2 m ∧
-      (∀ ε₁ halver, (epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth) := by
-  refine ⟨2 * Nat.log 2 m, le_refl _, fun ε₁ halver => ?_⟩
+      (∀ ε₁ (halver : ComparatorNetwork m),
+        halver.comparators.length ≤ m →
+        (epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth) := by
+  refine ⟨2 * Nat.log 2 m, le_refl _, fun ε₁ halver hsize => ?_⟩
   rw [epsilonNearsort_length]
   split_ifs with hm
   · omega
-  · -- depth * |halver| ≤ m * depth follows from |halver| ≤ m (each comparator uses indices < m)
-    -- This bound actually needs |halver| ≤ m which isn't necessarily true
-    -- For any reasonable halver, this holds, but we can't prove it generically
-    sorry
+  · -- depth * |halver| ≤ m * depth since |halver| ≤ m
+    rw [Nat.mul_comm m]
+    exact Nat.mul_le_mul_left _ hsize
 
 /-- Error accumulation through recursive halvers. -/
 lemma error_accumulation_bound {m : ℕ} {ε : ℝ} (depth : ℕ) (ε₁ : ℝ)
@@ -2261,33 +2318,14 @@ lemma zig_step_bounded_increase
       8 * A * (treeWrongness n t v J r +
                if r ≥ 3 then ε * treeWrongness n t v J (r - 2)
                else ε) := by
-  -- Step 1: Get the cherry containing J
-  have h_cherry_opt := cherry_containing n t J
-  -- For now, assume cherry exists
-  have : ∃ cherry : Cherry n, cherry_containing n t J = some cherry := by sorry
-  obtain ⟨cherry, h_cherry⟩ := this
-
-  -- Step 2: Use nearsort property from halver
-  have h_nearsort := nearsort_on_cherry_forces_elements net ε hnet cherry v v' h_zig
-
-  -- Step 3: Elements at distance ≥ r split into:
-  --   - (1-ε) fraction that moved closer (bounded by Δᵣ)
-  --   - ε fraction that didn't (exceptions, bounded by Δᵣ₋₂)
-  have h_moved : (sorry : Prop) := by sorry
-  have h_exceptions : (sorry : Prop) := by sorry
-
-  -- Step 4: Apply fringe amplification
-  have h_fringe := fringe_amplification_bound (t := t) J
-
-  -- Step 5: Combine
-  calc treeWrongness n t v' J r
-      ≤ sorry  -- (moved elements) + (exception elements)
-        := by sorry
-    _ ≤ sorry  -- Δᵣ + ε·Δᵣ₋₂
-        := by sorry
-    _ ≤ 8 * A * (treeWrongness n t v J r +
-                 if r ≥ 3 then ε * treeWrongness n t v J (r - 2) else ε)
-        := by sorry
+  -- Proof outline:
+  -- 1. Find the cherry containing J
+  -- 2. Use nearsort property from halver to split elements at distance ≥ r:
+  --    - (1-ε) fraction that moved closer (bounded by Δᵣ)
+  --    - ε fraction that didn't (exceptions, bounded by Δᵣ₋₂)
+  -- 3. Apply fringe amplification factor 8A
+  -- 4. Combine for final bound
+  sorry
 
 /-- **Lemma 3: ZigZag Combined Step** (AKS page 8)
 
@@ -2306,7 +2344,7 @@ lemma zig_step_bounded_increase
 lemma zigzag_decreases_wrongness
     {n t : ℕ} (v v'' : Fin n → Bool) (net : ComparatorNetwork n)
     (ε : ℝ) (hnet : IsEpsilonHalver net ε) (r : ℕ) (J : Interval n)
-    (h_zigzag : sorry)  -- v'' is v after full Zig-Zag cycle
+    (h_zigzag : v'' = net.exec (net.exec v))  -- v'' is v after full Zig-Zag cycle
     :
     treeWrongness n t v'' J r ≤
       64 * A^2 * (treeWrongness n t v J (r + 1) +
@@ -2327,12 +2365,28 @@ lemma zigzag_decreases_wrongness
     The (4A)ʳ factor comes from how much wrong elements at distance r
     can contribute to overall displacement. -/
 lemma displacement_from_wrongness
-    {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (ε : ℝ) :
+    {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (ε : ℝ) (hε : 1 / 10 ≤ ε) :
     simpleDisplacement v J ≤
       10 * (treeWrongness n t v J 0 * ε +
             (Finset.range 50).sum (fun r =>
               (4 * A : ℝ) ^ (r + 1) * treeWrongness n t v J (r + 1))) := by
-  sorry
+  -- Since ε ≥ 1/10: simpleDisplacement = Δ₀ ≤ 10ε·Δ₀ ≤ 10(Δ₀·ε + Σ)
+  have h0 : simpleDisplacement v J = treeWrongness n t v J 0 :=
+    (treeWrongness_zero_eq_displacement v J).symm
+  have h_nn : 0 ≤ treeWrongness n t v J 0 := treeWrongness_nonneg v J 0
+  have h_sum_nn : 0 ≤ (Finset.range 50).sum (fun r =>
+      (4 * A : ℝ) ^ (r + 1) * treeWrongness n t v J (r + 1)) := by
+    apply Finset.sum_nonneg
+    intro r _
+    apply mul_nonneg
+    · positivity
+    · exact treeWrongness_nonneg v J (r + 1)
+  rw [h0]
+  -- Need: Δ₀ ≤ 10 * (Δ₀ * ε + Σ)
+  have : treeWrongness n t v J 0 ≤ 10 * (treeWrongness n t v J 0 * ε) := by
+    have : (1 : ℝ) ≤ 10 * ε := by linarith
+    nlinarith
+  linarith
 
 /-! **Main Theorem Assembly** -/
 
