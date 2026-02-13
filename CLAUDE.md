@@ -257,7 +257,9 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Rotation bijection for walk/neighbor sum equality.** When proving properties of graph walks where neighbor sums appear: use `RegularGraph.sum_neighbor_eq G (fun v => f v)` to show `∑ v ∑ i, f(G.neighbor v i) = ∑ v ∑ i, f v`. This follows from G.rot being a bijection (involution). Particularly useful for proving QB = Q where the cluster mean absorbs the walk: the neighbor sum over all (i,j) pairs equals d₂ times the sum over all i. Chain with `Finset.sum_const` and `Finset.card_fin` to evaluate the d₂ factor.
 
-**Block-diagonal operator norms via calc + per-block bounds.** To prove `‖B‖ ≤ 1` for an operator B that acts block-diagonally (e.g., within-cluster walk): (1) use `opNorm_le_bound` to reduce to showing `‖Bf‖ ≤ ‖f‖`, (2) expand `‖·‖²` as `∑ vk, ‖·(vk)‖²`, (3) use calc with bijection helpers to regroup by blocks: `∑ vk, ... = ∑ v, ∑ k, ... ≤ ∑ v, ∑ k, ... = ∑ vk, ...`, (4) prove the inequality with `Finset.sum_le_sum` pushing the bound per-block, (5) inside each block, connect to the per-block operator's norm bound. See ZigZagSpectral.lean: `withinClusterCLM_norm_le_one` structure.
+**Block-diagonal operator norms via calc + per-block bounds.** To prove `‖B‖ ≤ 1` for an operator B that acts block-diagonally (e.g., within-cluster walk): (1) use `opNorm_le_bound` to reduce to showing `‖Bf‖ ≤ ‖f‖`, (2) expand `‖·‖²` as `∑ vk, ‖·(vk)‖²`, (3) use calc with bijection helpers to regroup by blocks: `∑ vk, ... = ∑ v, ∑ k, ... ≤ ∑ v, ∑ k, ... = ∑ vk, ...`, (4) prove the inequality with `Finset.sum_le_sum` pushing the bound per-block, (5) inside each block, connect to the per-block operator's norm bound. Use `EuclideanSpace.norm_sq_eq` to avoid double-sqrt issues (`Real.sqrt_le_sqrt` applies once, not twice). See ZigZagSpectral.lean: `withinClusterCLM_norm_le_one`.
+
+**When hitting technical obstacles, step back and reason mathematically first.** If a proof attempt gets tangled in Lean technicalities after 2-3 tries (type mismatches, stuck rewrites, failing tactics), don't immediately revert to `sorry`. Instead: (1) write out the mathematical structure in comments — what are you actually proving and why is it true? (2) identify the key sublemmas or reindexing steps needed, (3) implement those pieces as separate helper lemmas with clear signatures, (4) reassemble using the helpers. The investment in helpers pays off: they're reusable and make the main proof readable. Example: `stepPermCLM_isSelfAdjoint` needs a bijection reindexing lemma for `∑ v ∑ i, f(rot(v,i)) = ∑ v ∑ i, f(v,i)`; trying to inline this creates type-alignment chaos.
 
 ## Mathlib API Reference
 
@@ -304,9 +306,8 @@ No files have `#exit`. `BipartiteExpander` has been removed — `expander_gives_
 **Achievable (weeks):** `halver_convergence`
 
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
-- *Done (6/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P)
-- *Easy (days):* `rvwBound_mono_left`, `rvwBound_mono_right`
-- *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint), `withinClusterCLM_norm_le_one` (95% done, needs type alignment), `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
+- *Done (9/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`
+- *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, `hat_block_norm`, `withinCluster_tilde_contraction`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — Rayleigh quotient → 2×2 matrix eigenvalue)
 
 **Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)

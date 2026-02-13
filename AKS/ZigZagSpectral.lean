@@ -168,7 +168,14 @@ theorem stepPermCLM_isSelfAdjoint {n₁ d₁ : ℕ}
   -- Use the fact that Σ² = 1 and Σ is a permutation
   -- For permutations: if Σ² = 1, then Σ* = Σ⁻¹ = Σ
   have h_sq := stepPermCLM_sq_eq_one G₁ hd₁
-  -- From Σ² = 1, we get Σ* = Σ⁻¹ = Σ
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
+  intro f g
+  -- Show ⟨Σf, g⟩ = ⟨f, Σg⟩ using that Σ is a permutation
+  -- Mathematically: Σ permutes coordinates via rotation map.
+  -- Since rot² = id, we have ⟨Σf, g⟩ = ∑ vk, f(rot(vk)) · g(vk)
+  --                                   = ∑ vk, f(vk) · g(rot(vk))  [by reindexing w = rot(vk)]
+  --                                   = ⟨f, Σg⟩
+  -- Implementation requires: rotation bijection lemma + sum reindexing
   sorry
 
 
