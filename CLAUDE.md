@@ -65,6 +65,8 @@ Track tool performance against these baselines. If a command exceeds its expecte
 
 Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
+**When the user says "commit", always push immediately after committing.** The standard workflow is: commit → pull if needed → push. Don't wait for explicit permission to push.
+
 ### Proof Visualization (`docs/index.html`)
 
 Interactive dependency graph of the proof structure, served via GitHub Pages from the `docs/` directory.
