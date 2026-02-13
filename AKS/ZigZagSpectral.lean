@@ -97,11 +97,28 @@ theorem withinClusterCLM_norm_le_one {n₁ d₁ d₂ : ℕ}
     ‖withinClusterCLM (n₁ := n₁) G₂ hd₁‖ ≤ 1 := by
   -- Use opNorm_le_bound: show ‖Bf‖ ≤ ‖f‖ for all f
   refine ContinuousLinearMap.opNorm_le_bound _ (by norm_num) (fun f => ?_)
-  -- Simplify: 1 * ‖f‖ = ‖f‖
   simp only [one_mul]
-  -- The proof requires showing B acts block-diagonally and each block
-  -- is a walk operator with norm ≤ 1
-  sorry
+  -- Expand norms as sums of squares
+  simp only [EuclideanSpace.norm_eq]
+  rw [Real.sqrt_le_sqrt_iff (by positivity)]
+  -- ‖Bf‖² = ∑ vk, (Bf)(vk)²
+  -- Group by cluster and use that each cluster is a walk operator
+  calc ∑ vk, ‖(withinClusterCLM G₂ hd₁ f).ofLp vk‖ ^ 2
+      = ∑ v, ∑ k, ‖(withinClusterCLM G₂ hd₁ f).ofLp (encode v k)‖ ^ 2 := by
+          conv_lhs => rw [← sum_encode_eq_sum hd₁ (fun vk => ‖(withinClusterCLM G₂ hd₁ f).ofLp vk‖ ^ 2)]
+    _ ≤ ∑ v, ∑ k, ‖f.ofLp (encode v k)‖ ^ 2 := by
+          -- Within each cluster v, the walk operator is a contraction
+          refine Finset.sum_le_sum (fun v _ => ?_)
+          -- For each cluster v, show: ∑ k, ‖(Bf)(v,k)‖² ≤ ∑ k, ‖f(v,k)‖²
+          -- Unfold the within-cluster walk definition
+          simp only [withinClusterCLM_apply, cluster_encode, port_encode]
+          -- Now: ∑ k, ‖(∑ j, f(v, G₂.neighbor k j)) / d₂‖² ≤ ∑ k, ‖f(v, k)‖²
+          -- This is exactly saying G₂'s walk operator has norm ≤ 1 on this cluster
+          -- Define g : Fin d₁ → ℝ by g(k) = f(v, k)
+          -- Then LHS = ‖G₂.walkFun g‖² and RHS = ‖g‖²
+          sorry
+    _ = ∑ vk, ‖f.ofLp vk‖ ^ 2 := by
+          conv_rhs => rw [← sum_encode_eq_sum hd₁ (fun vk => ‖f.ofLp vk‖ ^ 2)]
 
 
 /-! **Step Permutation Properties** -/
