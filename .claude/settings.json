@@ -6,21 +6,23 @@
       "Write(.claude/settings.json)"
     ],
     "allow": [
-      "Bash(scripts/lean-check *)",
-      "Bash(scripts/sorries)",
-      "Bash(git status)",
-      "Bash(git diff *)",
-      "Bash(git log *)",
+      "Bash(cat *)",
       "Bash(git add *)",
       "Bash(git commit *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git pull *)",
       "Bash(git push *)",
+      "Bash(git status)",
       "Bash(lake build)",
       "Bash(lake clean)",
-      "Bash(uv run *)",
       "Bash(ls *)",
       "Bash(mkdir *)",
-      "Bash(cat *)",
-      "Bash(test *)"
+      "Bash(scripts/lean-check *)",
+      "Bash(scripts/sorries)",
+      "Bash(test *)",
+      "Bash(uv run *)",
+      "Bash(wc *)"
     ]
   }
 }
