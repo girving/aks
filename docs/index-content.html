@@ -446,7 +446,15 @@ const PROOF_DATA = {
     ["AKS.size_nlogn", "zigzag_implies_aks_network"],
     ["baseExpander_gap", "zigzag_implies_aks_network"],
 
-    // TreeSorting helper lemmas
+    // TreeSorting dependencies from other files
+    ["ComparatorNetwork", "halver_preserves_monotone"],
+    ["ComparatorNetwork", "comparator_displacement_bound"],
+    ["IsEpsilonHalver", "halver_balances_ones"],
+    ["IsEpsilonHalver", "halver_bounds_top_excess"],
+    ["IsEpsilonHalver", "halver_implies_nearsort_property"],
+    ["IsEpsilonSorted", "zig_step_bounded_increase"],
+
+    // TreeSorting internal dependencies
     ["TreeNode", "treeWrongness"],
     ["halver_balances_ones", "halver_bounds_top_excess"],
     ["countOnes_le", "countOnes_split"],

@@ -592,6 +592,10 @@ def countOnes {n : ℕ} (v : Fin n → Bool) : ℕ :=
 def countOnesInRange {n : ℕ} (v : Fin n → Bool) (lo hi : ℕ) : ℕ :=
   (Finset.univ.filter (fun i : Fin n => lo ≤ i.val ∧ i.val < hi ∧ v i = true)).card
 
+/-- Count of ones is always non-negative (trivially, since it's Nat). -/
+lemma countOnes_nonneg {n : ℕ} (v : Fin n → Bool) : 0 ≤ countOnes v := by
+  exact Nat.zero_le _
+
 /-- Count ones is bounded by n. -/
 lemma countOnes_le {n : ℕ} (v : Fin n → Bool) : countOnes v ≤ n := by
   unfold countOnes
@@ -599,13 +603,45 @@ lemma countOnes_le {n : ℕ} (v : Fin n → Bool) : countOnes v ≤ n := by
   · exact Finset.card_filter_le _ _
   · exact le_of_eq (Finset.card_fin n)
 
+/-- Count of zeros plus count of ones equals n. -/
+lemma countOnes_plus_countZeros {n : ℕ} (v : Fin n → Bool) :
+    countOnes v + (Finset.univ.filter (fun i => v i = false)).card = n := by
+  unfold countOnes
+  -- Partition Finset.univ by true/false values
+  have h_partition : (Finset.univ : Finset (Fin n)) =
+                     (Finset.univ.filter (fun i => v i = true)) ∪
+                     (Finset.univ.filter (fun i => v i = false)) := by
+    ext i
+    simp only [Finset.mem_univ, Finset.mem_union, Finset.mem_filter, true_and]
+    cases v i <;> simp
+  have h_disj : Disjoint (Finset.univ.filter (fun i => v i = true))
+                         (Finset.univ.filter (fun i => v i = false)) := by
+    rw [Finset.disjoint_iff_ne]
+    intro a ha b hb
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at ha hb
+    intro heq
+    rw [← heq] at hb
+    rw [ha] at hb
+    contradiction
+  calc (Finset.univ.filter (fun i => v i = true)).card +
+       (Finset.univ.filter (fun i => v i = false)).card
+      = ((Finset.univ.filter (fun i => v i = true)) ∪
+         (Finset.univ.filter (fun i => v i = false))).card :=
+          (Finset.card_union_of_disjoint h_disj).symm
+    _ = (Finset.univ : Finset (Fin n)).card := by rw [← h_partition]
+    _ = n := Finset.card_fin n
+
 /-- Count ones in range is bounded by range size. -/
 lemma countOnesInRange_le {n : ℕ} (v : Fin n → Bool) (lo hi : ℕ) :
     countOnesInRange v lo hi ≤ hi - lo := by
   unfold countOnesInRange
   -- The filtered set is a subset of all i in the range [lo, hi)
   trans (Finset.univ.filter (fun i : Fin n => lo ≤ i.val ∧ i.val < hi)).card
-  · exact Finset.card_filter_le _ _
+  · exact Finset.card_le_card (by
+      intro i
+      simp only [Finset.mem_filter, Finset.mem_univ, true_and]
+      intro h
+      exact ⟨h.1, h.2.1⟩)
   · -- Count elements in range [lo, hi) is at most hi - lo
     sorry  -- Needs careful Finset cardinality reasoning about integer ranges
 
@@ -834,6 +870,115 @@ lemma error_accumulation_bound {m : ℕ} {ε : ℝ} (depth : ℕ) (ε₁ : ℝ)
     depth * ε₁ < ε := by
   sorry
 
+/-! **Boolean Sequence Helpers** -/
+
+/-- A Boolean sequence is balanced if it has equal 0s and 1s. -/
+def IsBalanced {n : ℕ} (v : Fin n → Bool) : Prop :=
+  countOnes v = n / 2
+
+/-- Balanced sequences have equal numbers of zeros and ones. -/
+lemma IsBalanced.zeros_eq_ones {n : ℕ} (v : Fin n → Bool) (hbal : IsBalanced v) :
+    (Finset.univ.filter (fun i => v i = false)).card = n / 2 := by
+  unfold IsBalanced at hbal
+  have h := countOnes_plus_countZeros v
+  rw [hbal] at h
+  -- n / 2 + card false = n
+  -- This requires n to be even for exact equality
+  sorry  -- Needs: n = 2*(n/2), which is true when n is even
+
+/-- Hamming distance between two Boolean sequences. -/
+def hammingDistance {n : ℕ} (v w : Fin n → Bool) : ℕ :=
+  (Finset.univ.filter (fun i => v i ≠ w i)).card
+
+/-- Swapping two positions in a Boolean sequence. -/
+def swap {n : ℕ} (v : Fin n → Bool) (i j : Fin n) : Fin n → Bool :=
+  fun k => if k = i then v j else if k = j then v i else v k
+
+/-- A comparator is equivalent to conditional swap. -/
+lemma comparator_eq_conditional_swap {n : ℕ} (c : Comparator n) (v : Fin n → Bool) :
+    c.apply v = if v c.i ≤ v c.j then v else swap v c.i c.j := by
+  ext k
+  unfold Comparator.apply swap
+  by_cases hle : v c.i ≤ v c.j
+  · -- Case: v c.i ≤ v c.j, so no swap occurs
+    simp only [if_pos hle]
+    by_cases hki : k = c.i
+    · -- k = c.i
+      rw [if_pos hki, hki]
+      exact min_eq_left hle
+    · by_cases hkj : k = c.j
+      · -- k = c.j
+        rw [if_neg hki, if_pos hkj, hkj]
+        exact max_eq_right hle
+      · -- k ≠ c.i and k ≠ c.j
+        rw [if_neg hki, if_neg hkj]
+  · -- Case: v c.i > v c.j, so swap occurs
+    simp only [if_neg hle]
+    push_neg at hle
+    by_cases hki : k = c.i
+    · -- k = c.i, should get v c.j
+      rw [if_pos hki]
+      have : min (v c.i) (v c.j) = v c.j := min_eq_right (le_of_lt hle)
+      rw [this, hki, if_pos rfl]
+    · by_cases hkj : k = c.j
+      · -- k = c.j, should get v c.i
+        rw [if_neg hki, if_pos hkj]
+        have : max (v c.i) (v c.j) = v c.i := max_eq_left (le_of_lt hle)
+        rw [this, hkj, if_neg (ne_of_lt c.h).symm, if_pos rfl]
+      · -- k ≠ c.i and k ≠ c.j
+        rw [if_neg hki, if_neg hkj, if_neg hki, if_neg hkj]
+
+/-- Hamming distance is symmetric. -/
+lemma hammingDistance_symm {n : ℕ} (v w : Fin n → Bool) :
+    hammingDistance v w = hammingDistance w v := by
+  unfold hammingDistance
+  congr 1
+  ext i
+  simp only [Finset.mem_filter, Finset.mem_univ, true_and, ne_comm]
+
+/-- Hamming distance satisfies triangle inequality. -/
+lemma hammingDistance_triangle {n : ℕ} (u v w : Fin n → Bool) :
+    hammingDistance u w ≤ hammingDistance u v + hammingDistance v w := by
+  unfold hammingDistance
+  -- If u i ≠ w i, then either u i ≠ v i or v i ≠ w i (or both)
+  have h_subset : (Finset.univ.filter (fun i => u i ≠ w i)) ⊆
+                   (Finset.univ.filter (fun i => u i ≠ v i)) ∪
+                   (Finset.univ.filter (fun i => v i ≠ w i)) := by
+    intro i hi
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_union] at hi ⊢
+    by_cases h : u i = v i
+    · -- If u i = v i, then v i ≠ w i (since u i ≠ w i)
+      right
+      rw [← h]
+      exact hi
+    · -- If u i ≠ v i, we're in the left set
+      left
+      exact h
+  trans ((Finset.univ.filter (fun i => u i ≠ v i)) ∪
+         (Finset.univ.filter (fun i => v i ≠ w i))).card
+  · exact Finset.card_le_card h_subset
+  · exact Finset.card_union_le _ _
+
+/-- Swapping is involutive: swapping twice returns the original. -/
+lemma swap_involutive {n : ℕ} (v : Fin n → Bool) (i j : Fin n) :
+    swap (swap v i j) i j = v := by
+  ext k
+  unfold swap
+  split_ifs <;> simp_all
+
+/-- Swapping is symmetric in its arguments. -/
+lemma swap_comm {n : ℕ} (v : Fin n → Bool) (i j : Fin n) :
+    swap v i j = swap v j i := by
+  ext k
+  unfold swap
+  split_ifs <;> simp_all
+
+/-- Swapping preserves count of ones. -/
+lemma swap_preserves_countOnes {n : ℕ} (v : Fin n → Bool) (i j : Fin n) :
+    countOnes (swap v i j) = countOnes v := by
+  -- The set of true positions is bijectively mapped by the swap
+  sorry
+
 /-! **Connecting Halvers to Element Movement** -/
 
 /-- A halver balances ones between top and bottom halves.
@@ -928,6 +1073,30 @@ lemma comparator_preserves_value {n : ℕ} (c : Comparator n) (v : Fin n → Boo
   · left
     push_neg at h
     exact comparator_affects_only_compared c v k h
+
+/-- Comparators preserve the count of ones (and zeros). -/
+lemma comparator_preserves_countOnes {n : ℕ} (c : Comparator n) (v : Fin n → Bool) :
+    countOnes (c.apply v) = countOnes v := by
+  unfold countOnes
+  -- A comparator puts min at position i and max at position j
+  -- This preserves the multiset of values (either no-op or swap)
+  sorry  -- This requires showing comparator is a (partial) permutation
+
+/-- Networks preserve the count of ones by preserving it at each step. -/
+lemma network_preserves_countOnes {n : ℕ} (net : ComparatorNetwork n) (v : Fin n → Bool) :
+    countOnes (net.exec v) = countOnes v := by
+  unfold ComparatorNetwork.exec
+  -- Need stronger induction: for any initial state w, fold preserves countOnes
+  have h_fold : ∀ (cs : List (Comparator n)) (w : Fin n → Bool),
+      countOnes (List.foldl (fun acc c => c.apply acc) w cs) = countOnes w := by
+    intro cs
+    induction cs with
+    | nil => intro w; rfl
+    | cons c cs' ih =>
+      intro w
+      simp only [List.foldl_cons]
+      rw [ih (c.apply w), comparator_preserves_countOnes]
+  exact h_fold net.comparators v
 
 /-- Comparator displacement bound - proved version. -/
 lemma comparator_displacement_bound_proved {n : ℕ} (c : Comparator n) (v : Fin n → Bool) :

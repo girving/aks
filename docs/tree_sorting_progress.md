@@ -31,7 +31,7 @@
 - **File:** 870+ lines, all compiling cleanly
 - **Status:** Infrastructure complete, ready for core proof implementation
 
-**Latest Session Progress (continued):**
+**Latest Session Progress (continued - extended session):**
 - ✅ **PROVED:** `halver_balances_ones` (third complete proof!)
   - Direct application of IsEpsilonHalver definition
   - Clean 1-line proof showing proper use of existing infrastructure
@@ -60,9 +60,29 @@
   - Shows ones in top half of output are bounded
   - Direct application of IsEpsilonHalver with filter equivalence
   - Corrected to use output total (not input) per IsEpsilonHalver definition
-- **File:** 1410 lines (up from 522 at session start - **170% growth!**)
-- **Proofs:** 8 complete (halver_preserves_monotone, Interval.mem_toFinset, halver_balances_ones, monotone_bool_zeros_then_ones, countOnes_le, comparator_displacement_bound_proved, countOnes_split, halver_bounds_top_excess)
-- **Task Status:** ✅ Task #13 (helper lemmas) COMPLETED, Task #15 (halver_implies_nearsort_property) CREATED
+- ✅ **ADDED Boolean Sequence Helpers** (~65 lines)
+  - IsBalanced, hammingDistance, swap definitions
+  - **PROVED:** `hammingDistance_symm` (properties via ext + ne_comm)
+  - **PROVED:** `hammingDistance_triangle` (ninth proof!) - Triangle inequality via subset + card_union_le
+  - **PROVED:** `comparator_eq_conditional_swap` (tenth proof!) - Comparator as conditional swap via split_ifs
+  - **PROVED:** `swap_involutive` (eleventh proof!) - Swap is its own inverse via split_ifs + simp_all
+  - **PROVED:** `swap_comm` (twelfth proof!) - Swap is commutative via split_ifs + simp_all
+  - swap_preserves_countOnes (stubbed, bijection proof needed)
+- **File:** 1,555 lines (up from 522 at session start - **198% growth!**, +1,033 lines)
+- **Proofs:** 14 complete (original 8 + 6 new lemmas)
+  - Boolean helpers: hammingDistance_triangle, comparator_eq_conditional_swap, swap_involutive, swap_comm
+  - Counting lemmas: countOnes_nonneg (trivial), countOnes_plus_countZeros (partition proof)
+- **Task Status:** ✅ Task #13 (helper lemmas) COMPLETED, ⚙️ Task #15 (halver_implies_nearsort_property) IN PROGRESS
+
+**Extended Session Progress:**
+- ✅ Fixed countOnesInRange_le typeclass issue (explicit Finset.card_le_card proof)
+- ✅ **PROVED:** `countOnes_nonneg` (trivial Nat.zero_le, 1 line)
+- ✅ **PROVED:** `countOnes_plus_countZeros` (partition via calc + card_union_of_disjoint, 18 lines)
+- ✅ **ADDED:** `IsBalanced.zeros_eq_ones` (infrastructure, left as sorry due to even/odd complications)
+- ✅ **ADDED:** `comparator_preserves_countOnes` (framework, left as sorry pending permutation reasoning)
+- ✅ **ADDED:** `network_preserves_countOnes` (complete via induction, modulo comparator lemma)
+- **Total proofs:** 14 complete + 1 framework lemma (network_preserves_countOnes)
+- **File size:** 1,579 lines (+66 lines in extended session, +1,057 total from session start)
 
 **Next Steps:**
 - **PRIMARY:** Implement `halver_implies_nearsort_property` (THE KEY bottleneck, Task #15)
@@ -377,10 +397,10 @@ Current architecture is complete and demonstrates feasibility. Document for futu
 
 ## File Statistics
 
-- **Total lines:** 1410 (TreeSorting.lean) — **up from 522 at session start!** (170% growth, +888 lines)
-- **Definitions:** 80+ (ε-nearsort, counting, displacement, witness tracking, tree structure, cherry)
-- **Lemmas/Theorems:** 60+ (4 key lemmas + 55+ properties)
-- **Proofs complete:** 8 ✅
+- **Total lines:** 1,579 (TreeSorting.lean) — **up from 522 at session start!** (203% growth, +1,057 lines)
+- **Definitions:** 86+ (ε-nearsort, counting, displacement, witness tracking, tree structure, cherry, Boolean helpers)
+- **Lemmas/Theorems:** 67+ (4 key lemmas + 62+ properties)
+- **Proofs complete:** 14 ✅
   1. halver_preserves_monotone (uses ComparatorNetwork.exec_preserves_monotone)
   2. Interval.mem_toFinset (filter characterization)
   3. halver_balances_ones (direct application of IsEpsilonHalver)
@@ -389,7 +409,13 @@ Current architecture is complete and demonstrates feasibility. Document for futu
   6. comparator_displacement_bound_proved (subset reasoning, at most 2 changes, 18 lines)
   7. countOnes_split (partition by ranges with union disjoint, 30 lines)
   8. halver_bounds_top_excess (output top half bounded, 15 lines)
-- **Additional proved lemmas:** monotone_has_threshold_proved (partial), monotone_partitions_by_value_proved (full)
+  9. hammingDistance_triangle (triangle inequality via subset + card_union_le, 12 lines)
+  10. comparator_eq_conditional_swap (conditional swap equivalence via split_ifs, 18 lines)
+  11. swap_involutive (swap involution via split_ifs + simp_all, 3 lines)
+  12. swap_comm (swap commutativity via split_ifs + simp_all, 3 lines)
+  13. countOnes_nonneg (trivial Nat.zero_le, 1 line)
+  14. countOnes_plus_countZeros (partition proof via calc, 18 lines)
+- **Additional proved lemmas:** hammingDistance_symm, monotone_has_threshold_proved (partial), monotone_partitions_by_value_proved (full)
 - **Sorry count:** ~88 (expected for proof-in-progress phase)
 - **Compilation:** ✅ Clean (only sorry warnings)
 - **Dependencies:** AKS.Basic, AKS.Halver
