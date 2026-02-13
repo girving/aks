@@ -576,6 +576,23 @@ def countOnes {n : ℕ} (v : Fin n → Bool) : ℕ :=
 def countOnesInRange {n : ℕ} (v : Fin n → Bool) (lo hi : ℕ) : ℕ :=
   (Finset.univ.filter (fun i : Fin n => lo ≤ i.val ∧ i.val < hi ∧ v i = true)).card
 
+/-- Count ones is bounded by n. -/
+lemma countOnes_le {n : ℕ} (v : Fin n → Bool) : countOnes v ≤ n := by
+  unfold countOnes
+  -- Count of filtered set is at most count of original set
+  sorry
+
+/-- Count ones in range is bounded by range size. -/
+lemma countOnesInRange_le {n : ℕ} (v : Fin n → Bool) (lo hi : ℕ) :
+    countOnesInRange v lo hi ≤ hi - lo := by
+  unfold countOnesInRange
+  sorry
+
+/-- Total ones equals ones in top half plus ones in bottom half. -/
+lemma countOnes_split {n : ℕ} (v : Fin n → Bool) :
+    countOnes v = countOnesInRange v 0 (n/2) + countOnesInRange v (n/2) n := by
+  sorry
+
 /-- Monotone sequences have a threshold: all 0s before, all 1s after. -/
 lemma monotone_has_threshold {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
     ∃ k : ℕ, k ≤ n ∧ countOnes w = n - k := by
@@ -753,10 +770,13 @@ lemma error_accumulation_bound {m : ℕ} {ε : ℝ} (depth : ℕ) (ε₁ : ℝ)
     This is a restatement of IsEpsilonHalver for convenience. -/
 lemma halver_balances_ones {n : ℕ} (net : ComparatorNetwork n)
     (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
-    let totalOnes := (Finset.univ.filter (fun i => v i = true)).card
-    let onesInTop := (Finset.univ.filter (fun i : Fin n => (i : ℕ) < n/2 ∧ net.exec v i = true)).card
-    onesInTop ≤ totalOnes / 2 + ε * (n / 2) := by
-  sorry
+    let w := net.exec v
+    let topHalf := Finset.univ.filter (fun i : Fin n => (i : ℕ) < n / 2)
+    let onesInTop := (topHalf.filter (fun i => w i = true)).card
+    let totalOnes := (Finset.univ.filter (fun i : Fin n => w i = true)).card
+    (onesInTop : ℝ) ≤ totalOnes / 2 + ε * (n / 2) := by
+  -- This follows directly from the definition of IsEpsilonHalver
+  exact hnet v
 
 /-- If more than the fair share of ones are in the top half before halving,
     the halver will push some down. -/
