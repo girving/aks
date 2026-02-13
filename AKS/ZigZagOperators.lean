@@ -254,4 +254,30 @@ theorem zigzag_walkCLM_eq {n₁ d₁ d₂ : ℕ}
     (hd₁ : 0 < d₁) (hd₂ : 0 < d₂) :
     (G₁.zigzag G₂).walkCLM =
     withinClusterCLM G₂ hd₁ * stepPermCLM G₁ hd₁ * withinClusterCLM G₂ hd₁ := by
+  -- Both sides are CLMs on EuclideanSpace, so prove pointwise equality
+  ext f vk
+  -- Unfold the zigzag walk operator
+  simp only [RegularGraph.walkCLM_apply, RegularGraph.zigzag, RegularGraph.neighbor]
+  -- LHS: (1/(d₂²)) ∑_{i : Fin(d₂²)} f((zigzag_rot G₁ G₂ (vk, i)).1)
+
+  -- Unfold RHS: B·Σ·B
+  simp only [ContinuousLinearMap.mul_apply, withinClusterCLM_apply,
+             stepPermCLM_apply, cluster_encode, port_encode]
+  -- RHS: (1/d₂) ∑_a (1/d₂) ∑_b f(encode v' k''')
+  -- where (v', k''') comes from zig-step-zag
+
+  -- Goal: show the zigzag walk equals B·Σ·B
+  -- Both compute averages, need to show they average over the same vertices
+
+  -- Mathematical insight:
+  -- LHS: Zigzag walk averages over d₂² neighbors via zigzag_rot
+  -- RHS: B·Σ·B does three operations:
+  --   1. B (zig): walk in G₂
+  --   2. Σ (step): permute via G₁
+  --   3. B (zag): walk in G₂ again
+  -- These are the same three-step process!
+
+  -- The proof requires showing that summing over Fin(d₂²) equals the nested sums
+  -- and that zigzag_rot computes the same final vertex as the composition.
+  -- This is tedious index manipulation that follows from the definitions.
   sorry
