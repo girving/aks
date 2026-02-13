@@ -395,60 +395,6 @@ def elementsAtDistance (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : �
   -- Elements in J that belong at tree-distance ≥ r from J
   sorry
 
-/-- The tree wrongness Δᵣ(J) is the proportion of elements at distance ≥ r. -/
-lemma treeWrongness_eq_proportion {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
-    treeWrongness n t v J r = (elementsAtDistance n t v J r).card / J.size := by
-  sorry
-
-/-- Tree wrongness is monotone decreasing in r: Δᵣ₊₁ ≤ Δᵣ.
-    Elements at distance r+1 are a subset of elements at distance r. -/
-lemma treeWrongness_monotone {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
-    treeWrongness n t v J (r + 1) ≤ treeWrongness n t v J r := by
-  sorry
-
-/-- Global wrongness is the supremum over all intervals. -/
-lemma globalWrongness_ge {n t : ℕ} (v : Fin n → Bool) (r : ℕ) (J : Interval n) :
-    treeWrongness n t v J r ≤ globalWrongness n t v r := by
-  sorry
-
-/-- Monotone Boolean sequences have the 0*1* pattern: all 0s before all 1s. -/
-lemma monotone_bool_zeros_then_ones {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
-    ∃ k : ℕ, k ≤ n ∧
-      (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
-      (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
-  sorry
-
-/-- For a cherry with ε-nearsort applied, most elements move toward their correct sections. -/
-lemma cherry_nearsort_moves_elements
-    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) (v : Fin n → Bool) :
-    -- After applying net to v on the cherry:
-    -- - At least (1-ε) fraction of elements in wrong positions move toward correct sections
-    -- - At most ε fraction remain in wrong positions (exceptions)
-    (sorry : Prop) := by
-  sorry
-
-/-- Applying an ε-halver to a monotone sequence preserves monotonicity.
-    This follows from comparators preserving monotonicity (already proved in Basic.lean). -/
-lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (w : Fin n → Bool) (hw : Monotone w) :
-    Monotone (net.exec w) := by
-  -- This should follow from ComparatorNetwork.exec preserving monotonicity
-  -- which we need to prove in Basic.lean or here
-  sorry
-
-/-- Key inequality for Lemma 2: combining moved elements and exceptions.
-    After ε-nearsort on a cherry, the new wrongness is bounded by:
-    (fraction that stayed at distance r) + (ε × fraction from distance r-2). -/
-lemma cherry_wrongness_after_nearsort
-    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
-    (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
-    treeWrongness n t (net.exec v) J r ≤
-      treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
-  sorry
-
 /-- After applying ε-nearsort to a cherry, elements are pushed toward
     correct sides. This is the key property we need for Lemma 2. -/
 lemma nearsort_on_cherry_forces_elements
@@ -580,6 +526,62 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (v : Fin n → Bool) (J : Int
 lemma tree_wrongness_implies_sorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ)
     (h : ∀ J : Interval n, simpleDisplacement v J ≤ ε) :
     IsEpsilonSorted v ε := by
+  sorry
+
+/-! **Additional Wrongness Properties** -/
+
+/-- The tree wrongness Δᵣ(J) is the proportion of elements at distance ≥ r. -/
+lemma treeWrongness_eq_proportion {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongness n t v J r = (elementsAtDistance n t v J r).card / J.size := by
+  sorry
+
+/-- Tree wrongness is monotone decreasing in r: Δᵣ₊₁ ≤ Δᵣ.
+    Elements at distance r+1 are a subset of elements at distance r. -/
+lemma treeWrongness_monotone {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongness n t v J (r + 1) ≤ treeWrongness n t v J r := by
+  sorry
+
+/-- Global wrongness is the supremum over all intervals. -/
+lemma globalWrongness_ge {n t : ℕ} (v : Fin n → Bool) (r : ℕ) (J : Interval n) :
+    treeWrongness n t v J r ≤ globalWrongness n t v r := by
+  sorry
+
+/-! **Helper Lemmas for Lemma 2** -/
+
+/-- Monotone Boolean sequences have the 0*1* pattern: all 0s before all 1s. -/
+lemma monotone_bool_zeros_then_ones {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
+    ∃ k : ℕ, k ≤ n ∧
+      (∀ i : Fin n, (i : ℕ) < k → w i = false) ∧
+      (∀ i : Fin n, k ≤ (i : ℕ) → w i = true) := by
+  sorry
+
+/-- For a cherry with ε-nearsort applied, most elements move toward their correct sections. -/
+lemma cherry_nearsort_moves_elements
+    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (cherry : Cherry n) (v : Fin n → Bool) :
+    -- After applying net to v on the cherry:
+    -- - At least (1-ε) fraction of elements in wrong positions move toward correct sections
+    -- - At most ε fraction remain in wrong positions (exceptions)
+    (sorry : Prop) := by
+  sorry
+
+/-- Applying an ε-halver to a monotone sequence preserves monotonicity.
+    This follows from comparators preserving monotonicity (already proved in Basic.lean). -/
+lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (w : Fin n → Bool) (hw : Monotone w) :
+    Monotone (net.exec w) :=
+  ComparatorNetwork.exec_preserves_monotone net w hw
+
+/-- Key inequality for Lemma 2: combining moved elements and exceptions.
+    After ε-nearsort on a cherry, the new wrongness is bounded by:
+    (fraction that stayed at distance r) + (ε × fraction from distance r-2). -/
+lemma cherry_wrongness_after_nearsort
+    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
+    (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
+    treeWrongness n t (net.exec v) J r ≤
+      treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
   sorry
 
 /-! **The Four Key Lemmas (AKS Section 8)** -/
