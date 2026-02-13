@@ -293,6 +293,37 @@ lemma wrongness_bounds_sorted {n : ℕ} (v w : Fin n → Bool) (hw : Monotone w)
     field_simp
     norm_cast
 
+/-- **KEY LEMMA (Phase B.3)**: ε-halving decreases wrongness geometrically.
+
+    This is the core technical result enabling geometric decrease.
+
+    Proof strategy:
+    1. For monotone w with k ones, define transition point at k
+    2. Wrong elements: i < k with v i = true, OR i ≥ k with v i = false
+    3. After halving, ones are balanced by ε-halver property
+    4. Most wrong elements move toward correct half
+    5. Boundary effects contribute at most ε error
+
+    Risk: MEDIUM-HIGH. May need multiple attempts or reformulation.
+    Fallback: axiomatize if stuck after 3-4 attempts. -/
+lemma halver_decreases_wrongness {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1/2) (hnet : IsEpsilonHalver net ε)
+    (v w : Fin n → Bool) (hw : Monotone w) :
+    wrongness (net.exec v) (net.exec w) (ComparatorNetwork.exec_preserves_monotone net w hw)
+      ≤ 2 * ε * wrongness v w hw + ε := by
+  -- Proof sketch:
+  -- 1. Let k = number of ones in w (transition point)
+  -- 2. Let v' = net.exec v, w' = net.exec w
+  -- 3. Wrong elements in v: count positions i < k with v i = true (should be false)
+  --                          + positions i ≥ k with v i = false (should be true)
+  -- 4. Apply ε-halver property to v and w
+  -- 5. After halving, ones in v' are balanced (up to ε error)
+  -- 6. Since w' is also balanced and monotone, wrong elements in v' are bounded
+  -- 7. Connection: wrongness decrease comes from balanced distribution
+  --    forcing elements toward correct side
+
+  sorry
+
 /-- **Halver composition lemma**: Applying an ε-halver to a
     δ-sorted sequence yields a (δ·2ε)-sorted sequence.
     This geometric decrease is the engine of AKS correctness.
