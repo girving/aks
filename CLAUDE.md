@@ -69,7 +69,11 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 ### Proof Visualization (`docs/index.html`)
 
-Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
+Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: update `PROOF_DATA` JSON in `docs/index.html` with theorem names, statuses, and line numbers. Colors: green=proved, orange=sorry, red=axiom, blue=definition. Milestone theorems are larger with white border.
+
+**Update the visualization every time you prove something.** When a `sorry` is resolved, change its status in `PROOF_DATA` from `"sorry"` to `"proved"` and update its description. Then run `scripts/update-viz-lines` to sync line numbers. Do this proactively — don't wait for the user to ask.
+
+**Line number maintenance:** `scripts/update-viz-lines` auto-syncs line numbers from source files. Run it after any code changes. Use `--check` mode to verify without modifying. The script greps each node's source file for its declaration keyword and updates the `line:` field in `PROOF_DATA`.
 
 **Visualization invariant:** If all nodes in a file are green, the file must have no `sorry`s. Private lemmas with `sorry`s must be included as nodes unless they fall under a larger `sorry` theorem.
 
