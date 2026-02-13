@@ -84,6 +84,30 @@
 - **Total proofs:** 14 complete + 1 framework lemma (network_preserves_countOnes)
 - **File size:** 1,579 lines (+66 lines in extended session, +1,057 total from session start)
 
+**Sorry Reduction Session (continued 2026-02-13):**
+Starting from 55 sorry's, reduced to 49 (6 more eliminated):
+- ✅ **PROVED:** `raiseToLevel_level` — helper proving `raiseToLevel` preserves target level
+  - Proved by well-founded recursion on `node.level - targetLevel`
+  - Eliminated 2 sorry's in `commonAncestor` definition
+- ✅ **PROVED:** `sections_partition` — classical logic tautology `(P ∨ Q ∨ R) ∨ (¬P ∧ ¬Q ∧ ¬R)`
+- ✅ **PROVED:** `network_displacement_bound` — network changes ≤ 2×length positions
+  - Induction on comparator list with subset + card reasoning
+- ✅ **PROVED:** `commonAncestorSameLevel_comm` — commutativity of same-level ancestor finding
+  - Key insight: at level 0, index must be 0 (only one node), so TreeNode.ext applies
+  - Required adding `TreeNode.ext` lemma
+- ✅ **PROVED:** `commonAncestor_comm` + `treeDistance_comm` — tree distance symmetry
+  - Uses `conv_lhs/rhs` for clean branch matching on asymmetric definition
+- ✅ **PROVED:** `comparator_disagreements_le` — comparators don't increase disagreements
+  - Major infrastructure lemma: partition into {c.i,c.j} and rest, filter_pair counting
+  - 16-case Bool analysis reduced via `cases ... <;> simp`
+- ✅ **PROVED:** `network_disagreements_le` — networks don't increase disagreements
+  - Induction using comparator_disagreements_le
+- ✅ **PROVED:** `halver_preserves_witness_structure` — halving preserves monotone witness
+  - Uses network_disagreements_le for δ·n bound, then derives ε ≥ 0 from halver property
+  - Interesting sub-proof: all-false input stays all-false through network (countOnes=0)
+- **File:** 2,140+ lines, 49 sorry warnings, 0 errors
+- **Total proofs this session:** 9 substantial lemmas eliminated
+
 **Next Steps:**
 - **PRIMARY:** Implement `halver_implies_nearsort_property` (THE KEY bottleneck, Task #15)
   - Requires: recursive ε-nearsort correctness proof
@@ -91,6 +115,7 @@
   - Risk: MEDIUM (has fallback: axiomatize if stuck after 2-3 attempts)
 - Continue helper proofs for element movement tracking
 - Phase 3: Complete Lemma 2 main proof assembly
+- Most remaining 49 sorry's are deep theory (Lemmas 1-4) or `(sorry : Prop)` placeholders
 
 ## Executive Summary
 

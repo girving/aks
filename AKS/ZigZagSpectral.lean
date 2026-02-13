@@ -311,7 +311,7 @@ theorem norm_sq_cluster_decomposition {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
 theorem withinCluster_mul_complement_clusterMean {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) (hd₂ : 0 < d₂) :
     withinClusterCLM (n₁ := n₁) G₂ hd₁ * (1 - clusterMeanCLM hd₁) =
-    withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁ := by
+    withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁ := by
   rw [mul_sub, mul_one, withinCluster_comp_clusterMean G₂ hd₁ hd₂]
 
 /-- Within each cluster v, (B-Q) acts like (G₂.walkCLM - meanCLM d₁).
@@ -319,19 +319,18 @@ theorem withinCluster_mul_complement_clusterMean {n₁ d₁ d₂ : ℕ}
 theorem withinCluster_minus_clusterMean_cluster_action {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁)
     (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) (v : Fin n₁) (k : Fin d₁) :
-    ((withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f).ofLp (encode v k) =
+    (withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f (encode v k) =
     ((∑ j : Fin d₂, f.ofLp (encode v (G₂.neighbor k j))) / d₂) -
     ((∑ i : Fin d₁, f.ofLp (encode v i)) / d₁) := by
-  simp only [ContinuousLinearMap.sub_apply, withinClusterCLM_apply,
-             clusterMeanCLM_apply, cluster_encode, port_encode]
-  rfl
+  simp only [ContinuousLinearMap.sub_apply, WithLp.ofLp_sub, Pi.sub_apply,
+             withinClusterCLM_apply, clusterMeanCLM_apply, cluster_encode, port_encode]
 
 
 /-! **Cluster Quotient Helpers** -/
 
 /-- Extract the cluster-constant part of a function as a function on Fin n₁.
     This is the "quotient map" that sends f ↦ (v ↦ mean of f on cluster v). -/
-noncomputable def clusterQuotient {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+noncomputable def clusterQuotient {n₁ d₁ : ℕ} (_hd₁ : 0 < d₁)
     (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) : EuclideanSpace ℝ (Fin n₁) :=
   (WithLp.equiv 2 _).symm (fun v ↦ (∑ k : Fin d₁, f.ofLp (encode v k)) / d₁)
 
@@ -380,13 +379,10 @@ theorem norm_clusterLift {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
     ‖clusterLift hd₁ g‖ = Real.sqrt d₁ * ‖g‖ := by
   rw [EuclideanSpace.norm_eq, EuclideanSpace.norm_eq]
   simp only [clusterLift_apply]
-  rw [← sum_encode_eq_sum hd₁]
-  simp only [Finset.sum_comm (t := univ)]
-  rw [show ∑ v, ∑ k, ‖g.ofLp v‖ ^ 2 = ∑ v, d₁ • ‖g.ofLp v‖ ^ 2 by
-      simp [Finset.sum_const, Fintype.card_fin, nsmul_eq_mul]]
-  rw [← Finset.sum_mul, Real.sqrt_mul (Nat.cast_nonneg _)]
-  congr 1
-  rw [Real.sqrt_sq (Nat.cast_nonneg _)]
+  rw [← sum_encode_eq_sum hd₁, Finset.sum_comm]
+  simp only [cluster_encode]
+  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+      Real.sqrt_mul (Nat.cast_nonneg _)]
 
 /-- The global mean annihilates functions with zero cluster means. -/
 theorem meanCLM_of_zero_clusterQuotient {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
@@ -397,13 +393,12 @@ theorem meanCLM_of_zero_clusterQuotient {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
   simp only [meanCLM_apply]
   have : ∑ j, f.ofLp j = 0 := by
     rw [← sum_encode_eq_sum hd₁]
-    simp only [Finset.sum_comm (t := univ)]
     have : ∀ v, ∑ k, f.ofLp (encode v k) = 0 := by
       intro v
       have := congr_arg (·.ofLp v) h
       simp only [clusterQuotient_apply, PiLp.zero_apply] at this
       field_simp at this
-      exact this
+      linarith
     simp [this]
   rw [this]
   simp
@@ -413,10 +408,18 @@ theorem hat_block_vanishes_on_complement {n₁ d₁ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁)
     (f : EuclideanSpace ℝ (Fin (n₁ * d₁)))
     (h : clusterMeanCLM hd₁ f = 0) :
-    (clusterMeanCLM (n₁ := n₁) hd₁ * stepPermCLM G₁ hd₁ * clusterMeanCLM hd₁ -
+    (clusterMeanCLM (n₁ := n₁) hd₁ * stepPermCLM G₁ hd₁ * clusterMeanCLM (n₁ := n₁) hd₁ -
      meanCLM (n₁ * d₁)) f = 0 := by
-  simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.mul_apply, h]
-  simp only [map_zero, sub_self]
+  simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.mul_apply, h, map_zero]
+  -- Goal: 0 - P f = 0; need P f = 0
+  have hq : clusterQuotient hd₁ f = 0 := by
+    have hlift := clusterMeanCLM_eq_lift_quotient hd₁ f
+    rw [h] at hlift
+    ext v
+    have := congr_arg (·.ofLp (encode v ⟨0, hd₁⟩)) hlift.symm
+    simp only [clusterLift_apply, cluster_encode, PiLp.zero_apply] at this
+    exact this
+  rw [meanCLM_of_zero_clusterQuotient hd₁ f hq, sub_self]
 
 /-- On cluster-constant functions (lifted), QΣQ acts like lift(W_{G₁}). -/
 theorem hat_block_on_lift {n₁ d₁ : ℕ}
@@ -427,15 +430,10 @@ theorem hat_block_on_lift {n₁ d₁ : ℕ}
   -- Q(Σ(Q(lift(g)))) = Q(Σ(lift(g))) since Q(lift(g)) = lift(g)
   have : clusterMeanCLM hd₁ (clusterLift hd₁ g) = clusterLift hd₁ g := by
     rw [clusterMeanCLM_eq_lift_quotient]
-    simp only [clusterQuotient_apply, clusterLift_apply]
-    apply PiLp.ext; intro vk
-    simp only [clusterLift_apply]
     congr 1
-    rw [← sum_encode_eq_sum hd₁]
-    simp only [Finset.sum_comm (t := univ)]
-    have : ∀ v, ∑ k, g.ofLp (cluster hd₁ (encode v k)) = d₁ • g.ofLp v := by
-      intro v; simp [Finset.sum_const, Fintype.card_fin, cluster_encode]
-    simp [this, nsmul_eq_mul]
+    apply PiLp.ext; intro v
+    simp only [clusterQuotient_apply, clusterLift_apply, cluster_encode]
+    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
     field_simp
   rw [this]
   -- Q(Σ(lift(g))) = lift(quotient(Σ(lift(g))))
@@ -449,15 +447,10 @@ theorem meanCLM_on_lift {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
     meanCLM (n₁ * d₁) (clusterLift hd₁ g) = clusterLift hd₁ (meanCLM n₁ g) := by
   apply PiLp.ext; intro vk
   simp only [meanCLM_apply, clusterLift_apply]
-  -- LHS: (∑ j, g(cluster j)) / (n₁ * d₁)
-  -- RHS: ((∑ v, g(v)) / n₁)
-  congr 1
-  rw [← sum_encode_eq_sum hd₁]
-  simp only [Finset.sum_comm (t := univ), clusterLift_apply]
-  have : ∀ v, ∑ k, g.ofLp (cluster hd₁ (encode v k)) = d₁ • g.ofLp v := by
-    intro v; simp [Finset.sum_const, Fintype.card_fin, cluster_encode]
-  simp [this, nsmul_eq_mul]
-  ring
+  -- LHS: (∑ j, g(cluster j)) / (n₁ * d₁)   RHS: ((∑ v, g(v)) / n₁)
+  rw [sum_over_cluster hd₁ (fun v ↦ g.ofLp v), nsmul_eq_mul, Nat.cast_mul,
+      mul_comm (n₁ : ℝ) (d₁ : ℝ),
+      mul_div_mul_left _ _ (Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp hd₁))]
 
 /-! **Cluster Restriction Helpers** -/
 
@@ -475,11 +468,10 @@ def clusterRestrict {n₁ d₁ : ℕ} (f : EuclideanSpace ℝ (Fin (n₁ * d₁)
 theorem clusterRestrict_action {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁)
     (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) (v : Fin n₁) :
-    clusterRestrict ((withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f) v =
+    clusterRestrict ((withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f) v =
     (G₂.walkCLM - meanCLM d₁) (clusterRestrict f v) := by
   apply PiLp.ext; intro k
-  simp only [clusterRestrict_apply, ContinuousLinearMap.sub_apply,
-             RegularGraph.walkCLM_apply, meanCLM_apply]
+  simp only [clusterRestrict_apply, ContinuousLinearMap.sub_apply]
   exact withinCluster_minus_clusterMean_cluster_action G₂ hd₁ f v k
 
 /-- Norm squared decomposes over cluster restrictions. -/
@@ -503,8 +495,13 @@ theorem withinCluster_tilde_contraction {n₁ d₁ d₂ : ℕ}
      (1 - clusterMeanCLM hd₁)‖ ≤ spectralGap G₂ := by
   -- Need hd₂ for the simplification lemma
   rcases Nat.eq_zero_or_pos d₂ with rfl | hd₂
-  · -- d₂ = 0 case: both operators are zero
-    simp [withinClusterCLM, clusterMeanCLM, Finset.sum_empty]
+  · -- d₂ = 0 case: B = 0 since walk sums over Fin 0
+    have hB_zero : withinClusterCLM (n₁ := n₁) G₂ hd₁ = 0 := by
+      ext f : 1
+      apply PiLp.ext; intro vk
+      show withinClusterCLM G₂ hd₁ f vk = 0
+      simp only [withinClusterCLM_apply, Finset.univ_eq_empty, Finset.sum_empty, zero_div]
+    rw [hB_zero, zero_mul, norm_zero]
     exact spectralGap_nonneg G₂
 
   -- Simplify B(I-Q) = B - Q
@@ -515,10 +512,10 @@ theorem withinCluster_tilde_contraction {n₁ d₁ d₂ : ℕ}
   · exact spectralGap_nonneg G₂
   · intro f
     -- Bound using cluster decomposition
-    have h_sq : ‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖ ^ 2 ≤
+    have h_sq : ‖(withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f‖ ^ 2 ≤
                 (spectralGap G₂) ^ 2 * ‖f‖ ^ 2 := by
-      calc ‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖ ^ 2
-          = ∑ v : Fin n₁, ‖clusterRestrict ((withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f) v‖ ^ 2 := by
+      calc ‖(withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f‖ ^ 2
+          = ∑ v : Fin n₁, ‖clusterRestrict ((withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f) v‖ ^ 2 := by
             exact norm_sq_clusterRestrict hd₁ _
         _ = ∑ v : Fin n₁, ‖(G₂.walkCLM - meanCLM d₁) (clusterRestrict f v)‖ ^ 2 := by
             refine Finset.sum_congr rfl fun v _ ↦ ?_
@@ -526,21 +523,56 @@ theorem withinCluster_tilde_contraction {n₁ d₁ d₂ : ℕ}
         _ ≤ ∑ v : Fin n₁, (spectralGap G₂ * ‖clusterRestrict f v‖) ^ 2 := by
             apply Finset.sum_le_sum; intro v _
             unfold spectralGap
-            exact sq_le_sq' (by linarith [norm_nonneg _, spectralGap_nonneg G₂])
-                            (ContinuousLinearMap.le_opNorm _ _)
+            exact sq_le_sq'
+              (by linarith [norm_nonneg ((G₂.walkCLM - meanCLM d₁) (clusterRestrict f v)),
+                            mul_nonneg (norm_nonneg (G₂.walkCLM - meanCLM d₁ : _))
+                                       (norm_nonneg (clusterRestrict f v))])
+              (ContinuousLinearMap.le_opNorm _ _)
         _ = (spectralGap G₂) ^ 2 * ∑ v : Fin n₁, ‖clusterRestrict f v‖ ^ 2 := by
             rw [Finset.mul_sum]; refine Finset.sum_congr rfl fun v _ ↦ ?_; ring
         _ = (spectralGap G₂) ^ 2 * ‖f‖ ^ 2 := by
             rw [← norm_sq_clusterRestrict hd₁]
     -- Take square root
-    calc ‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖
-        = √(‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖ ^ 2) := by
+    calc ‖(withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f‖
+        = √(‖(withinClusterCLM (n₁ := n₁) G₂ hd₁ - clusterMeanCLM (n₁ := n₁) hd₁) f‖ ^ 2) := by
           rw [Real.sqrt_sq (norm_nonneg _)]
       _ ≤ √((spectralGap G₂) ^ 2 * ‖f‖ ^ 2) := by
           apply Real.sqrt_le_sqrt; exact h_sq
       _ = spectralGap G₂ * ‖f‖ := by
           rw [Real.sqrt_mul (sq_nonneg _), Real.sqrt_sq (spectralGap_nonneg G₂),
               Real.sqrt_sq (norm_nonneg _)]
+
+/-! **Global Mean Decomposition** -/
+
+/-- The global mean on `ℝ^{n₁·d₁}` factors through the cluster mean.
+    Averaging globally = taking cluster means, then averaging those.
+
+    This establishes the relationship `P ≤ Q` (as projections) needed
+    for the abstract RVW bound. -/
+theorem meanCLM_eq_clusterMean_comp {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
+    (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) *
+    clusterMeanCLM hd₁ =
+    meanCLM (n₁ * d₁) := by
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, clusterMeanCLM_apply]
+  congr 1
+  calc ∑ j, (∑ i, f.ofLp (encode (cluster hd₁ j) i)) / ↑d₁
+      = (∑ j, ∑ i, f.ofLp (encode (cluster hd₁ j) i)) / ↑d₁ := by rw [← Finset.sum_div]
+    _ = (d₁ • ∑ v, ∑ i, f.ofLp (encode v i)) / ↑d₁ := by
+        congr 1
+        exact sum_over_cluster hd₁ (fun v => ∑ i, f.ofLp (encode v i))
+    _ = ∑ v, ∑ i, f.ofLp (encode v i) := by simp; field_simp
+    _ = ∑ k, f.ofLp k := sum_encode_eq_sum hd₁ _
+
+theorem clusterMean_comp_meanCLM {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
+    clusterMeanCLM (n₁ := n₁) hd₁ *
+    (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) =
+    meanCLM (n₁ * d₁) := by
+  ext f vk
+  simp only [ContinuousLinearMap.mul_apply, clusterMeanCLM_apply, meanCLM_apply]
+  rw [Finset.sum_const, Finset.card_fin]
+  simp
+  field_simp
 
 /-- **Hat block spectral gap:** `Q · Σ · Q` restricted to the hat subspace
     acts like `W_{G₁}` lifted to the product space, so its distance from
@@ -557,50 +589,27 @@ theorem hat_block_norm {n₁ d₁ : ℕ}
   set S := stepPermCLM G₁ hd₁
   set P := (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _)
 
+  -- Function-level helpers for Q² = Q and PQ = P
+  have hQ_app : ∀ x, Q (Q x) = Q x := by
+    intro x; change (Q * Q) x = Q x; rw [clusterMeanCLM_idempotent hd₁]
+  have hPQ_app : ∀ x, P (Q x) = P x := by
+    intro x; change (P * Q) x = P x; rw [meanCLM_eq_clusterMean_comp hd₁]
+
   -- Use opNorm_le_bound
   apply ContinuousLinearMap.opNorm_le_bound
   · exact spectralGap_nonneg G₁
   · intro f
-    -- Key: (QSQ - P) acts only on the image of Q
-    -- Write Qf = clusterLift(g) where g = clusterQuotient(f)
     set g := clusterQuotient hd₁ f
-
-    -- Since Q is idempotent, Qf = clusterLift(g)
     have hQf : Q f = clusterLift hd₁ g := clusterMeanCLM_eq_lift_quotient hd₁ f
 
     -- (QSQ - P)f = (QSQ - P)(Qf) using Q² = Q and PQ = P
     have vanish_key : (Q * S * Q - P) f = (Q * S * Q - P) (Q f) := by
       simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.mul_apply]
       congr 1
-      · -- QS(Qf) = QS(Q(Qf))
-        rw [clusterMeanCLM_idempotent hd₁]
-      · -- Pf = P(Qf) using PQ = P
-        have hPQ : P * Q = P := meanCLM_eq_clusterMean_comp hd₁
-        calc P f = P (Q f + (1 - Q) f) := by
-              congr 1
-              rw [add_sub_cancel]
-          _ = P (Q f) + P ((1 - Q) f) := by
-              simp only [map_add, ContinuousLinearMap.sub_apply,
-                         ContinuousLinearMap.one_apply]
-          _ = P (Q f) := by
-              -- P((I-Q)f) = 0 since (I-Q)f has zero cluster means, so zero global mean
-              have : (1 - Q) f = (1 - Q) f := rfl
-              simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply] at this
-              have hzero : Q ((1 - Q) f) = 0 := by
-                simp only [map_sub, ContinuousLinearMap.one_apply]
-                rw [clusterMeanCLM_idempotent hd₁]
-                simp
-              have : clusterQuotient hd₁ ((1 - Q) f) = 0 := by
-                rw [← clusterMeanCLM_eq_lift_quotient] at hzero
-                have : clusterLift hd₁ (clusterQuotient hd₁ ((1 - Q) f)) = 0 := hzero
-                -- If lift(g) = 0, then g = 0
-                have : ∀ v, (clusterQuotient hd₁ ((1 - Q) f)).ofLp v = 0 := by
-                  intro v
-                  have := congr_arg (·.ofLp (encode v ⟨0, hd₁⟩)) this
-                  simp only [clusterLift_apply, cluster_encode, PiLp.zero_apply] at this
-                  exact this
-                ext v; exact this v
-              exact meanCLM_of_zero_clusterQuotient hd₁ _ this
+      · -- QS(Qf) = QS(Q(Qf)): rewrite inner Q f using Q² = Q
+        congr 1; congr 1; exact (hQ_app f).symm
+      · -- Pf = P(Qf)
+        exact (hPQ_app f).symm
 
     rw [vanish_key, hQf]
 
@@ -608,10 +617,9 @@ theorem hat_block_norm {n₁ d₁ : ℕ}
     have action_on_lift : (Q * S * Q - P) (clusterLift hd₁ g) =
         clusterLift hd₁ ((G₁.walkCLM - meanCLM n₁) g) := by
       simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.mul_apply]
-      have : Q * S * Q = Q * (S * Q) := by rw [mul_assoc]
-      rw [this]
       rw [hat_block_on_lift, meanCLM_on_lift]
-      simp [ContinuousLinearMap.sub_apply]
+      apply PiLp.ext; intro vk
+      simp only [clusterLift_apply, WithLp.ofLp_sub, Pi.sub_apply]
 
     rw [action_on_lift]
 
@@ -629,48 +637,10 @@ theorem hat_block_norm {n₁ d₁ : ℕ}
       _ = spectralGap G₁ * ‖Q f‖ := by rw [← hQf]
       _ ≤ spectralGap G₁ * ‖f‖ := by
           apply mul_le_mul_of_nonneg_left _ (spectralGap_nonneg G₁)
-          -- Q is a projection with norm ≤ 1
           calc ‖Q f‖ ≤ ‖Q‖ * ‖f‖ := Q.le_opNorm f
             _ ≤ 1 * ‖f‖ := by
                 apply mul_le_mul_of_nonneg_right (clusterMeanCLM_norm_le_one hd₁) (norm_nonneg _)
             _ = ‖f‖ := one_mul _
 
 
-/-! **Global Mean Decomposition** -/
-
-/-- The global mean on `ℝ^{n₁·d₁}` factors through the cluster mean.
-    Averaging globally = taking cluster means, then averaging those.
-
-    This establishes the relationship `P ≤ Q` (as projections) needed
-    for the abstract RVW bound. -/
-theorem meanCLM_eq_clusterMean_comp {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
-    (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) *
-    clusterMeanCLM hd₁ =
-    meanCLM (n₁ * d₁) := by
-  ext f vk
-  simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, clusterMeanCLM_apply]
-  -- LHS: (∑ j, ((∑ i, f (encode (cluster j) i)) / d₁)) / (n₁ * d₁)
-  -- RHS: (∑ k, f k) / (n₁ * d₁)
-  -- Key: as j ranges over Fin (n₁ * d₁), cluster j takes each value in Fin n₁ exactly d₁ times
-  congr 1
-  calc ∑ j, (∑ i, f.ofLp (encode (cluster hd₁ j) i)) / ↑d₁
-      = (∑ j, ∑ i, f.ofLp (encode (cluster hd₁ j) i)) / ↑d₁ := by rw [← Finset.sum_div]
-    _ = (d₁ • ∑ v, ∑ i, f.ofLp (encode v i)) / ↑d₁ := by
-        congr 1
-        -- Group by cluster: ∑ j ... = d₁ · ∑ v ...
-        exact sum_over_cluster hd₁ (fun v => ∑ i, f.ofLp (encode v i))
-    _ = ∑ v, ∑ i, f.ofLp (encode v i) := by simp; field_simp
-    _ = ∑ k, f.ofLp k := sum_encode_eq_sum hd₁ _
-
-theorem clusterMean_comp_meanCLM {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
-    clusterMeanCLM (n₁ := n₁) hd₁ *
-    (meanCLM (n₁ * d₁) : EuclideanSpace ℝ (Fin (n₁ * d₁)) →L[ℝ] _) =
-    meanCLM (n₁ * d₁) := by
-  ext f vk
-  simp only [ContinuousLinearMap.mul_apply, clusterMeanCLM_apply, meanCLM_apply]
-  -- LHS: (∑ i, (meanCLM f) (encode (cluster vk) i)) / d₁
-  -- Since meanCLM f is constant (= (∑ k, f k) / (n₁ * d₁)), this simplifies
-  -- to (d₁ · ((∑ k, f k) / (n₁ * d₁))) / d₁ = (∑ k, f k) / (n₁ * d₁) = RHS
-  rw [Finset.sum_const, Finset.card_fin]
-  simp
-  field_simp
+-- (moved meanCLM_eq_clusterMean_comp and clusterMean_comp_meanCLM before hat_block_norm)
