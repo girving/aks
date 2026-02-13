@@ -301,6 +301,25 @@ private lemma rvw_inner_product_expansion {n : ℕ}
           rw [inner_add_left, inner_add_right, inner_add_right]
           ring
 
+/-- Helper: For an eigenvector v with Av = λv, we have ⟨Av,v⟩ = λ·‖v‖². -/
+private lemma eigenvalue_inner_eq {n : ℕ} (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (v : EuclideanSpace ℝ (Fin n)) (lambda : ℝ) (h : A v = lambda • v) :
+    @inner ℝ _ _ (A v) v = lambda * ‖v‖ ^ 2 := by
+  calc @inner ℝ _ _ (A v) v
+      = @inner ℝ _ _ (lambda • v) v := by rw [h]
+    _ = lambda * @inner ℝ _ _ v v := by rw [inner_smul_left]; norm_cast
+    _ = lambda * ‖v‖ ^ 2 := by rw [real_inner_self_eq_norm_sq]
+
+/-- Helper: For a unit eigenvector, the Rayleigh quotient equals the eigenvalue. -/
+private lemma rayleigh_at_eigenvector {n : ℕ}
+    (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (v : EuclideanSpace ℝ (Fin n)) (lambda : ℝ)
+    (hv_norm : ‖v‖ = 1) (h : A v = lambda • v) :
+    @inner ℝ _ _ (A v) v = lambda := by
+  have := eigenvalue_inner_eq A v lambda h
+  simp [hv_norm] at this
+  exact this
+
 /-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A. -/
 private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
     (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
@@ -346,32 +365,51 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
     -- 3. Computing |⟨Av,v⟩| = |λ| = ‖A‖
     -- 4. Showing this is in the supremum range
 
-    -- Use a different approach: the Rayleigh quotient extrema are eigenvalues,
-    -- and for self-adjoint operators, the operator norm equals the maximum
-    -- absolute eigenvalue.
-    --
-    -- Key lemma from Mathlib: LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional
-    -- states that sup{⟨Ax,x⟩/‖x‖² : x ≠ 0} is an eigenvalue.
-    --
-    -- For self-adjoint A on finite-dimensional real space:
-    -- - Let λ_max = sup{⟨Ax,x⟩ : ‖x‖=1} (an eigenvalue by Rayleigh theory)
-    -- - Let λ_min = inf{⟨Ax,x⟩ : ‖x‖=1} (also an eigenvalue)
-    -- - Then ‖A‖ = max(|λ_max|, |λ_min|) (standard spectral theory)
-    --
-    -- Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|λ_max|, |λ_min|) = ‖A‖
-    --
-    -- This is a standard result in spectral theory for finite-dimensional
-    -- self-adjoint operators. The complete proof requires:
-    -- 1. Converting CLM to LinearMap to use Rayleigh theory
-    -- 2. Applying hasEigenvalue_iSup_of_finiteDimensional
-    -- 3. Using the spectral theorem for self-adjoint operators
-    -- 4. Connecting operator norm to eigenvalues
-    --
-    -- All components exist in Mathlib but require careful coordination between:
-    -- - ContinuousLinearMap (Analysis.InnerProductSpace.Adjoint)
-    -- - LinearMap.IsSymmetric (Analysis.InnerProductSpace.Rayleigh)
-    -- - Spectrum and eigenvalues (Analysis.Normed.Algebra.Spectrum)
-    -- - Self-adjoint operator norms (Analysis.CStarAlgebra.Spectrum)
+    -- Strategy: Use Rayleigh quotient theory + spectral radius
+    -- For self-adjoint A on finite-dimensional space:
+    -- 1. sup{⟨Ax,x⟩ : ‖x‖=1} is an eigenvalue λ_max (Rayleigh theory)
+    -- 2. inf{⟨Ax,x⟩ : ‖x‖=1} is an eigenvalue λ_min (Rayleigh theory)
+    -- 3. ‖A‖ = spectralRadius(A) = max{|λ| : λ eigenvalue}
+    -- 4. Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|λ_max|, |λ_min|) = ‖A‖
+
+    -- Convert to LinearMap for Rayleigh theory
+    set T : EuclideanSpace ℝ (Fin n) →ₗ[ℝ] EuclideanSpace ℝ (Fin n) := A.toLinearMap
+
+    -- T is symmetric (equivalent to A being self-adjoint)
+    have hT_symm : T.IsSymmetric := hA_sa
+
+    -- The Rayleigh quotient supremum is an eigenvalue
+    have h_ray_sup : HasEigenvalue T
+        (⨆ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
+          RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 : ℝ) := by
+      haveI : Nontrivial (EuclideanSpace ℝ (Fin n)) := by
+        apply EuclideanSpace.nontrivial_of_finrank_pos
+        simp [hn]
+      exact LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional hT_symm
+
+    -- Similarly for infimum
+    have h_ray_inf : HasEigenvalue T
+        (⨅ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
+          RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 : ℝ) := by
+      haveI : Nontrivial (EuclideanSpace ℝ (Fin n)) := by
+        apply EuclideanSpace.nontrivial_of_finrank_pos
+        simp [hn]
+      exact LinearMap.IsSymmetric.hasEigenvalue_iInf_of_finiteDimensional hT_symm
+
+    -- These eigenvalues are in the spectrum
+    -- For finite-dimensional spaces, spectrum = eigenvalues
+    -- The spectral radius is the sup of norms of spectrum elements
+    -- For self-adjoint, spectralRadius = ‖A‖
+
+    -- The key connection: the Rayleigh quotient extrema equal the eigenvalues
+    -- with max/min absolute value, so their absolute values bound the operator norm.
+
+    -- This requires showing:
+    -- (a) The Rayleigh supremum/infimum correspond to eigenvectors
+    -- (b) At an eigenvector v with Av = λv, we have ⟨Av,v⟩ = λ
+    -- (c) The eigenvalue with max |λ| satisfies |λ| = ‖A‖ (spectral radius)
+    -- (d) Therefore the supremum range includes this value
+
     sorry
 
   exact le_antisymm dir2 dir1
