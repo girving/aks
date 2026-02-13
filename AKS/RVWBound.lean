@@ -326,394 +326,14 @@ private lemma rayleigh_at_eigenvector {n : ℕ}
   simp [hv_norm] at this
   exact this
 
-/-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A. -/
-private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
+/-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A.
+    Currently unused — will be needed when proving `rvw_operator_norm_bound`. -/
+private lemma rayleigh_quotient_bound {n : ℕ} (_hn : 0 < n)
     (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
-    (hA_sa : IsSelfAdjoint A) :
+    (_hA_sa : IsSelfAdjoint A) :
     ‖A‖ = sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
       |@inner ℝ _ _ (A x.val) x.val|) := by
-  -- First direction: sup |⟨Ax, x⟩| ≤ ‖A‖ by Cauchy-Schwarz
-  have dir1 : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-      |@inner ℝ _ _ (A x.val) x.val|) ≤ ‖A‖ := by
-    apply Real.sSup_le
-    · intro b ⟨x, hx⟩
-      simp only [Subtype.coe_mk] at hx
-      rw [← hx]
-      calc |@inner ℝ _ _ (A x.val) x.val|
-          ≤ ‖A x.val‖ * ‖x.val‖ := abs_real_inner_le_norm _ _
-        _ ≤ ‖A‖ * ‖x.val‖ * ‖x.val‖ := by
-            gcongr
-            exact ContinuousLinearMap.le_opNorm A x.val
-        _ = ‖A‖ := by rw [x.prop]; ring
-    · exact norm_nonneg _
-
-  -- Second direction: ‖A‖ ≤ sup |⟨Ax, x⟩| (harder, uses Rayleigh quotient)
-  have dir2 : ‖A‖ ≤ sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-      |@inner ℝ _ _ (A x.val) x.val|) := by
-    -- Strategy: For self-adjoint A, ‖A‖ equals the maximum absolute eigenvalue.
-    -- The Rayleigh quotient at an eigenvector equals the eigenvalue.
-    -- Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max{|λ| : λ eigenvalue} = ‖A‖.
-
-    -- Convert to LinearMap for Rayleigh quotient theory
-    rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hA_sa
-
-    -- Key observation: for any eigenvector v with Av = λv and ‖v‖ = 1,
-    -- we have ⟨Av, v⟩ = ⟨λv, v⟩ = λ·⟨v, v⟩ = λ
-    -- So if λ is the eigenvalue with max |λ|, then |⟨Av, v⟩| = |λ| = ‖A‖
-
-    -- For finite-dimensional spaces, the operator norm equals the spectral radius
-    -- This is proved in Mathlib via IsSelfAdjoint.spectralRadius_eq_nnnorm,
-    -- and the spectral radius is attained by some eigenvalue.
-
-    -- The complete proof requires:
-    -- 1. Showing A has an eigenvalue λ with |λ| = ‖A‖ (from spectral theory)
-    -- 2. Finding unit eigenvector v with Av = λv
-    -- 3. Computing |⟨Av,v⟩| = |λ| = ‖A‖
-    -- 4. Showing this is in the supremum range
-
-    -- Strategy: Use Rayleigh quotient theory + spectral radius
-    -- For self-adjoint A on finite-dimensional space:
-    -- 1. sup{⟨Ax,x⟩ : ‖x‖=1} is an eigenvalue λ_max (Rayleigh theory)
-    -- 2. inf{⟨Ax,x⟩ : ‖x‖=1} is an eigenvalue λ_min (Rayleigh theory)
-    -- 3. ‖A‖ = spectralRadius(A) = max{|λ| : λ eigenvalue}
-    -- 4. Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|λ_max|, |λ_min|) = ‖A‖
-
-    -- Convert to LinearMap for Rayleigh theory
-    set T : EuclideanSpace ℝ (Fin n) →ₗ[ℝ] EuclideanSpace ℝ (Fin n) := A.toLinearMap
-
-    -- T is symmetric (equivalent to A being self-adjoint)
-    have hT_symm : T.IsSymmetric := hA_sa
-
-    -- The Rayleigh quotient supremum is an eigenvalue
-    have h_ray_sup : Module.End.hasEigenvalue T
-        (⨆ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
-          RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 : ℝ) := by
-      haveI : Nontrivial (EuclideanSpace ℝ (Fin n)) := by
-        apply EuclideanSpace.nontrivial_of_finrank_pos
-        simp [hn]
-      exact LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional hT_symm
-
-    -- Similarly for infimum
-    have h_ray_inf : Module.End.hasEigenvalue T
-        (⨅ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
-          RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 : ℝ) := by
-      haveI : Nontrivial (EuclideanSpace ℝ (Fin n)) := by
-        apply EuclideanSpace.nontrivial_of_finrank_pos
-        simp [hn]
-      exact LinearMap.IsSymmetric.hasEigenvalue_iInf_of_finiteDimensional hT_symm
-
-    -- These eigenvalues are in the spectrum
-    -- For finite-dimensional spaces, spectrum = eigenvalues
-    -- The spectral radius is the sup of norms of spectrum elements
-    -- For self-adjoint, spectralRadius = ‖A‖
-
-    -- The Rayleigh quotient is bounded
-    have h_rayleigh_bounded_above : ∃ (M : ℝ), ∀ (x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 }),
-        ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 ≤ M := by
-      use ‖A‖
-      intro x
-      have hx_ne : ‖x.val‖ ≠ 0 := norm_ne_zero_iff.mpr x.prop
-      calc ⟪T x, x⟫ / ‖x.val‖ ^ 2
-          ≤ |⟪T x, x⟫| / ‖x.val‖ ^ 2 := by
-            gcongr
-            exact le_abs_self _
-        _ ≤ ‖T x.val‖ * ‖x.val‖ / ‖x.val‖ ^ 2 := by
-            gcongr
-            exact abs_real_inner_le_norm _ _
-        _ ≤ ‖A‖ * ‖x.val‖ * ‖x.val‖ / ‖x.val‖ ^ 2 := by
-            gcongr
-            exact ContinuousLinearMap.le_opNorm A x.val
-        _ = ‖A‖ := by
-            rw [sq]
-            field_simp
-
-    have h_rayleigh_bounded_below : ∃ (m : ℝ), ∀ (x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 }),
-        m ≤ ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 := by
-      use -‖A‖
-      intro x
-      have hx_ne : ‖x.val‖ ≠ 0 := norm_ne_zero_iff.mpr x.prop
-      calc -‖A‖
-          = -(‖A‖ * ‖x.val‖ * ‖x.val‖ / ‖x.val‖ ^ 2) := by
-            rw [sq]
-            field_simp
-        _ ≤ -(‖T x.val‖ * ‖x.val‖ / ‖x.val‖ ^ 2) := by
-            gcongr
-            exact ContinuousLinearMap.le_opNorm A x.val
-        _ ≤ -|⟪T x, x⟫| / ‖x.val‖ ^ 2 := by
-            gcongr
-            exact abs_real_inner_le_norm _ _
-        _ ≤ ⟪T x, x⟫ / ‖x.val‖ ^ 2 := by
-            linarith [abs_nonneg (⟪T x, x⟫), neg_abs_le (⟪T x, x⟫)]
-
-    -- Key insight: For self-adjoint A, ALL eigenvalues lie between λ_min and λ_max.
-    -- Proof: For any eigenvalue λ with unit eigenvector v, we have λ = ⟨Av,v⟩,
-    -- which by definition of sup/inf satisfies λ_min ≤ λ ≤ λ_max.
-    -- Therefore max{|λ| : λ eigenvalue} = max(|λ_max|, |λ_min|).
-
-    set lam_max := ⨆ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
-          RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2
-    set lam_min := ⨅ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
-          RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2
-
-    -- For real spaces, RCLike.re is just the identity
-    have h_re_id : ∀ (x : ℝ), RCLike.re x = x := fun x => rfl
-
-    -- λ_max and λ_min bound all eigenvalues
-    have h_all_eigenvalues_bounded : ∀ (lambda : ℝ),
-        Module.End.hasEigenvalue T lambda → lam_min ≤ lambda ∧ lambda ≤ lam_max := by
-      intro lambda hlam
-      -- For eigenvalue λ with eigenvector v (normalized), we have λ = ⟨Tv,v⟩
-      obtain ⟨v, hv_ne, hv_eigen⟩ := Module.End.hasEigenvalue.exists_hasEigenvector hlam
-      have hv_ne_zero : v ≠ 0 := hv_ne
-      set v_normed := (‖v‖⁻¹ : ℝ) • v
-      have hv_normed_ne : v_normed ≠ 0 := by
-        simp [v_normed]
-        intro h
-        apply hv_ne_zero
-        have : ‖v‖⁻¹ ≠ 0 := inv_ne_zero (norm_ne_zero_iff.mpr hv_ne_zero)
-        exact (smul_eq_zero.mp h).resolve_left this
-      have hv_normed_norm : ‖v_normed‖ = 1 := by
-        simp [v_normed, norm_smul]
-        rw [abs_of_nonneg (inv_nonneg.mpr (norm_nonneg v))]
-        rw [inv_mul_cancel (norm_ne_zero_iff.mpr hv_ne_zero)]
-      have hv_normed_eigen : T v_normed = lambda • v_normed := by
-        simp [v_normed]
-        rw [map_smul, hv_eigen.eigenvalue_eq]
-        rw [smul_comm]
-      -- Now λ = ⟨Tv_normed, v_normed⟩ / ‖v_normed‖²
-      have h_eq : lambda = ⟪T v_normed, v_normed⟫ / ‖v_normed‖ ^ 2 := by
-        have := rayleigh_at_eigenvector A v_normed lambda hv_normed_norm
-          (by convert hv_normed_eigen; rfl)
-        rw [hv_normed_norm] at this
-        simp at this
-        exact this.symm
-      constructor
-      · -- lam_min ≤ lambda
-        rw [h_eq]
-        apply ciInf_le_of_le
-        · exact ⟨_, h_rayleigh_bounded_below⟩
-        · use ⟨v_normed, hv_normed_ne⟩
-          simp [h_re_id]
-      · -- lambda ≤ lam_max
-        rw [h_eq]
-        apply le_ciSup_of_le
-        · exact ⟨_, h_rayleigh_bounded_above⟩
-        · use ⟨v_normed, hv_normed_ne⟩
-          simp [h_re_id]
-
-    -- Therefore ‖A‖ = max(|λ_max|, |λ_min|)
-    -- and sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|λ_max|, |λ_min|) = ‖A‖
-
-    -- Get unit eigenvectors for λ_max and λ_min
-    obtain ⟨v_max, hv_max_ne, hv_max_eigen⟩ := Module.End.hasEigenvalue.exists_hasEigenvector h_ray_sup
-    obtain ⟨v_min, hv_min_ne, hv_min_eigen⟩ := Module.End.hasEigenvalue.exists_hasEigenvector h_ray_inf
-
-    -- Normalize them
-    set u_max := (‖v_max‖⁻¹ : ℝ) • v_max
-    set u_min := (‖v_min‖⁻¹ : ℝ) • v_min
-
-    have hu_max_ne : u_max ≠ 0 := by
-      simp [u_max]
-      intro h
-      apply hv_max_ne
-      have : ‖v_max‖⁻¹ ≠ 0 := inv_ne_zero (norm_ne_zero_iff.mpr hv_max_ne)
-      exact (smul_eq_zero.mp h).resolve_left this
-
-    have hu_min_ne : u_min ≠ 0 := by
-      simp [u_min]
-      intro h
-      apply hv_min_ne
-      have : ‖v_min‖⁻¹ ≠ 0 := inv_ne_zero (norm_ne_zero_iff.mpr hv_min_ne)
-      exact (smul_eq_zero.mp h).resolve_left this
-
-    have hu_max_norm : ‖u_max‖ = 1 := by
-      simp [u_max, norm_smul]
-      rw [abs_of_nonneg (inv_nonneg.mpr (norm_nonneg v_max))]
-      rw [inv_mul_cancel (norm_ne_zero_iff.mpr hv_max_ne)]
-
-    have hu_min_norm : ‖u_min‖ = 1 := by
-      simp [u_min, norm_smul]
-      rw [abs_of_nonneg (inv_nonneg.mpr (norm_nonneg v_min))]
-      rw [inv_mul_cancel (norm_ne_zero_iff.mpr hv_min_ne)]
-
-    have hu_max_eigen : T u_max = lam_max • u_max := by
-      simp [u_max]
-      rw [map_smul, hv_max_eigen.eigenvalue_eq]
-      rw [smul_comm]
-
-    have hu_min_eigen : T u_min = lam_min • u_min := by
-      simp [u_min]
-      rw [map_smul, hv_min_eigen.eigenvalue_eq]
-      rw [smul_comm]
-
-    -- At these unit eigenvectors, |⟨Au,u⟩| = |λ|
-    have h_max_val : |⟪A u_max, u_max⟫| = |lam_max| := by
-      have := rayleigh_at_eigenvector A u_max lam_max hu_max_norm
-        (by convert hu_max_eigen; rfl)
-      rw [this]
-
-    have h_min_val : |⟪A u_min, u_min⟫| = |lam_min| := by
-      have := rayleigh_at_eigenvector A u_min lam_min hu_min_norm
-        (by convert hu_min_eigen; rfl)
-      rw [this]
-
-    -- These values are in the supremum range
-    have h_max_in : |lam_max| ∈ Set.range (fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-        |⟪A x.val, x.val⟫|) := by
-      use ⟨u_max, hu_max_norm⟩
-      exact h_max_val.symm
-
-    have h_min_in : |lam_min| ∈ Set.range (fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-        |⟪A x.val, x.val⟫|) := by
-      use ⟨u_min, hu_min_norm⟩
-      exact h_min_val.symm
-
-    -- For self-adjoint operators in finite dimensions, the operator norm equals
-    -- the maximum absolute eigenvalue, which by h_all_eigenvalues_bounded equals
-    -- max(|lam_max|, |lam_min|).
-
-    -- We need: ‖A‖ ≤ sup{|⟨Ax,x⟩| : ‖x‖=1}
-    -- We'll show: sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|lam_max|, |lam_min|)
-    --            and then use spectral theory to show ‖A‖ = max(|lam_max|, |lam_min|)
-
-    -- The supremum is at least |lam_max|
-    have h_sup_ge_max : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-        |⟪A x.val, x.val⟫|) ≥ |lam_max| := by
-      apply le_sSup
-      · use ‖A‖
-        intro b ⟨x, hx⟩
-        rw [← hx]
-        calc |⟪A x.val, x.val⟫|
-            ≤ ‖A x.val‖ * ‖x.val‖ := abs_real_inner_le_norm _ _
-          _ ≤ ‖A‖ * ‖x.val‖ * ‖x.val‖ := by
-              gcongr
-              exact ContinuousLinearMap.le_opNorm A x.val
-          _ = ‖A‖ := by rw [x.prop]; ring
-      · exact h_max_in
-
-    -- The supremum is at least |lam_min|
-    have h_sup_ge_min : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-        |⟪A x.val, x.val⟫|) ≥ |lam_min| := by
-      apply le_sSup
-      · use ‖A‖
-        intro b ⟨x, hx⟩
-        rw [← hx]
-        calc |⟪A x.val, x.val⟫|
-            ≤ ‖A x.val‖ * ‖x.val‖ := abs_real_inner_le_norm _ _
-          _ ≤ ‖A‖ * ‖x.val‖ * ‖x.val‖ := by
-              gcongr
-              exact ContinuousLinearMap.le_opNorm A x.val
-          _ = ‖A‖ := by rw [x.prop]; ring
-      · exact h_min_in
-
-    -- Therefore sup ≥ max(|lam_max|, |lam_min|)
-    have h_sup_ge_both : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-        |⟪A x.val, x.val⟫|) ≥ max |lam_max| |lam_min| := by
-      exact le_max_iff.mpr (Or.inl h_sup_ge_max)
-
-    -- For self-adjoint operators on finite-dimensional real inner product spaces,
-    -- ‖A‖ = max{|λ| : λ eigenvalue}.
-    -- We've shown all eigenvalues satisfy lam_min ≤ λ ≤ lam_max.
-    -- Therefore ‖A‖ ≤ max(|lam_max|, |lam_min|).
-
-    -- The key fact: operator norm = spectral radius = max absolute eigenvalue
-    have h_norm_eq_max_eig : ‖A‖ = max |lam_max| |lam_min| := by
-      -- Strategy: Use the Rayleigh quotient characterization we've established
-      -- in dir1 and dir2. For self-adjoint operators:
-      -- ‖A‖ = sup{|⟨Ax,x⟩| : ‖x‖=1}
-      --
-      -- We've shown:
-      -- 1. All eigenvalues (hence all Rayleigh quotients) lie in [lam_min, lam_max]
-      -- 2. Both |lam_max| and |lam_min| are achieved (they're eigenvalues)
-      -- 3. Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} = max(|lam_max|, |lam_min|)
-
-      -- From dir1 we have: sup ≤ ‖A‖
-      -- From h_sup_ge_both we have: sup ≥ max(|lam_max|, |lam_min|)
-      -- We need to show sup ≤ max(|lam_max|, |lam_min|) to conclude equality
-
-      have h_sup_le_max : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-          |⟪A x.val, x.val⟫|) ≤ max |lam_max| |lam_min| := by
-        apply Real.sSup_le
-        · intro b ⟨x, hx⟩
-          rw [← hx]
-          -- For any unit vector x, ⟨Ax,x⟩ is a Rayleigh quotient
-          -- We need: |⟨Ax,x⟩| ≤ max(|lam_max|, |lam_min|)
-
-          -- Key: the Rayleigh quotient ⟨Tx,x⟩/‖x‖² lies in [lam_min, lam_max]
-          -- For unit vectors, this means lam_min ≤ ⟨Ax,x⟩ ≤ lam_max
-
-          -- First, connect A to T
-          have hTx_eq : ⟪T x.val, x.val⟫ = ⟪A x.val, x.val⟫ := by rfl
-
-          -- The Rayleigh quotient for x.val is bounded
-          have hx_ne : x.val ≠ 0 := norm_ne_zero_iff.mp (by rw [x.prop]; norm_num)
-
-          have h_ray_x_lower : lam_min ≤ ⟪T x.val, x.val⟫ / ‖x.val‖ ^ 2 := by
-            apply ciInf_le
-            · exact ⟨_, h_rayleigh_bounded_below⟩
-            · use ⟨x.val, hx_ne⟩
-              simp [h_re_id]
-
-          have h_ray_x_upper : ⟪T x.val, x.val⟫ / ‖x.val‖ ^ 2 ≤ lam_max := by
-            apply le_ciSup
-            · exact ⟨_, h_rayleigh_bounded_above⟩
-            · use ⟨x.val, hx_ne⟩
-              simp [h_re_id]
-
-          -- For unit vector: ⟨Ax,x⟩ = ⟨Tx,x⟩ / ‖x‖² = ⟨Tx,x⟩ (since ‖x‖ = 1)
-          have h_unit_ray : ⟪T x.val, x.val⟫ = ⟪T x.val, x.val⟫ / ‖x.val‖ ^ 2 := by
-            rw [x.prop]
-            norm_num
-
-          -- So lam_min ≤ ⟨Ax,x⟩ ≤ lam_max
-          have h_bounds : lam_min ≤ ⟪A x.val, x.val⟫ ∧ ⟪A x.val, x.val⟫ ≤ lam_max := by
-            rw [← hTx_eq] at h_ray_x_lower h_ray_x_upper
-            rw [← h_unit_ray] at h_ray_x_lower h_ray_x_upper
-            exact ⟨h_ray_x_lower, h_ray_x_upper⟩
-
-          -- Therefore |⟨Ax,x⟩| ≤ max(|lam_max|, |lam_min|)
-          by_cases h_nonneg : 0 ≤ ⟪A x.val, x.val⟫
-          · -- Case: ⟨Ax,x⟩ ≥ 0
-            calc |⟪A x.val, x.val⟫|
-                = ⟪A x.val, x.val⟫ := abs_of_nonneg h_nonneg
-              _ ≤ lam_max := h_bounds.2
-              _ ≤ |lam_max| := le_abs_self _
-              _ ≤ max |lam_max| |lam_min| := le_max_left _ _
-          · -- Case: ⟨Ax,x⟩ < 0
-            have h_neg : ⟪A x.val, x.val⟫ < 0 := not_le.mp h_nonneg
-            calc |⟪A x.val, x.val⟫|
-                = -⟪A x.val, x.val⟫ := abs_of_neg h_neg
-              _ ≤ -lam_min := by linarith [h_bounds.1]
-              _ ≤ |lam_min| := by
-                  by_cases h_min_neg : lam_min < 0
-                  · simp [abs_of_neg h_min_neg]
-                  · push_neg at h_min_neg
-                    have : lam_min = 0 := by
-                      linarith [h_bounds.1, h_neg]
-                    simp [this]
-              _ ≤ max |lam_max| |lam_min| := le_max_right _ _
-        · exact norm_nonneg _
-
-      -- Now we have:
-      -- - h_sup_ge_both: sup ≥ max(|lam_max|, |lam_min|)
-      -- - h_sup_le_max: sup ≤ max(|lam_max|, |lam_min|)
-      -- Therefore sup = max(|lam_max|, |lam_min|)
-      have h_sup_eq : sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-          |⟪A x.val, x.val⟫|) = max |lam_max| |lam_min| :=
-        le_antisymm h_sup_le_max h_sup_ge_both
-
-      -- From ray_bound: ‖A‖ = sup
-      -- Therefore ‖A‖ = max(|lam_max|, |lam_min|)
-      rw [ray_bound]
-      exact h_sup_eq
-
-    -- Conclude
-    calc ‖A‖
-        = max |lam_max| |lam_min| := h_norm_eq_max_eig
-      _ ≤ sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-            |⟪A x.val, x.val⟫|) := h_sup_ge_both
-
-  exact le_antisymm dir2 dir1
+  sorry
 
 /-- The 2×2 matrix whose largest eigenvalue equals rvwBound(λ₁, λ₂).
     This is the matrix M = [[(1-λ₂²)λ₁, λ₂], [λ₂, 0]]. -/
@@ -760,7 +380,8 @@ private lemma meanProj_inner_eq_hat {n : ℕ}
   set x_tilde := (1 - Q) x
   -- Decompose x = x̂ + x̃
   have decomp : x = x_hat + x_tilde := by
-    simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply]; abel
+    change x = Q x + (1 - Q) x
+    rw [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply]; abel
   -- Orthogonality
   have orth := hat_tilde_orthogonal Q hQ_proj hQ_sa x
   -- P annihilates x̃
@@ -777,9 +398,9 @@ private lemma meanProj_inner_eq_hat {n : ℕ}
         -- ⟨Px̂, x̃⟩ = 0 by orthogonality: use P = QP to show Px̂ is in range of Q
         -- Then use Q self-adjoint: ⟨Qy, (I-Q)z⟩ = ⟨y, Q(I-Q)z⟩ = ⟨y, 0⟩ = 0
         have hPhat_in_Q : ∃ y, P x_hat = Q y := by
-          use P x_hat
-          calc Q (P x_hat) = (Q * P) x_hat := rfl
-             _ = P x_hat := by rw [hQP]
+          refine ⟨P x_hat, ?_⟩
+          change P x_hat = (Q * P) x_hat
+          rw [hQP]
         obtain ⟨y, hy⟩ := hPhat_in_Q
         rw [hy]
         -- Now ⟨Qy, x̃⟩ = ⟨Qy, (I-Q)x⟩ = 0 by orthogonality
@@ -820,14 +441,18 @@ private lemma involution_norm_le_one {n : ℕ}
   -- For self-adjoint Σ: ‖Σ‖² = ‖Σ²‖ = ‖1‖ = 1 by C*-identity
   have h_sq : ‖Sig‖ ^ 2 = ‖Sig * Sig‖ := hSig_sa.norm_mul_self.symm
   rw [hSig_inv] at h_sq
-  have : ‖Sig‖ ^ 2 = 1 := by simp at h_sq; exact h_sq
-  have : ‖Sig‖ * ‖Sig‖ = 1 := by simpa [sq] using this
-  -- Either ‖Σ‖ = 1 or impossible (‖Σ‖ = -1 ruled out by nonnegativity)
-  have : ‖Sig‖ * ‖Sig‖ - 1 = 0 := by linarith
-  have : (‖Sig‖ - 1) * (‖Sig‖ + 1) = 0 := by ring_nf at this ⊢; exact this
-  rcases eq_zero_or_eq_zero_of_mul_eq_zero this with h | h
-  · linarith
-  · linarith [norm_nonneg Sig]
+  -- ‖(1 : CLM)‖ = 1 when Nontrivial, = 0 when trivial
+  by_cases hn : Nontrivial (EuclideanSpace ℝ (Fin n))
+  · have h1 : ‖Sig‖ ^ 2 = 1 := by rw [h_sq]; exact norm_one
+    have h2 : ‖Sig‖ * ‖Sig‖ = 1 := by simpa [sq] using h1
+    have : (‖Sig‖ - 1) * (‖Sig‖ + 1) = 0 := by nlinarith
+    rcases eq_zero_or_eq_zero_of_mul_eq_zero this with h | h
+    · linarith
+    · linarith [norm_nonneg Sig]
+  · -- Trivial space: all operators are zero, so ‖Sig‖ = 0 ≤ 1
+    rw [not_nontrivial_iff_subsingleton] at hn
+    have : Sig = 0 := Subsingleton.eq_zero Sig
+    simp [this]
 
 /-- Helper: Bound the cross term |⟨Σx̂, Bx̃⟩| ≤ ‖x̂‖·‖Bx̃‖. -/
 private lemma cross_term_bound {n : ℕ}
@@ -1094,29 +719,56 @@ private lemma quadratic_root_upper_bound {x c d : ℝ}
       linarith
     linarith
 
-/-- **The bound with exact μ values** (RVW Section 4.2, mathematical core).
+/-- The core quadratic inequality: `X² ≤ (1-μ₂²)μ₁|X| + μ₂²`.
+    After clearing denominators by `a²b²`, this becomes
+    `a²b²X² ≤ (b²-c²)|p||X| + a²c²`. -/
+private lemma rvw_quadratic_ineq
+    (a b c p q r : ℝ)
+    (ha : 0 < a) (hb : 0 < b) (hc : 0 ≤ c) (hcb : c ≤ b)
+    (h_unit : a ^ 2 + b ^ 2 = 1)
+    (h_refl_u : |p| ≤ a ^ 2) (h_refl_w : |r| ≤ c ^ 2)
+    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
+    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
+    (p + 2 * q + r) ^ 2 ≤
+      (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |p + 2 * q + r| + (c / b) ^ 2 := by
+  sorry
 
-    Given all the reflection constraints, shows `|p + 2q + r| ≤ rvwBound(μ₁, μ₂)`
-    where `μ₁ = |p|/a²` and `μ₂ = c/b` are the *exact* spectral gap and tilde
-    contraction values.
-
-    The proof amounts to a constrained optimization: for fixed `a, c, p` (which
-    determine `μ₁`), the maximum of `|p + 2q + r|` over feasible `(q, r)` is
-    achieved when both Cauchy-Schwarz constraints are simultaneously tight
-    (`r = -(p/a²)c²`), giving `q = ac√(1-μ₁²)`. The resulting expression
-    `μ₁(a²-c²) + 2ac√(1-μ₁²)` has the form `A + B cos(2φ) + C sin(2φ)`
-    (with `a = cos φ`, `c = μ₂ sin φ`), whose maximum over `φ` equals
-    `rvwBound(μ₁, μ₂)`. -/
 private lemma rvw_exact_bound
     (a b c p q r : ℝ)
-    (ha : 0 < a) (hb : 0 < b) (hc : 0 ≤ c)
+    (ha : 0 < a) (hb : 0 < b) (hc : 0 ≤ c) (hcb : c ≤ b)
     (h_unit : a ^ 2 + b ^ 2 = 1)
     (h_refl_u : |p| ≤ a ^ 2)
     (h_refl_w : |r| ≤ c ^ 2)
     (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
     (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
     |p + 2 * q + r| ≤ rvwBound (|p| / a ^ 2) (c / b) := by
-  sorry
+  -- Use quadratic_root_upper_bound: from X² ≤ C·|X| + D², deduce |X| ≤ (C+√(C²+4D²))/2
+  set μ₁ := |p| / a ^ 2
+  set μ₂ := c / b
+  have hμ₁ : 0 ≤ μ₁ := div_nonneg (abs_nonneg _) (by positivity)
+  have hμ₂ : 0 ≤ μ₂ := div_nonneg hc hb.le
+  have hμ₂_le : μ₂ ≤ 1 := by rw [div_le_one hb]; exact hcb
+  have h_quad := rvw_quadratic_ineq a b c p q r ha hb hc hcb
+    h_unit h_refl_u h_refl_w h_cs_plus h_cs_minus
+  -- quadratic_root_upper_bound gives |X| ≤ (C + √(C² + 4D²))/2
+  set C := (1 - μ₂ ^ 2) * μ₁
+  have h_quad' : |p + 2 * q + r| ^ 2 ≤ C * |p + 2 * q + r| + μ₂ ^ 2 := by
+    rwa [sq_abs]
+  have h_bound := quadratic_root_upper_bound (abs_nonneg (p + 2 * q + r)) hμ₂ h_quad'
+  -- Show rvwBound μ₁ μ₂ = (C + √(C² + 4·μ₂²))/2
+  suffices h_eq : rvwBound μ₁ μ₂ = (C + Real.sqrt (C ^ 2 + 4 * μ₂ ^ 2)) / 2 by
+    rw [h_eq]; exact h_bound
+  unfold rvwBound
+  -- Need: C/2 + √(C²/4 + μ₂²) = (C + √(C²+4μ₂²))/2
+  -- Equiv: √(C²/4 + μ₂²) = √(C²+4μ₂²)/2
+  have h_arith : C ^ 2 / 4 + μ₂ ^ 2 = (C ^ 2 + 4 * μ₂ ^ 2) / 4 := by ring
+  have hC_def : (1 - μ₂ ^ 2) ^ 2 * μ₁ ^ 2 / 4 + μ₂ ^ 2 = C ^ 2 / 4 + μ₂ ^ 2 := by
+    simp only [C]; ring
+  rw [hC_def]
+  rw [h_arith, Real.sqrt_div (by positivity : (0:ℝ) ≤ C ^ 2 + 4 * μ₂ ^ 2)]
+  rw [show (4:ℝ) = 2 ^ 2 from by norm_num,
+      Real.sqrt_sq (by norm_num : (0:ℝ) ≤ 2)]
+  ring
 
 private lemma rvw_optimization_bound
     (a b c p q r lam₁ lam₂ : ℝ)
@@ -1192,7 +844,8 @@ private lemma rvw_optimization_bound
       have ha_pos : 0 < a := lt_of_le_of_ne ha (Ne.symm ha0)
       have hb_pos : 0 < b := lt_of_le_of_ne hb (Ne.symm hb0)
       -- Step 1: Bound with exact μ values
-      have h1 := rvw_exact_bound a b c p q r ha_pos hb_pos hc
+      have hcb : c ≤ b := le_trans h_tilde (by nlinarith)
+      have h1 := rvw_exact_bound a b c p q r ha_pos hb_pos hc hcb
         h_unit h_refl_u h_refl_w h_cs_plus h_cs_minus
       -- Step 2: Show μ₁ = |p|/a² ≤ λ₁ and μ₂ = c/b ≤ λ₂
       have hmu1 : |p| / a ^ 2 ≤ lam₁ := by
