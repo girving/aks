@@ -89,10 +89,18 @@ theorem clusterMean_comp_withinCluster {n₁ d₁ d₂ : ℕ}
     _ = (d₂ • ∑ i, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₂ / ↑d₁ := by rw [Finset.smul_sum]
     _ = (∑ i, f.ofLp (encode (cluster hd₁ vk) i)) / ↑d₁ := by simp; field_simp
 
-/-- The within-cluster walk is a contraction: `‖B‖ ≤ 1`. -/
+/-- The within-cluster walk is a contraction: `‖B‖ ≤ 1`.
+    Since B applies G₂'s walk operator independently within each cluster,
+    and ‖G₂.walkCLM‖ ≤ 1, we have ‖B‖ ≤ 1. -/
 theorem withinClusterCLM_norm_le_one {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) :
     ‖withinClusterCLM (n₁ := n₁) G₂ hd₁‖ ≤ 1 := by
+  -- Use opNorm_le_bound: show ‖Bf‖ ≤ ‖f‖ for all f
+  refine ContinuousLinearMap.opNorm_le_bound _ (by norm_num) (fun f => ?_)
+  -- Simplify: 1 * ‖f‖ = ‖f‖
+  simp only [one_mul]
+  -- The proof requires showing B acts block-diagonally and each block
+  -- is a walk operator with norm ≤ 1
   sorry
 
 
