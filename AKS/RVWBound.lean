@@ -346,9 +346,32 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
     -- 3. Computing |⟨Av,v⟩| = |λ| = ‖A‖
     -- 4. Showing this is in the supremum range
 
-    -- This requires substantial spectral theory machinery from Mathlib that
-    -- bridges CLMs, matrices, and eigenvalues for finite-dimensional spaces.
-    -- The components exist but assembling them is non-trivial.
+    -- Use a different approach: the Rayleigh quotient extrema are eigenvalues,
+    -- and for self-adjoint operators, the operator norm equals the maximum
+    -- absolute eigenvalue.
+    --
+    -- Key lemma from Mathlib: LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional
+    -- states that sup{⟨Ax,x⟩/‖x‖² : x ≠ 0} is an eigenvalue.
+    --
+    -- For self-adjoint A on finite-dimensional real space:
+    -- - Let λ_max = sup{⟨Ax,x⟩ : ‖x‖=1} (an eigenvalue by Rayleigh theory)
+    -- - Let λ_min = inf{⟨Ax,x⟩ : ‖x‖=1} (also an eigenvalue)
+    -- - Then ‖A‖ = max(|λ_max|, |λ_min|) (standard spectral theory)
+    --
+    -- Therefore sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|λ_max|, |λ_min|) = ‖A‖
+    --
+    -- This is a standard result in spectral theory for finite-dimensional
+    -- self-adjoint operators. The complete proof requires:
+    -- 1. Converting CLM to LinearMap to use Rayleigh theory
+    -- 2. Applying hasEigenvalue_iSup_of_finiteDimensional
+    -- 3. Using the spectral theorem for self-adjoint operators
+    -- 4. Connecting operator norm to eigenvalues
+    --
+    -- All components exist in Mathlib but require careful coordination between:
+    -- - ContinuousLinearMap (Analysis.InnerProductSpace.Adjoint)
+    -- - LinearMap.IsSymmetric (Analysis.InnerProductSpace.Rayleigh)
+    -- - Spectrum and eigenvalues (Analysis.Normed.Algebra.Spectrum)
+    -- - Self-adjoint operator norms (Analysis.CStarAlgebra.Spectrum)
     sorry
 
   exact le_antisymm dir2 dir1
@@ -494,12 +517,59 @@ private lemma tilde_contraction_bound {n : ℕ}
     _ ≤ ‖B * (1 - Q)‖ * ‖x‖ := ContinuousLinearMap.le_opNorm _ _
     _ ≤ lam₂ * ‖x‖ := by gcongr
 
-/-- Helper: The quadratic form bound combining all terms. -/
+/-- Helper: The quadratic form bound combining all terms.
+
+The quadratic form `f(α,β) = λ₁α² + 2λ₂αβ + λ₂²β²` subject to `α² + β² = 1`
+can be written as the Rayleigh quotient of the 2×2 matrix:
+```
+M = [[λ₁,  λ₂ ],
+     [λ₂,  λ₂²]]
+```
+
+However, the rvwBound formula comes from a different but related matrix:
+```
+M' = [[(1-λ₂²)λ₁,  λ₂],
+      [λ₂,          0 ]]
+```
+
+whose largest eigenvalue is exactly `rvwBound(λ₁, λ₂)`.
+
+The connection: our quadratic form arises from bounding three terms:
+- Hat term: contributes at most λ₁α²
+- Cross terms: contribute at most 2λ₂αβ
+- Tilde term: contributes at most λ₂²β²
+
+The RVW analysis shows this bound is tight and achieved at the eigenvector
+corresponding to the largest eigenvalue of M'.
+
+Proof strategy:
+1. Show the quadratic form ≤ Rayleigh quotient of M
+2. Relate eigenvalues of M to those of M' via the substitution λ₂² = 1 - c
+3. Compute that λ_max(M') = rvwBound using the quadratic formula
+4. Show our bound is achieved at the optimal α, β
+
+This requires either:
+(a) Matrix eigenvalue theory and quadratic formula algebra, or
+(b) Calculus: substitute β = √(1-α²), differentiate, solve for critical point
+-/
 private lemma quadratic_form_bound {n : ℕ}
     (lam₁ lam₂ : ℝ) (alpha beta : ℝ)
     (h_unit : alpha ^ 2 + beta ^ 2 = 1)
     (ha : 0 ≤ alpha) (hb : 0 ≤ beta) :
     lam₁ * alpha ^ 2 + 2 * lam₂ * alpha * beta + lam₂ ^ 2 * beta ^ 2 ≤ rvwBound lam₁ lam₂ := by
+  -- Strategy: The quadratic form [α β]·M·[α β]ᵀ where M = [[λ₁, λ₂], [λ₂, λ₂²]]
+  -- has maximum eigenvalue at most the RVW bound.
+  --
+  -- We'll prove this by showing the quadratic form can be rewritten to relate
+  -- to the RVW matrix eigenvalue through algebraic manipulation.
+  --
+  -- Key steps:
+  -- 1. Expand: λ₁α² + 2λ₂αβ + λ₂²β²
+  -- 2. Rewrite using α² + β² = 1
+  -- 3. Show this ≤ rvwBound formula through algebraic inequalities
+  --
+  -- The complete proof requires matrix eigenvalue theory or careful calculus.
+  -- The RVW paper derives this bound by analyzing the 2×2 operator structure.
   sorry
 
 /-- **The core RVW operator norm bound (abstract).**
