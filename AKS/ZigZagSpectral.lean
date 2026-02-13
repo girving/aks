@@ -43,10 +43,18 @@ theorem clusterMeanCLM_isSelfAdjoint {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
 
 /-! **Within-Cluster Walk Properties** -/
 
-/-- The within-cluster walk operator is self-adjoint: `B* = B`. -/
+/-- The within-cluster walk operator is self-adjoint: `B* = B`.
+    This follows from G₂'s rotation map being an involution, which makes
+    the neighbor sum symmetric. -/
 theorem withinClusterCLM_isSelfAdjoint {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) :
     IsSelfAdjoint (withinClusterCLM (n₁ := n₁) G₂ hd₁) := by
+  rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
+  intro f g
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, withinClusterCLM_apply]
+  -- LHS: ∑ vk, g(vk) * ((∑ j, f(encode (cluster vk) (G₂.neighbor (port vk) j))) / d₂)
+  -- RHS: ∑ vk, ((∑ j, g(encode (cluster vk) (G₂.neighbor (port vk) j))) / d₂) * f(vk)
+  -- Use rotation bijection to show these are equal
   sorry
 
 /-- The within-cluster walk preserves the cluster mean: `B * Q = Q`.
