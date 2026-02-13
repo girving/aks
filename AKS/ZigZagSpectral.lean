@@ -108,7 +108,7 @@ theorem withinClusterCLM_norm_le_one {n₁ d₁ d₂ : ℕ}
   simp only [one_mul]
   -- Expand norms as sums of squares
   simp only [EuclideanSpace.norm_eq]
-  rw [Real.sqrt_le_sqrt_iff (by positivity)]
+  apply Real.sqrt_le_sqrt
   -- ‖Bf‖² = ∑ vk, (Bf)(vk)²
   -- Group by cluster and use that each cluster is a walk operator
   calc ∑ vk, ‖(withinClusterCLM G₂ hd₁ f).ofLp vk‖ ^ 2
@@ -118,13 +118,30 @@ theorem withinClusterCLM_norm_le_one {n₁ d₁ d₂ : ℕ}
           -- Within each cluster v, the walk operator is a contraction
           refine Finset.sum_le_sum (fun v _ => ?_)
           -- For each cluster v, show: ∑ k, ‖(Bf)(v,k)‖² ≤ ∑ k, ‖f(v,k)‖²
-          -- Unfold the within-cluster walk definition
           simp only [withinClusterCLM_apply, cluster_encode, port_encode]
-          -- Now: ∑ k, ‖(∑ j, f(v, G₂.neighbor k j)) / d₂‖² ≤ ∑ k, ‖f(v, k)‖²
-          -- This is exactly saying G₂'s walk operator has norm ≤ 1 on this cluster
-          -- Define g : Fin d₁ → ℝ by g(k) = f(v, k)
-          -- Then LHS = ‖G₂.walkFun g‖² and RHS = ‖g‖²
-          sorry
+          -- Define the cluster-restricted function
+          let g : EuclideanSpace ℝ (Fin d₁) := (WithLp.equiv 2 _).symm (fun k => f.ofLp (encode v k))
+          -- Connect to G₂.walkCLM and use its contraction property
+          have sum_eq : ∑ k, ‖(∑ j, f.ofLp (encode v (G₂.neighbor k j))) / ↑d₂‖ ^ 2
+                      = ∑ k, ‖(G₂.walkCLM g).ofLp k‖ ^ 2 := by
+            refine Finset.sum_congr rfl (fun k _ => ?_)
+            show ‖(∑ j, f.ofLp (encode v (G₂.neighbor k j))) / ↑d₂‖ ^ 2
+               = ‖(∑ j, g.ofLp (G₂.neighbor k j)) / ↑d₂‖ ^ 2
+            rfl
+          rw [sum_eq]
+          -- Use ‖G₂.walkCLM g‖² ≤ ‖g‖² from walkCLM_norm_le_one
+          have h_norm : ‖G₂.walkCLM g‖ ≤ ‖g‖ := by
+            calc ‖G₂.walkCLM g‖ ≤ ‖G₂.walkCLM‖ * ‖g‖ := ContinuousLinearMap.le_opNorm _ _
+              _ ≤ 1 * ‖g‖ := by gcongr; exact RegularGraph.walkCLM_norm_le_one G₂
+              _ = ‖g‖ := one_mul _
+          calc ∑ k, ‖(G₂.walkCLM g).ofLp k‖ ^ 2
+              = ‖G₂.walkCLM g‖ ^ 2 := by rw [← EuclideanSpace.norm_sq_eq]
+            _ ≤ ‖g‖ ^ 2 := by gcongr
+            _ = ∑ k, ‖g.ofLp k‖ ^ 2 := by rw [EuclideanSpace.norm_sq_eq]
+            _ = ∑ k, ‖f.ofLp (encode v k)‖ ^ 2 := by
+                  refine Finset.sum_congr rfl (fun k _ => ?_)
+                  show ‖g.ofLp k‖ ^ 2 = ‖f.ofLp (encode v k)‖ ^ 2
+                  rfl
     _ = ∑ vk, ‖f.ofLp vk‖ ^ 2 := by
           conv_rhs => rw [← sum_encode_eq_sum hd₁ (fun vk => ‖f.ofLp vk‖ ^ 2)]
 
