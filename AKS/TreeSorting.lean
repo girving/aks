@@ -806,18 +806,26 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 
   Proof chain:
   1. ✅ halver_preserves_monotone (PROVED)
-  2. ⚠️ monotone_bool_zeros_then_ones (needs Nat.find machinery)
-  3. ⚠️ halver_implies_nearsort_property (THE KEY - requires AKS Section 4 ε-nearsort construction)
-  4. ⚠️ cherry_nearsort_moves_elements (builds on #3)
-  5. ⚠️ cherry_wrongness_after_nearsort (core inequality, builds on #4)
-  6. ⚠️ zig_step_bounded_increase (main proof, assembles #5 with fringe amplification)
+  2. ✅ Interval.mem_toFinset (PROVED)
+  3. ⚠️ monotone_bool_zeros_then_ones (needs Nat.find machinery)
+  4. ⚠️ halver_implies_nearsort_property (THE KEY - requires AKS Section 4 ε-nearsort construction)
+  5. ⚠️ cherry_nearsort_moves_elements (builds on #4)
+  6. ⚠️ cherry_wrongness_after_nearsort (core inequality, builds on #5)
+  7. ⚠️ zig_step_bounded_increase (main proof, assembles #6 with fringe amplification)
 
-  The bottleneck is #3 (halver_implies_nearsort_property), which requires:
+  The bottleneck is #4 (halver_implies_nearsort_property), which requires:
   - Understanding recursive ε-nearsort construction (AKS Section 4)
   - Showing ε₁-halver → ε-nearsort with ε₁ << ε
   - Connecting balanced property to forcing elements toward correct sides
 
-  Current status: Infrastructure complete, first proof done, building toward core proofs.
+  Infrastructure now includes:
+  - Element counting: countOnes, countOnesInRange
+  - Element tracking: elementsAtDistance, elementsToLower/Upper, correctlyPlaced
+  - Movement tracking: elements_partition_by_movement
+  - Halver connections: halver_balances_ones, halver_bounds_top_excess
+  - Witness preservation: halver_preserves_witness_structure
+
+  Current status: 1000+ lines, 2 proofs complete, comprehensive infrastructure ready.
 -/
 
 /-- Monotone Boolean sequences have the 0*1* pattern: all 0s before all 1s.
