@@ -409,6 +409,17 @@ noncomputable def Cherry.totalSize {n : ℕ} (cherry : Cherry n) : ℕ :=
 def Cherry.isNonTrivial {n : ℕ} (cherry : Cherry n) : Prop :=
   cherry.parent.size > 0 ∧ cherry.leftChild.size > 0 ∧ cherry.rightChild.size > 0
 
+/-- Elements in a cherry partition into parent, left child, right child.
+
+    Note: This is a simplification. In AKS, the parent interval has TWO parts
+    (framing the children), so the partition is more complex. -/
+lemma cherry_elements_partition {n : ℕ} (cherry : Cherry n) :
+    -- Parent, left, right are disjoint and cover the cherry's range
+    Disjoint cherry.parent.toFinset cherry.leftChild.toFinset ∧
+    Disjoint cherry.parent.toFinset cherry.rightChild.toFinset ∧
+    Disjoint cherry.leftChild.toFinset cherry.rightChild.toFinset := by
+  sorry
+
 /-- Helper: Partition elements in an interval by where they belong.
     Elements belong either to lower sections (should be in left/bottom),
     upper sections (should be in right/top), or locally (stay in place). -/
@@ -430,6 +441,27 @@ def elementsToUpper (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (
 def elementsCorrectlyPlaced (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (Fin n) :=
   -- Elements in J that belong in J
   J.toFinset \ (elementsToLower n t v J ∪ elementsToUpper n t v J)
+
+/-- Elements at distance exactly r from J. -/
+def elementsAtDistanceExactly (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n) :=
+  (elementsAtDistance n t v J r) \ (elementsAtDistance n t v J (r + 1))
+
+/-- After ε-nearsort on a cherry, elements at distance r either:
+    1. Move closer (distance becomes < r), or
+    2. Stay at distance ≥ r (exceptions, bounded by ε·Δᵣ₋₂)
+
+    This lemma formalizes the partition of elements for the Lemma 2 proof. -/
+lemma elements_partition_by_movement {n t : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
+    (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
+    let elements_r := elementsAtDistance n t v J r
+    let moved := elements_r.filter (fun i => i ∈ elementsAtDistance n t (net.exec v) J (r - 1))
+    let stayed := elements_r \ moved
+    -- Most elements move closer (1-ε) fraction
+    -- Exceptions stay far (ε fraction, bounded by Δᵣ₋₂)
+    (sorry : Prop) := by
+  sorry
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -525,12 +557,31 @@ def UpperSection (n t : ℕ) (J : Interval n) : Finset (Interval n) :=
 /-- Lower and upper sections are disjoint. -/
 lemma sections_disjoint {n t : ℕ} (J : Interval n) :
     Disjoint (LowerSection n t J) (UpperSection n t J) := by
+  -- By definition, LowerSection contains intervals before J
+  -- and UpperSection contains intervals after J
+  -- These are disjoint by construction (I.b < J.a vs I.a > J.b)
   sorry
 
 /-- An interval belongs to at most one of: LowerSection, the interval itself, UpperSection. -/
 lemma sections_partition {n t : ℕ} (J K : Interval n) :
     (K ∈ LowerSection n t J ∨ K = J ∨ K ∈ UpperSection n t J) ∨
     (K ∉ LowerSection n t J ∧ K ≠ J ∧ K ∉ UpperSection n t J) := by
+  sorry
+
+/-- Helper: Count ones in a boolean sequence. -/
+def countOnes {n : ℕ} (v : Fin n → Bool) : ℕ :=
+  (Finset.univ.filter (fun i => v i = true)).card
+
+/-- Helper: Count ones in a specific range. -/
+def countOnesInRange {n : ℕ} (v : Fin n → Bool) (lo hi : ℕ) : ℕ :=
+  (Finset.univ.filter (fun i : Fin n => lo ≤ i.val ∧ i.val < hi ∧ v i = true)).card
+
+/-- Monotone sequences have a threshold: all 0s before, all 1s after. -/
+lemma monotone_has_threshold {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
+    ∃ k : ℕ, k ≤ n ∧ countOnes w = n - k := by
+  -- This follows from monotone_bool_zeros_then_ones
+  -- The threshold k is where w switches from false to true
+  -- Then countOnes = number of positions ≥ k = n - k
   sorry
 
 /-- Contents of registers in interval J at time t.
@@ -686,12 +737,12 @@ lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (halver : ComparatorNet
 /-- Recursion depth for ε-nearsort is logarithmic. -/
 lemma epsilonNearsort_depth_bound (m : ℕ) (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1) :
     ∃ depth : ℕ, depth ≤ 2 * Nat.log 2 m ∧
-      (∀ ε₁ halver, epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth := by
+      (∀ ε₁ halver, (epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth) := by
   sorry
 
 /-- Error accumulation through recursive halvers. -/
-lemma error_accumulation_bound {depth : ℕ} (ε₁ : ℝ) (hdepth : depth ≤ Nat.log 2 m)
-    (hε₁ : ε₁ < ε / depth ^ 4) :
+lemma error_accumulation_bound {m : ℕ} {ε : ℝ} (depth : ℕ) (ε₁ : ℝ)
+    (hdepth : depth ≤ Nat.log 2 m) (hε₁ : ε₁ < ε / depth ^ 4) :
     depth * ε₁ < ε := by
   sorry
 
@@ -722,6 +773,27 @@ lemma balance_implies_movement {n : ℕ} (net : ComparatorNetwork n)
     (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
     -- At most ε fraction of elements that should move stay in the wrong place
     (sorry : Prop) := by
+  sorry
+
+/-- After applying a halver, excess ones in the top are bounded.
+
+    This is a key step toward showing that elements move correctly. -/
+lemma halver_bounds_top_excess {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
+    countOnesInRange (net.exec v) 0 (n/2) ≤ countOnes v / 2 + ε * (n / 2) := by
+  -- This is essentially a restatement of IsEpsilonHalver
+  sorry
+
+/-- If the input has a monotone witness, the halver preserves structure.
+
+    Specifically, after halving, we can still find a monotone witness
+    for the output, and it's related to the input witness by the halver property. -/
+lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (v : Fin n → Bool) (w : Fin n → Bool) (hw : Monotone w)
+    (δ : ℝ) (h_witness : (Finset.univ.filter (fun i => v i ≠ w i)).card ≤ δ * n) :
+    ∃ w' : Fin n → Bool, Monotone w' ∧
+      (Finset.univ.filter (fun i => net.exec v i ≠ w' i)).card ≤ (δ + ε) * n := by
   sorry
 
 /-! **Helper Lemmas for Lemma 2** -/
