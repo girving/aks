@@ -270,3 +270,102 @@ lemma parent_of_child {node : TreeNode} (hi : node.level > 0) :
     (node.parent hi).leftChild = ⟨node.level, 2 * (node.index / 2), sorry⟩ ∨
     (node.parent hi).rightChild = ⟨node.level, 2 * (node.index / 2) + 1, sorry⟩ := by
   sorry
+
+/-! **Tree Distance** -/
+
+/-- Distance between two tree nodes (minimum path length in the tree).
+    This is the sum of levels needed to reach common ancestor. -/
+def treeDistance (node₁ node₂ : TreeNode) : ℕ :=
+  -- Find common ancestor and sum distances
+  -- For now, placeholder implementation
+  sorry
+
+/-- Distance from a node to an interval (minimum distance to any node containing
+    a part of the interval). -/
+noncomputable def distanceToInterval (n t : ℕ) (node : TreeNode) (I : Interval n) : ℕ :=
+  -- Find minimum distance from node to any tree node whose intervals overlap with I
+  sorry
+
+/-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
+
+/-- Lower section L(J): all intervals at the same or lower tree level
+    that come "before" interval J in the natural ordering of registers. -/
+def LowerSection (n t : ℕ) (J : Interval n) : Finset (Interval n) :=
+  sorry
+
+/-- Upper section U(J): all intervals at the same or higher tree level
+    that come "after" interval J in the natural ordering of registers. -/
+def UpperSection (n t : ℕ) (J : Interval n) : Finset (Interval n) :=
+  sorry
+
+/-- Contents of registers in interval J at time t.
+    R(J) in AKS notation = {values currently in interval J}. -/
+def registerContents {n : ℕ} (v : Fin n → Bool) (J : Interval n) : Finset Bool :=
+  J.toFinset.image v
+
+/-- Tree-based wrongness measure Δᵣ(J) from AKS Section 8.
+
+    Δᵣ(J) = proportion of elements in interval J that belong at
+    tree-distance ≥ r from J.
+
+    Precisely: for interval J, let S₁ = sup |R(J) ∩ L(K)| over all intervals K
+    where K < J (K before J) and d(J, L(K)) ≥ r.
+    Similarly S₂ = sup |R(J) ∩ U(K)| for K > J.
+    Then Δᵣ(J) = max(S₁, S₂) / |J|.
+
+    This measures how many elements are "wrongly placed" at distance r or more
+    from where they should be in the tree. -/
+noncomputable def treeWrongness (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ :=
+  if J.size = 0 then 0
+  else
+    -- S₁: count elements in J that belong to lower sections at distance ≥ r
+    let s1 := sorry
+    -- S₂: count elements in J that belong to upper sections at distance ≥ r
+    let s2 := sorry
+    max s1 s2 / J.size
+
+/-- Global wrongness parameter Δᵣ = sup_J Δᵣ(J). -/
+noncomputable def globalWrongness (n t : ℕ) (v : Fin n → Bool) (r : ℕ) : ℝ :=
+  sorry  -- supremum over all intervals J
+
+/-- Simple displacement δ(J) = |R(J) - J| / |J|.
+    This is the AKS "δ" measuring how many elements in J are displaced. -/
+noncomputable def simpleDisplacement {n : ℕ} (v : Fin n → Bool) (J : Interval n) : ℝ :=
+  if J.size = 0 then 0
+  else
+    -- Count elements in J that are not at their "correct" positions
+    -- (where "correct" means the monotone witness for v)
+    sorry
+
+/-! **Properties of Tree-Based Wrongness** -/
+
+-- Tree wrongness is bounded by 1
+lemma treeWrongness_le_one {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongness n t v J r ≤ 1 := by
+  sorry
+
+-- Tree wrongness is non-negative
+lemma treeWrongness_nonneg {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    0 ≤ treeWrongness n t v J r := by
+  sorry
+
+-- Tree wrongness at distance 0 equals simple displacement
+lemma treeWrongness_zero_eq_displacement {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
+    treeWrongness n t v J 0 = simpleDisplacement v J := by
+  sorry
+
+-- Simple displacement is bounded by sum of tree wrongness at all distances
+-- This is AKS Lemma 4 (Equation 4, page 8-9)
+lemma displacement_from_tree_wrongness {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
+    simpleDisplacement v J ≤
+      10 * (sorry : ℝ) * globalWrongness n t v 0 +
+      (Finset.range 100).sum (fun r => (4 * A : ℝ) ^ r * globalWrongness n t v r) := by
+  sorry
+
+/-! **Connection to IsEpsilonSorted** -/
+
+-- If all intervals have low tree wrongness, the sequence is ε-sorted
+lemma tree_wrongness_implies_sorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ)
+    (h : ∀ J : Interval n, simpleDisplacement v J ≤ ε) :
+    IsEpsilonSorted v ε := by
+  sorry
