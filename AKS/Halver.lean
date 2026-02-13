@@ -241,9 +241,67 @@ lemma card_wrongHalf_le_displaced {n : ℕ} (v w : Fin n → Bool) :
           simp [wrongHalfTop, wrongHalfBottom, displaced]
           tauto
 
+
+/-! **Wrongness Measure for Geometric Decrease** -/
+
+/-- **Wrongness measure**: Fraction of positions where v differs from
+    monotone witness w. For Boolean sequences, this measures how many
+    elements are on the "wrong side" of the 0-1 transition.
+
+    Key property: wrongness decreases geometrically under ε-halving,
+    enabling the (2ε)^k bound for iterated halvings. -/
+noncomputable def wrongness {n : ℕ} (v w : Fin n → Bool) (hw : Monotone w) : ℝ :=
+  if n = 0 then 0 else (displaced v w).card / n
+
+/-- Wrongness is bounded by 1 -/
+lemma wrongness_le_one {n : ℕ} (v w : Fin n → Bool) (hw : Monotone w) :
+    wrongness v w hw ≤ 1 := by
+  unfold wrongness
+  split_ifs with h
+  · norm_num
+  · have card_bound : (displaced v w).card ≤ n := by
+      have : displaced v w ⊆ (Finset.univ : Finset (Fin n)) := by
+        intro i
+        simp [displaced]
+      calc (displaced v w).card
+          ≤ (Finset.univ : Finset (Fin n)).card := Finset.card_le_card this
+        _ = n := Finset.card_fin n
+    have hn_pos : (0 : ℝ) < n := by positivity
+    calc (displaced v w).card / (n : ℝ)
+        ≤ (n : ℝ) / n := by gcongr
+      _ = 1 := by field_simp
+
+/-- Wrongness is non-negative -/
+lemma wrongness_nonneg {n : ℕ} (v w : Fin n → Bool) (hw : Monotone w) :
+    0 ≤ wrongness v w hw := by
+  unfold wrongness
+  split_ifs <;> simp [Nat.cast_nonneg, div_nonneg]
+
+/-- Wrongness bounds the IsEpsilonSorted measure -/
+lemma wrongness_bounds_sorted {n : ℕ} (v w : Fin n → Bool) (hw : Monotone w) :
+    IsEpsilonSorted v (wrongness v w hw) := by
+  refine ⟨w, hw, ?_⟩
+  unfold wrongness
+  split_ifs with hn
+  · -- Case n = 0: Fin 0 is empty
+    simp
+    subst hn
+    intro x
+    exact Fin.elim0 x
+  · -- Case n ≠ 0: wrongness is exactly displaced.card / n
+    simp only [displaced]
+    field_simp
+    norm_cast
+
 /-- **Halver composition lemma**: Applying an ε-halver to a
     δ-sorted sequence yields a (δ·2ε)-sorted sequence.
-    This geometric decrease is the engine of AKS correctness. -/
+    This geometric decrease is the engine of AKS correctness.
+
+    NOTE: This theorem may not be provable for Boolean sequences
+    with single ε-halver application. AKS (1983) proves geometric
+    decrease for ITERATED halvings with tree structure, not single
+    application. See epsHalverMerge_improves_sortedness for the
+    correct formulation. -/
 theorem halver_composition {n : ℕ} (net : ComparatorNetwork n)
     (ε δ : ℝ) (hε : 0 < ε) (hε1 : ε < 1/2)
     (hnet : IsEpsilonHalver net ε)
@@ -262,10 +320,28 @@ theorem halver_composition {n : ℕ} (net : ComparatorNetwork n)
   refine ⟨w₂, hw₂_mono, ?_⟩
 
   -- Need to show: |{i : (net.exec v) i ≠ w₂ i}| ≤ δ·2ε·n
-  -- This follows from bounding wrong-half elements
 
-  -- Key insight: wrong-half elements in the output are bounded by
-  -- the halver property combined with the input displacement
+  -- The strategy: bound wrong-half elements using the halver property
+  -- Key observation: displaced elements in output are those in wrong halves
+
+  -- First, let's understand what we're trying to bound
+  have goal_eq : (displaced (net.exec v) w₂).card =
+                 (displaced (net.exec v) (net.exec w₁)).card := by rfl
+
+  -- The displaced elements are those where net.exec v and net.exec w₁ differ
+  -- These differences come from the input differences (displaced v w₁)
+  -- propagating through the network
+
+  -- Apply the halver property to both v and w₁
+  have halver_v := hnet v
+  have halver_w₁ := hnet w₁
+
+  -- Since w₁ is monotone, net.exec w₁ (= w₂) has a specific structure
+  -- All its ones are in the bottom part (high indices)
+
+  -- The key insight: wrong-half elements are bounded by the halver property
+  -- We need to connect this to the displacement count
+
   sorry
 
 /-- **Convergence**: After O(log n) rounds of ε-halving (with ε < 1/2),
