@@ -97,11 +97,45 @@ theorem withinClusterCLM_isSelfAdjoint {n₁ d₁ d₂ : ℕ}
     IsSelfAdjoint (withinClusterCLM (n₁ := n₁) G₂ hd₁) := by
   rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
   intro f g
-  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial, withinClusterCLM_apply]
-  -- LHS: ∑ vk, g(vk) * ((∑ j, f(encode (cluster vk) (G₂.neighbor (port vk) j))) / d₂)
-  -- RHS: ∑ vk, ((∑ j, g(encode (cluster vk) (G₂.neighbor (port vk) j))) / d₂) * f(vk)
-  -- Use rotation bijection to show these are equal
-  sorry
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial]
+  -- Unfold withinClusterCLM on both sides
+  show ∑ vk, g.ofLp vk * (withinClusterCLM G₂ hd₁ f).ofLp vk =
+       ∑ vk, (withinClusterCLM G₂ hd₁ g).ofLp vk * f.ofLp vk
+  simp only [withinClusterCLM_apply]
+  -- Both sides equal (1/d₂) * ∑ v, ∑ k, ∑ j, ... after pulling out divisions
+  -- The inner double sum is symmetric by rotation bijection
+
+  suffices h : ∑ vk, ∑ j, g.ofLp vk * f.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j)) =
+               ∑ vk, ∑ j, g.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j)) * f.ofLp vk by
+    have lhs : ∑ vk, g.ofLp vk * ((∑ j, f.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j))) / ↑d₂) =
+               (∑ vk, ∑ j, g.ofLp vk * f.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j))) / ↑d₂ := by
+      trans (∑ vk, (g.ofLp vk * ∑ j, f.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j))) / ↑d₂)
+      · congr; funext vk; rw [mul_div_assoc]
+      · rw [← Finset.sum_div]; congr; funext vk; rw [Finset.mul_sum]
+    have rhs : ∑ vk, ((∑ j, g.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j))) / ↑d₂) * f.ofLp vk =
+               (∑ vk, ∑ j, g.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j)) * f.ofLp vk) / ↑d₂ := by
+      trans (∑ vk, ((∑ j, g.ofLp (encode (cluster hd₁ vk) (G₂.neighbor (port hd₁ vk) j))) * f.ofLp vk) / ↑d₂)
+      · congr; funext vk; rw [div_mul_eq_mul_div]
+      · rw [← Finset.sum_div]; congr; funext vk; rw [Finset.sum_mul]
+    rw [lhs, rhs, h]
+
+  -- Show double sums are equal by converting to cluster structure and using rotation bijection
+  conv_lhs => rw [← sum_encode_eq_sum hd₁]
+  conv_rhs => rw [← sum_encode_eq_sum hd₁]
+  simp only [cluster_encode, port_encode]
+
+  congr 1; ext v
+  -- For each cluster v, apply rotation bijection to swap neighbors
+  simp_rw [RegularGraph.neighbor]
+  simp_rw [← Fintype.sum_prod_type']
+  -- Now both sides are ∑_{k,j} ... where the product is over Fin d₁ × Fin d₂
+  -- Simplify (x.1, x.2) to x
+  simp only [Prod.mk.eta]
+  -- Apply rotation bijection to reindex
+  have h := G₂.rotEquiv.sum_comp (fun p ↦ g.ofLp (encode v (G₂.rot p).1) * f.ofLp (encode v p.1))
+  simp only [show ∀ p, (G₂.rotEquiv p : Fin d₁ × Fin d₂) = G₂.rot p from fun _ ↦ rfl,
+    G₂.rot_involution] at h
+  exact h
 
 /-- The within-cluster walk preserves the cluster mean: `B * Q = Q`.
     Walking within a cluster preserves the cluster average because
