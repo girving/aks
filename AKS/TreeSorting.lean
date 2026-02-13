@@ -601,6 +601,23 @@ lemma monotone_has_threshold {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
   -- Then countOnes = number of positions ≥ k = n - k
   sorry
 
+/-- A monotone witness partitions elements by their value. -/
+lemma monotone_partitions_by_value {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
+    ∃ k : ℕ, k ≤ n ∧
+      (∀ i : Fin n, (i : ℕ) < k ↔ w i = false) ∧
+      (∀ i : Fin n, k ≤ (i : ℕ) ↔ w i = true) := by
+  -- This is essentially monotone_bool_zeros_then_ones with iff instead of →
+  sorry
+
+/-- For a monotone witness, elements that are 0 should be in the bottom,
+    elements that are 1 should be in the top. -/
+lemma monotone_witness_placement {n : ℕ} (v w : Fin n → Bool) (hw : Monotone w)
+    (h_witness : (Finset.univ.filter (fun i => v i ≠ w i)).card ≤ δ * n) :
+    -- Elements where w = false should be in positions < threshold
+    -- Elements where w = true should be in positions ≥ threshold
+    (sorry : Prop) := by
+  sorry
+
 /-- Contents of registers in interval J at time t.
     R(J) in AKS notation = {values currently in interval J}. -/
 def registerContents {n : ℕ} (v : Fin n → Bool) (J : Interval n) : Finset Bool :=
@@ -804,17 +821,47 @@ lemma halver_bounds_top_excess {n : ℕ} (net : ComparatorNetwork n)
   -- This is essentially a restatement of IsEpsilonHalver
   sorry
 
+/-- If an input has excess ones in the top half, the halver will reduce this excess. -/
+lemma halver_reduces_top_excess {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool)
+    (h_excess : countOnesInRange v 0 (n/2) > countOnes v / 2) :
+    -- After halving, the excess is bounded by ε * (n / 2)
+    countOnesInRange (net.exec v) 0 (n/2) - countOnes v / 2 ≤ ε * (n / 2) := by
+  sorry
+
+/-- Comparators move at most a bounded number of elements. -/
+lemma comparator_displacement_bound {n : ℕ} (c : Comparator n) (v : Fin n → Bool) :
+    -- At most 2 positions change (the two compared positions)
+    (Finset.univ.filter (fun i => c.apply v i ≠ v i)).card ≤ 2 := by
+  sorry
+
+/-- Network displacement accumulates through comparators. -/
+lemma network_displacement_bound {n : ℕ} (net : ComparatorNetwork n) (v : Fin n → Bool) :
+    (Finset.univ.filter (fun i => net.exec v i ≠ v i)).card ≤ 2 * net.comparators.length := by
+  sorry
+
 /-- If the input has a monotone witness, the halver preserves structure.
 
     Specifically, after halving, we can still find a monotone witness
-    for the output, and it's related to the input witness by the halver property. -/
+    for the output, and it's related to the input witness by the halver property.
+
+    This is a key lemma toward showing that halvers improve sortedness. -/
 lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
     (ε : ℝ) (hnet : IsEpsilonHalver net ε)
     (v : Fin n → Bool) (w : Fin n → Bool) (hw : Monotone w)
     (δ : ℝ) (h_witness : (Finset.univ.filter (fun i => v i ≠ w i)).card ≤ δ * n) :
     ∃ w' : Fin n → Bool, Monotone w' ∧
       (Finset.univ.filter (fun i => net.exec v i ≠ w' i)).card ≤ (δ + ε) * n := by
-  sorry
+  -- Strategy:
+  -- 1. Start with w' := net.exec w (monotone by halver_preserves_monotone)
+  -- 2. Show that displacement between net.exec v and w' is bounded
+  -- 3. Use halver balance property to bound new displaced elements
+  use net.exec w
+  constructor
+  · exact halver_preserves_monotone net ε hnet w hw
+  · -- Bound the displacement
+    -- Elements that were displaced before (δ * n) plus new exceptions (ε * n)
+    sorry
 
 /-! **Helper Lemmas for Lemma 2** -/
 
