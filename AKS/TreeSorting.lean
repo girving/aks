@@ -226,7 +226,8 @@ lemma Interval.size_pos_of_nonempty {n : ℕ} (I : Interval n) (h : I.size > 0) 
 -- Interval membership
 lemma Interval.mem_toFinset {n : ℕ} (I : Interval n) (i : Fin n) :
     i ∈ I.toFinset ↔ I.a.val ≤ i.val ∧ i.val ≤ I.b.val := by
-  sorry
+  unfold Interval.toFinset
+  simp only [Finset.mem_filter, Finset.mem_univ, true_and]
 
 -- Y_t(i) is monotone in i
 lemma Y_monotone {n t : ℕ} : Monotone (Y n t) := by
@@ -429,6 +430,19 @@ def elementsToUpper (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (
 def elementsCorrectlyPlaced (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : Finset (Fin n) :=
   -- Elements in J that belong in J
   J.toFinset \ (elementsToLower n t v J ∪ elementsToUpper n t v J)
+
+/-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
+lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
+    elementsToLower n t v J ∪ elementsToUpper n t v J ∪ elementsCorrectlyPlaced n t v J = J.toFinset ∧
+    Disjoint (elementsToLower n t v J) (elementsToUpper n t v J) ∧
+    Disjoint (elementsToLower n t v J) (elementsCorrectlyPlaced n t v J) ∧
+    Disjoint (elementsToUpper n t v J) (elementsCorrectlyPlaced n t v J) := by
+  sorry
+
+/-- Cardinality bound for displaced elements. -/
+lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
+    (elementsToLower n t v J).card + (elementsToUpper n t v J).card ≤ J.size := by
+  sorry
 
 /-- After applying ε-nearsort to a cherry, elements are pushed toward
     correct sides. This is the key property we need for Lemma 2. -/
@@ -669,6 +683,47 @@ lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (halver : ComparatorNet
   --   - Total error: ε₁ + ε ≈ ε (since ε₁ << ε)
   sorry
 
+/-- Recursion depth for ε-nearsort is logarithmic. -/
+lemma epsilonNearsort_depth_bound (m : ℕ) (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1) :
+    ∃ depth : ℕ, depth ≤ 2 * Nat.log 2 m ∧
+      (∀ ε₁ halver, epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth := by
+  sorry
+
+/-- Error accumulation through recursive halvers. -/
+lemma error_accumulation_bound {depth : ℕ} (ε₁ : ℝ) (hdepth : depth ≤ Nat.log 2 m)
+    (hε₁ : ε₁ < ε / depth ^ 4) :
+    depth * ε₁ < ε := by
+  sorry
+
+/-! **Connecting Halvers to Element Movement** -/
+
+/-- A halver balances ones between top and bottom halves.
+
+    This is a restatement of IsEpsilonHalver for convenience. -/
+lemma halver_balances_ones {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
+    let totalOnes := (Finset.univ.filter (fun i => v i = true)).card
+    let onesInTop := (Finset.univ.filter (fun i : Fin n => (i : ℕ) < n/2 ∧ net.exec v i = true)).card
+    onesInTop ≤ totalOnes / 2 + ε * (n / 2) := by
+  sorry
+
+/-- If more than the fair share of ones are in the top half before halving,
+    the halver will push some down. -/
+lemma halver_pushes_excess_down {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool)
+    (h_excess : (Finset.univ.filter (fun i : Fin n => (i : ℕ) < n/2 ∧ v i = true)).card >
+                 (Finset.univ.filter (fun i => v i = true)).card / 2) :
+    -- After halving, excess is bounded by ε
+    (sorry : Prop) := by
+  sorry
+
+/-- Balanced distribution implies most elements move correctly. -/
+lemma balance_implies_movement {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
+    -- At most ε fraction of elements that should move stay in the wrong place
+    (sorry : Prop) := by
+  sorry
+
 /-! **Helper Lemmas for Lemma 2** -/
 
 /-
@@ -705,7 +760,23 @@ lemma monotone_bool_zeros_then_ones {n : ℕ} (w : Fin n → Bool) (hw : Monoton
   -- The proof requires careful handling of Nat.find and Bool cases
   sorry
 
-/-- For a cherry with ε-nearsort applied, most elements move toward their correct sections. -/
+/-- For a cherry with ε-nearsort applied, most elements move toward their correct sections.
+
+    This is the key forcing property that comes from halver_implies_nearsort_property.
+
+    Given:
+    - A cherry with intervals (parent, leftChild, rightChild)
+    - An ε-nearsort network built from ε₁-halvers
+    - Input v : Fin n → Bool
+
+    After applying the nearsort:
+    - Elements that should be in leftChild (elementsToLower):
+      → At least (1-ε) fraction actually move to leftChild or lower
+    - Elements that should be in rightChild (elementsToUpper):
+      → At least (1-ε) fraction actually move to rightChild or higher
+    - At most ε fraction are "exceptional" (stuck in wrong place)
+
+    This lemma connects the halver balance property to actual element movement. -/
 lemma cherry_nearsort_moves_elements
     {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
     (cherry : Cherry n) (v : Fin n → Bool) :
@@ -713,6 +784,8 @@ lemma cherry_nearsort_moves_elements
     -- - At least (1-ε) fraction of elements in wrong positions move toward correct sections
     -- - At most ε fraction remain in wrong positions (exceptions)
     (sorry : Prop) := by
+  -- This depends on halver_implies_nearsort_property
+  -- and requires tracking element positions through the network
   sorry
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
