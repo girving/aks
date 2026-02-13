@@ -4,7 +4,13 @@
   The pure operator-theory core of the Reingold–Vadhan–Wigderson spectral
   composition theorem. Given operators `W = B · Σ · B` on a Hilbert space
   with projections `Q ≥ P`, the bound `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` follows
-  from the contraction `‖B(I-Q)‖ ≤ λ₂` and the spectral gap `‖QΣQ - P‖ ≤ λ₁`.
+  from the contraction `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖` (B contracts the tilde
+  subspace) and the spectral gap `‖QΣQ - P‖ ≤ λ₁`.
+
+  **Important:** The tilde contraction must be stated as a bound on `ker Q`
+  (not as `‖B(I-Q)‖ ≤ λ₂`). The operator norm `‖B(I-Q)‖ ≤ λ₂` only gives
+  `‖B(I-Q)x‖ ≤ λ₂·‖x‖` (full vector norm), not `‖B(I-Q)x‖ ≤ λ₂·‖(I-Q)x‖`
+  (projected vector norm). The RVW proof requires the latter (Claim 4.1).
 
   This file has NO graph imports — it works in abstract inner product spaces.
 -/
@@ -842,104 +848,56 @@ private lemma cross_term_bound {n : ℕ}
 /-- Helper: Bound ‖Bx̃‖ ≤ λ₂·‖x̃‖ using ‖B(I-Q)‖ ≤ λ₂. -/
 private lemma tilde_contraction_bound {n : ℕ}
     (B Q : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
-    (lam₂ : ℝ) (h_tilde : ‖B * (1 - Q)‖ ≤ lam₂)
+    (lam₂ : ℝ) (h_tilde : ∀ x, Q x = 0 → ‖B x‖ ≤ lam₂ * ‖x‖)
+    (hQ_proj : Q * Q = Q)
     (x : EuclideanSpace ℝ (Fin n)) :
     ‖B ((1 - Q) x)‖ ≤ lam₂ * ‖(1 - Q) x‖ := by
-  calc ‖B ((1 - Q) x)‖
-      = ‖(B * (1 - Q)) x‖ := rfl
-    _ ≤ ‖B * (1 - Q)‖ * ‖x‖ := ContinuousLinearMap.le_opNorm _ _
-    _ ≤ lam₂ * ‖x‖ := by gcongr
+  -- (1 - Q) x is in ker(Q) since Q((1-Q)x) = (Q - Q²)x = 0
+  have hker : Q ((1 - Q) x) = 0 := by
+    change (Q * (1 - Q)) x = 0
+    rw [mul_sub, mul_one, hQ_proj, sub_self, ContinuousLinearMap.zero_apply]
+  exact h_tilde ((1 - Q) x) hker
 
-/-- Helper: The quadratic form bound combining all terms.
+/-- The reflection–Rayleigh quotient bound (RVW section 4.2).
 
-The quadratic form `f(α,β) = λ₁α² + 2λ₂αβ + λ₂²β²` subject to `α² + β² = 1`
-can be written as the Rayleigh quotient of the 2×2 matrix:
-```
-M = [[λ₁,  λ₂ ],
-     [λ₂,  λ₂²]]
-```
+For a self-adjoint involution `Σ` (a reflection: `Σ² = I`, `Σ* = Σ`) and orthogonal
+vectors `u`, `w` with:
+- `|⟨Σu, u⟩| ≤ λ₁ · ‖u‖²` (hat block spectral gap)
+- `‖w‖ ≤ λ₂ · b` where `b² + ‖u‖² = 1` (tilde contraction)
 
-However, the rvwBound formula comes from a different but related matrix:
-```
-M' = [[(1-λ₂²)λ₁,  λ₂],
-      [λ₂,          0 ]]
-```
+We have: `|⟨Σ(u + w), u + w⟩| ≤ rvwBound(λ₁, λ₂)`.
 
-whose largest eigenvalue is exactly `rvwBound(λ₁, λ₂)`.
+**Why the triangle inequality approach fails:** Naively bounding
+`|⟨Σv, v⟩| ≤ |⟨Σu, u⟩| + 2|⟨Σu, w⟩| + |⟨Σw, w⟩| ≤ λ₁a² + 2ac + c²`
+gives the weaker bound `λ₁ + λ₂`, not `rvwBound`. The three terms
+cannot simultaneously achieve their maxima because `Σ` is a reflection:
+`⟨Σv, v⟩ = cos(2θ) · ‖v‖²` for some angle `θ`. The cross terms are
+constrained by the hat term through the reflection geometry.
 
-The connection: our quadratic form arises from bounding three terms:
-- Hat term: contributes at most λ₁α²
-- Cross terms: contribute at most 2λ₂αβ
-- Tilde term: contributes at most λ₂²β²
-
-The RVW analysis shows this bound is tight and achieved at the eigenvector
-corresponding to the largest eigenvalue of M'.
-
-Proof strategy:
-1. Show the quadratic form ≤ Rayleigh quotient of M
-2. Relate eigenvalues of M to those of M' via the substitution λ₂² = 1 - c
-3. Compute that λ_max(M') = rvwBound using the quadratic formula
-4. Show our bound is achieved at the optimal α, β
-
-This requires either:
-(a) Matrix eigenvalue theory and quadratic formula algebra, or
-(b) Calculus: substitute β = √(1-α²), differentiate, solve for critical point
+**RVW proof strategy (section 4.2):**
+1. Since `Σ² = I` and `Σ* = Σ`, the space decomposes into `±1`-eigenspaces
+   `S ⊕ S⊥`. For any `v`: `⟨Σv, v⟩ = cos(2θ) · ‖v‖²` where `θ` is
+   the angle of `v` from `S`.
+2. Express the Rayleigh quotient as `|cos 2θ| · cos²φ / cos²φ'` where
+   `φ`, `φ'` are angles related to `u/(u+w̃)` and `u/(u+w)`.
+3. The constraints translate to `tan φ'/tan φ ≤ λ₂` and `|cos 2ψ| ≤ λ₁`.
+4. Two-case optimization (depending on whether `|cos 2x|` achieves 1 in
+   `[ψ-φ', ψ+φ']`) yields `rvwBound` in both cases.
 -/
-private lemma quadratic_form_bound {n : ℕ}
-    (lam₁ lam₂ : ℝ) (alpha beta : ℝ)
-    (h_unit : alpha ^ 2 + beta ^ 2 = 1)
-    (ha : 0 ≤ alpha) (hb : 0 ≤ beta) :
-    lam₁ * alpha ^ 2 + 2 * lam₂ * alpha * beta + lam₂ ^ 2 * beta ^ 2 ≤ rvwBound lam₁ lam₂ := by
-  -- Strategy: The quadratic form [α β]·M·[α β]ᵀ where M = [[λ₁, λ₂], [λ₂, λ₂²]]
-  -- represents the Rayleigh quotient for the symmetric matrix M.
-  --
-  -- Mathematical approach:
-  -- 1. By Lagrange multipliers, maximizing f(α,β) = λ₁α² + 2λ₂αβ + λ₂²β²
-  --    subject to g(α,β) = α² + β² = 1 gives the eigenvalue equation:
-  --    ∇f = μ·∇g  ⟹  M·[α,β]ᵀ = μ·[α,β]ᵀ
-  --    where M = [[λ₁, λ₂], [λ₂, λ₂²]]
-  --
-  -- 2. The characteristic polynomial is:
-  --    det(M - λI) = λ² - (λ₁ + λ₂²)λ + λ₂²(λ₁ - 1)
-  --
-  -- 3. The largest eigenvalue is:
-  --    λ₊ = [(λ₁ + λ₂²) + √((λ₁ - λ₂²)² + 4λ₂²)] / 2
-  --
-  -- 4. Show λ₊ = rvwBound(λ₁, λ₂) via algebraic manipulation:
-  --    Need: [(λ₁ + λ₂²) + √((λ₁ - λ₂²)² + 4λ₂²)] / 2
-  --        = (1-λ₂²)·λ₁/2 + √((1-λ₂²)²·λ₁²/4 + λ₂²)
-  --
-  --    This follows by expanding both sides and verifying the identity.
-  --
-  -- The proof requires either:
-  -- (a) Matrix eigenvalue theory from Mathlib + quadratic formula algebra, or
-  -- (b) Direct calculus: substitute β = √(1-α²), differentiate, solve for maximum
-  --
-  -- Both approaches are straightforward but require careful algebraic manipulation.
-
-  -- We'll prove this by showing the quadratic form is bounded by rvwBound
-  -- through direct algebraic manipulation.
-
-  -- The quadratic form λ₁α² + 2λ₂αβ + λ₂²β² represents the Rayleigh quotient
-  -- for the 2×2 symmetric matrix M = [[λ₁, λ₂], [λ₂, λ₂²]].
-  --
-  -- The maximum over the unit circle (α²+β²=1) is the largest eigenvalue of M.
-  --
-  -- For a 2×2 matrix with trace T and determinant D, the largest eigenvalue is:
-  --   λ_max = (T + √(T² - 4D)) / 2
-  --
-  -- For M: T = λ₁ + λ₂², D = λ₁λ₂² - λ₂²
-  --
-  -- The RVW bound is exactly this formula after algebraic simplification:
-  --   rvwBound(λ₁, λ₂) = (1-λ₂²)·λ₁/2 + √((1-λ₂²)²·λ₁²/4 + λ₂²)
-  --
-  -- Proving this identity requires either:
-  -- (a) Mathlib lemmas: Matrix.discr_fin_two, then show λ_max = rvwBound algebraically
-  -- (b) Direct calculus: Lagrange multipliers on the constraint optimization
-  --
-  -- Both are straightforward algebra but require careful manipulation of sqrt expressions.
-
-  sorry -- TODO: Complete using approach (a) with Mathlib's 2×2 matrix theory
+private lemma reflection_quadratic_bound {n : ℕ}
+    (Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (u w : EuclideanSpace ℝ (Fin n)) (h_orth : @inner ℝ _ _ u w = 0)
+    (b : ℝ) (hb : 0 ≤ b)
+    (h_unit : ‖u‖ ^ 2 + b ^ 2 = 1)
+    (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (h_hat : |@inner ℝ _ _ (Sig u) u| ≤ lam₁ * ‖u‖ ^ 2)
+    (h_tilde_norm : ‖w‖ ≤ lam₂ * b) :
+    |@inner ℝ _ _ (Sig (u + w)) (u + w)| ≤ rvwBound lam₁ lam₂ := by
+  -- This is the mathematical core of RVW (2002) Section 4.2.
+  -- The proof uses the reflection structure of Σ and a geometric
+  -- two-case optimization over angles. See the paper for details.
+  sorry
 
 /-- **The core RVW operator norm bound (abstract).**
 
@@ -947,86 +905,38 @@ private lemma quadratic_form_bound {n : ℕ}
     - `W = B · Σ · B` (walk factorization)
     - `Q` orthogonal projection (`Q² = Q`, `Q* = Q`)
     - `B` self-adjoint contraction preserving `Q` (`BQ = QB = Q`, `‖B‖ ≤ 1`)
-    - `Σ` self-adjoint involution (`Σ² = 1`, `Σ* = Σ`)
+    - `Σ` self-adjoint involution (`Σ² = 1`, `Σ* = Σ`, `ΣP = P`)
     - `P ≤ Q` projections (`PQ = QP = P`)
-    - `‖B(I-Q)‖ ≤ λ₂` (within-cluster contraction on tilde subspace)
+    - `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖` (within-cluster contraction on tilde subspace)
     - `‖QΣQ - P‖ ≤ λ₁` (hat-block spectral gap)
 
     Then `‖W - P‖ ≤ rvwBound(λ₁, λ₂)`.
 
-    ## Proof Strategy
+    ## Proof Strategy (RVW Section 4.2)
 
     The proof uses the Rayleigh quotient characterization for self-adjoint operators:
     ```
     ‖W - P‖ = sup { |⟨(W-P)x, x⟩| : ‖x‖ = 1 }
     ```
 
-    For any unit vector x, decompose via the hat/tilde split:
-    ```
-    x = x̂ + x̃    where x̂ = Qx, x̃ = (I-Q)x
-    ```
+    **Step 1: Reduce to x ⊥ P.** Since `ΣP = P`, we get `WP = BΣBP = BΣP = BP = P`,
+    so `(W-P)` annihilates `range(P)`. The sup is achieved on `range(P)⊥`.
 
-    Key properties of this decomposition:
-    - **Orthogonality**: ⟨x̂, x̃⟩ = 0 (since Q is self-adjoint projection)
-    - **Pythagorean**: ‖x‖² = ‖x̂‖² + ‖x̃‖² = 1
-    - **Simplification**: Bx̂ = x̂ (from BQ = Q)
+    **Step 2: For x ⊥ P with ‖x‖ = 1**, decompose `x = x̂ + x̃` where `x̂ = Qx`,
+    `x̃ = (I-Q)x`. By self-adjointness of B: `⟨(W-P)x, x⟩ = ⟨Σv, v⟩` where
+    `v = x̂ + Bx̃` (using `Bx̂ = x̂` and `Px = 0 ⟹ Px̂ = 0`).
 
-    ### Step 1: Expand ⟨Wx, x⟩ using factorization W = B·Σ·B
+    **Step 3: Apply the reflection bound.** Since `Σ` is a reflection (`Σ² = I`,
+    `Σ* = Σ`), `⟨Σv, v⟩ = cos(2θ)·‖v‖²` where `θ` is the angle of `v` from the
+    `+1`-eigenspace of `Σ`. The constraints `|⟨Σx̂, x̂⟩| ≤ λ₁·‖x̂‖²` (hat block) and
+    `‖Bx̃‖ ≤ λ₂·‖x̃‖` (tilde contraction) restrict the geometry. A two-case
+    optimization (RVW Section 4.2) shows `|⟨Σv, v⟩| ≤ rvwBound(λ₁, λ₂)`.
 
-    Using the inner product expansion lemma:
-    ```
-    ⟨Wx, x⟩ = ⟨Σ(Bx̂), Bx̂⟩ + ⟨Σ(Bx̂), Bx̃⟩ + ⟨Σ(Bx̃), Bx̂⟩ + ⟨Σ(Bx̃), Bx̃⟩
-    ```
-
-    Substitute Bx̂ = x̂:
-    ```
-    ⟨Wx, x⟩ = ⟨Σx̂, x̂⟩ + ⟨Σx̂, Bx̃⟩ + ⟨Σ(Bx̃), x̂⟩ + ⟨Σ(Bx̃), Bx̃⟩
-    ```
-
-    ### Step 2: Expand ⟨Px, x⟩ using PQ = P
-
-    Since P ≤ Q and the orthogonality:
-    ```
-    ⟨Px, x⟩ = ⟨P(x̂ + x̃), x̂ + x̃⟩ = ⟨Px̂, x̂⟩ + 0 + 0 + 0 = ⟨Px̂, x̂⟩
-    ```
-    (The cross terms vanish because Px̃ = P(I-Q)x = (P - PQ)x = 0)
-
-    ### Step 3: Form the difference and bound terms
-
-    ```
-    ⟨(W-P)x, x⟩ = [⟨Σx̂, x̂⟩ - ⟨Px̂, x̂⟩] + [⟨Σx̂, Bx̃⟩ + ⟨Σ(Bx̃), x̂⟩] + ⟨Σ(Bx̃), Bx̃⟩
-                = ⟨(QΣQ - P)x̂, x̂⟩ + 2·Re⟨Σx̂, Bx̃⟩ + ⟨Σ(Bx̃), Bx̃⟩
-    ```
-
-    Bound each term (using ‖Σ‖ = 1 from Σ² = 1):
-    - **Hat term**: |⟨(QΣQ - P)x̂, x̂⟩| ≤ λ₁·‖x̂‖²
-    - **Cross terms**: |⟨Σx̂, Bx̃⟩| ≤ ‖x̂‖·‖Bx̃‖ ≤ ‖x̂‖·λ₂·‖x̃‖
-    - **Tilde term**: |⟨Σ(Bx̃), Bx̃⟩| ≤ ‖Bx̃‖² ≤ λ₂²·‖x̃‖²
-
-    Therefore:
-    ```
-    |⟨(W-P)x, x⟩| ≤ λ₁·‖x̂‖² + 2λ₂·‖x̂‖·‖x̃‖ + λ₂²·‖x̃‖²
-    ```
-
-    ### Step 4: Optimize the quadratic form
-
-    Subject to ‖x̂‖² + ‖x̃‖² = 1, find:
-    ```
-    max { λ₁·α² + 2λ₂·α·√(1-α²) + λ₂²·(1-α²) : 0 ≤ α ≤ 1 }
-    ```
-    where α = ‖x̂‖.
-
-    This is equivalent to finding the largest eigenvalue of the 2×2 matrix:
-    ```
-    M = [[(1-λ₂²)·λ₁,  λ₂],
-         [λ₂,           0]]
-    ```
-
-    The characteristic polynomial is λ² - (1-λ₂²)·λ₁·λ - λ₂² = 0.
-    By the quadratic formula, the largest root is:
-    ```
-    λ_max = (1-λ₂²)·λ₁/2 + √((1-λ₂²)²·λ₁²/4 + λ₂²) = rvwBound(λ₁, λ₂)
-    ```
+    **Key insight (why triangle inequality fails):** Bounding the three terms
+    `|⟨Σx̂,x̂⟩| + 2|⟨Σx̂,Bx̃⟩| + |⟨Σ(Bx̃),Bx̃⟩|` independently gives the weaker
+    bound `λ₁ + λ₂`, not `rvwBound`. The reflection structure of `Σ` constrains
+    all terms simultaneously — when the hat term is large, the cross terms are small,
+    and vice versa.
 
     This is the mathematical core of the Reingold–Vadhan–Wigderson (2002)
     spectral composition theorem. -/
@@ -1038,180 +948,16 @@ theorem rvw_operator_norm_bound
     (hBQ : B * Q = Q) (hQB : Q * B = Q)
     (hB_sa : IsSelfAdjoint B) (hB_contr : ‖B‖ ≤ 1)
     (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (hSigP : Sig * P = P)
     (hP_proj : P * P = P) (hP_sa : IsSelfAdjoint P)
     (hPQ : P * Q = P) (hQP : Q * P = P)
     (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
-    (h_tilde : ‖B * (1 - Q)‖ ≤ lam₂)
+    (h_tilde : ∀ x, Q x = 0 → ‖B x‖ ≤ lam₂ * ‖x‖)
     (h_hat : ‖Q * Sig * Q - P‖ ≤ lam₁) :
     ‖W - P‖ ≤ rvwBound lam₁ lam₂ := by
-  -- Proof outline:
-  -- 1. Use Rayleigh quotient characterization: ‖W - P‖ = sup_{‖x‖=1} |⟨(W-P)x, x⟩|
-  -- 2. For any unit vector x, decompose x = x̂ + x̃ where x̂ = Qx, x̃ = (I-Q)x
-  -- 3. Expand ⟨W x, x⟩ using the factorization W = B·Σ·B
-  -- 4. Bound the cross terms using h_tilde (‖B(I-Q)‖ ≤ λ₂) and orthogonality
-  -- 5. Bound the hat term using h_hat (‖QΣQ - P‖ ≤ λ₁)
-  -- 6. The Rayleigh quotient reduces to a 2×2 optimization whose maximum is rvwBound
-
-  -- W - P is self-adjoint (since W = B·Σ·B and all operators are self-adjoint)
-  have hWP_sa : IsSelfAdjoint (W - P) := by
-    -- W = B·Σ·B is self-adjoint
-    have hW_sa : IsSelfAdjoint W := by
-      rw [hfact]
-      -- Use (A·B)* = B*·A* and self-adjointness of B, Σ
-      rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hB_sa hSig_sa ⊢
-      intro x y
-      simp only [ContinuousLinearMap.mul_apply]
-      -- ⟨B(Σ(Bx)), y⟩ = ⟨Σ(Bx), By⟩ by B self-adjoint
-      rw [hB_sa (Sig (B x)) y]
-      -- ⟨Σ(Bx), By⟩ = ⟨Bx, Σ(By)⟩ by Σ self-adjoint
-      rw [hSig_sa (B x) (B y)]
-      -- ⟨Bx, Σ(By)⟩ = ⟨x, B(Σ(By))⟩ by B self-adjoint
-      rw [hB_sa x (Sig (B y))]
-    -- W - P is self-adjoint since both W and P are
-    exact IsSelfAdjoint.sub hW_sa hP_sa
-
-  -- Use Rayleigh quotient bound
-  have ray_bound := rayleigh_quotient_bound hn (W - P) hWP_sa
-
-  -- Bound the Rayleigh quotient for each unit vector
-  have key : ∀ (x : EuclideanSpace ℝ (Fin n)), ‖x‖ = 1 →
-      |@inner ℝ _ _ ((W - P) x) x| ≤ rvwBound lam₁ lam₂ := by
-    intro x hx
-    -- Decompose x = x̂ + x̃ where x̂ = Qx, x̃ = (I-Q)x
-    set x_hat := Q x
-    set x_tilde := (1 - Q) x
-
-    -- Use orthogonality: ⟨x̂, x̃⟩ = 0
-    have orth := hat_tilde_orthogonal Q hQ_proj hQ_sa x
-    -- Norm decomposition: ‖x‖² = ‖x̂‖² + ‖x̃‖²
-    have norm_decomp := hat_tilde_norm_sq Q hQ_proj hQ_sa x
-    -- This gives us ‖x̂‖² + ‖x̃‖² = 1
-    have h_unit : ‖x_hat‖ ^ 2 + ‖x_tilde‖ ^ 2 = 1 := by rw [← hx]; exact norm_decomp
-
-    -- Key simplifications using BQ = Q and QB = Q
-    have hBhat : B x_hat = x_hat := by
-      calc B x_hat = B (Q x) := rfl
-         _ = (B * Q) x := rfl
-         _ = Q x := by rw [hBQ]
-         _ = x_hat := rfl
-
-    have hQBhat : Q (B x_hat) = x_hat := by rw [hBhat]
-
-    -- Rewrite ⟨Px, x⟩ in terms of x̂
-    have hPx_eq : @inner ℝ _ _ (P x) x = @inner ℝ _ _ (P x_hat) x_hat :=
-      meanProj_inner_eq_hat P Q hQ_proj hQ_sa hPQ hQP x
-
-    -- Expand ⟨Wx, x⟩ using the factorization
-    have hWx_expand := rvw_inner_product_expansion W B Sig Q hfact hQ_proj hQ_sa
-      hBQ hQB hB_sa hSig_sa x
-
-    -- Combine: ⟨(W-P)x, x⟩ = ⟨Wx, x⟩ - ⟨Px, x⟩
-    have h_diff : @inner ℝ _ _ ((W - P) x) x =
-        @inner ℝ _ _ (Sig (B x_hat)) (B x_hat) +
-        @inner ℝ _ _ (Sig (B x_hat)) (B x_tilde) +
-        @inner ℝ _ _ (Sig (B x_tilde)) (B x_hat) +
-        @inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde) -
-        @inner ℝ _ _ (P x_hat) x_hat := by
-      simp only [ContinuousLinearMap.sub_apply, inner_sub_left]
-      rw [hWx_expand, hPx_eq]
-
-    -- Simplify using Bx̂ = x̂
-    have h_diff_simp : @inner ℝ _ _ ((W - P) x) x =
-        @inner ℝ _ _ (Sig x_hat) x_hat +
-        @inner ℝ _ _ (Sig x_hat) (B x_tilde) +
-        @inner ℝ _ _ (Sig (B x_tilde)) x_hat +
-        @inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde) -
-        @inner ℝ _ _ (P x_hat) x_hat := by
-      rw [h_diff, hBhat, hBhat]
-
-    -- Regroup: combine hat and P terms
-    have h_regroup : @inner ℝ _ _ ((W - P) x) x =
-        [@inner ℝ _ _ (Sig x_hat) x_hat - @inner ℝ _ _ (P x_hat) x_hat] +
-        [@inner ℝ _ _ (Sig x_hat) (B x_tilde) + @inner ℝ _ _ (Sig (B x_tilde)) x_hat] +
-        @inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde) := by
-      rw [h_diff_simp]; ring
-
-    -- The hat block term equals ⟨(QΣQ - P)x̂, x̂⟩
-    have h_hat_block : @inner ℝ _ _ (Sig x_hat) x_hat - @inner ℝ _ _ (P x_hat) x_hat =
-        @inner ℝ _ _ ((Q * Sig * Q - P) x_hat) x_hat := by
-      -- Need: ⟨Σx̂, x̂⟩ = ⟨QΣQx̂, x̂⟩ since x̂ = Qx
-      -- Proof: Since x̂ = Qx and Q² = Q, we have Qx̂ = x̂
-      -- So QΣQx̂ = QΣx̂ = Σx̂ (using Q self-adjoint)
-      simp only [ContinuousLinearMap.sub_apply, inner_sub_left]
-      congr 1
-      -- Show: ⟨Σx̂, x̂⟩ = ⟨QΣQx̂, x̂⟩
-      have hQhat : Q x_hat = x_hat := by
-        simp [x_hat]
-        rw [← ContinuousLinearMap.mul_apply, hQ_proj]
-      rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric] at hQ_sa
-      simp only [ContinuousLinearMap.mul_apply]
-      rw [hQhat]
-      exact (hQ_sa (Sig x_hat) x_hat).symm
-
-    rw [h_regroup, h_hat_block]
-
-    -- Bound using triangle inequality
-    calc |@inner ℝ _ _ ((Q * Sig * Q - P) x_hat) x_hat +
-          (@inner ℝ _ _ (Sig x_hat) (B x_tilde) + @inner ℝ _ _ (Sig (B x_tilde)) x_hat) +
-          @inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde)|
-        ≤ |@inner ℝ _ _ ((Q * Sig * Q - P) x_hat) x_hat| +
-          |@inner ℝ _ _ (Sig x_hat) (B x_tilde) + @inner ℝ _ _ (Sig (B x_tilde)) x_hat| +
-          |@inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde)| := by
-            apply abs_add_three
-      _ ≤ lam₁ * ‖x_hat‖ ^ 2 +
-          (|@inner ℝ _ _ (Sig x_hat) (B x_tilde)| + |@inner ℝ _ _ (Sig (B x_tilde)) x_hat|) +
-          |@inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde)| := by
-            gcongr
-            · exact hat_block_bound Sig Q P lam₁ h_hat x_hat
-            · exact abs_add _ _
-      _ ≤ lam₁ * ‖x_hat‖ ^ 2 +
-          (‖x_hat‖ * ‖B x_tilde‖ + ‖x_hat‖ * ‖B x_tilde‖) +
-          ‖B x_tilde‖ ^ 2 := by
-            gcongr
-            · exact cross_term_bound Sig B hSig_inv hSig_sa x_hat x_tilde
-            · -- Symmetric: |⟨Σ(Bx̃), x̂⟩| ≤ ‖x̂‖·‖Bx̃‖ by Cauchy-Schwarz
-              calc |@inner ℝ _ _ (Sig (B x_tilde)) x_hat|
-                  ≤ ‖Sig (B x_tilde)‖ * ‖x_hat‖ := abs_real_inner_le_norm _ _
-                _ ≤ ‖Sig‖ * ‖B x_tilde‖ * ‖x_hat‖ := by
-                    gcongr; exact ContinuousLinearMap.le_opNorm _ _
-                _ ≤ 1 * ‖B x_tilde‖ * ‖x_hat‖ := by
-                    gcongr; exact involution_norm_le_one Sig hSig_inv hSig_sa
-                _ = ‖x_hat‖ * ‖B x_tilde‖ := by ring
-            · -- Pure tilde: |⟨Σ(Bx̃), Bx̃⟩| ≤ ‖Bx̃‖²
-              calc |@inner ℝ _ _ (Sig (B x_tilde)) (B x_tilde)|
-                  ≤ ‖Sig (B x_tilde)‖ * ‖B x_tilde‖ := abs_real_inner_le_norm _ _
-                _ ≤ ‖Sig‖ * ‖B x_tilde‖ * ‖B x_tilde‖ := by
-                    gcongr; exact ContinuousLinearMap.le_opNorm _ _
-                _ ≤ 1 * ‖B x_tilde‖ * ‖B x_tilde‖ := by
-                    gcongr; exact involution_norm_le_one Sig hSig_inv hSig_sa
-                _ = ‖B x_tilde‖ ^ 2 := by ring
-      _ = lam₁ * ‖x_hat‖ ^ 2 + 2 * ‖x_hat‖ * ‖B x_tilde‖ + ‖B x_tilde‖ ^ 2 := by ring
-      _ ≤ lam₁ * ‖x_hat‖ ^ 2 + 2 * lam₂ * ‖x_hat‖ * ‖x_tilde‖ + lam₂ ^ 2 * ‖x_tilde‖ ^ 2 := by
-            gcongr
-            · exact tilde_contraction_bound B Q lam₂ h_tilde x
-            · calc ‖B x_tilde‖ ^ 2
-                  = ‖B x_tilde‖ * ‖B x_tilde‖ := sq _
-                _ ≤ (lam₂ * ‖x_tilde‖) * (lam₂ * ‖x_tilde‖) := by
-                    gcongr; exact tilde_contraction_bound B Q lam₂ h_tilde x
-                _ = lam₂ ^ 2 * ‖x_tilde‖ ^ 2 := by ring
-      _ ≤ rvwBound lam₁ lam₂ := by
-            exact quadratic_form_bound lam₁ lam₂ ‖x_hat‖ ‖x_tilde‖ h_unit
-              (norm_nonneg _) (norm_nonneg _)
-
-  -- Conclude using the Rayleigh quotient characterization
-  rw [ray_bound]
-  apply Real.sSup_le
-  · intro b ⟨x, hx⟩
-    rw [← hx]
-    exact key x.val x.prop
-  · exact rvwBound_nonneg lam₁ lam₂ hlam₁ hlam₂
-    where
-      rvwBound_nonneg (lam₁ lam₂ : ℝ) (h₁ : 0 ≤ lam₁) (h₂ : 0 ≤ lam₂) : 0 ≤ rvwBound lam₁ lam₂ := by
-        unfold rvwBound
-        apply add_nonneg
-        · apply div_nonneg
-          · apply mul_nonneg
-            · nlinarith [sq_nonneg lam₂]
-            · exact h₁
-          · norm_num
-        · exact Real.sqrt_nonneg _
+  -- Full proof requires:
+  -- 1. rayleigh_quotient_bound (self-adjoint operator norm = Rayleigh quotient)
+  -- 2. WP = P reduction (from hSigP, hBQ, hPQ)
+  -- 3. Decomposition x = x̂ + x̃ and v = x̂ + Bx̃
+  -- 4. reflection_quadratic_bound (the geometric core)
+  sorry
