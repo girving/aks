@@ -21,3 +21,4 @@ Formal verification of the Ajtai–Komlós–Szemerédi (1983) O(n log n) sortin
 4. **Recursive AKS construction** (`AKS/Basic.lean`)
 
 See [REFERENCES.md](REFERENCES.md) for detailed citations and proof strategy documentation.
+# Test comment
