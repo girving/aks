@@ -73,6 +73,51 @@ theorem sum_over_cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (g : Fin n₁ → 
   rw [Finset.smul_sum]
 
 
+/-! **Port-Space Encoding Helpers** -/
+
+/-- Decode the first port coordinate from a product port (for d₂² ports in zigzag). -/
+def portFirst {d₂ : ℕ} (hd₂ : 0 < d₂) (ab : Fin (d₂ * d₂)) : Fin d₂ :=
+  ⟨ab.val / d₂, (Nat.div_lt_iff_lt_mul hd₂).mpr ab.isLt⟩
+
+/-- Decode the second port coordinate from a product port. -/
+def portSecond {d₂ : ℕ} (hd₂ : 0 < d₂) (ab : Fin (d₂ * d₂)) : Fin d₂ :=
+  ⟨ab.val % d₂, Nat.mod_lt _ hd₂⟩
+
+/-- Encode two port indices as a product port. -/
+def encodePort {d₂ : ℕ} (a : Fin d₂) (b : Fin d₂) : Fin (d₂ * d₂) :=
+  ⟨a.val * d₂ + b.val, Fin.pair_lt a b⟩
+
+@[simp]
+theorem portFirst_encodePort {d₂ : ℕ} (hd₂ : 0 < d₂) (a b : Fin d₂) :
+    portFirst hd₂ (encodePort a b) = a :=
+  fin_encode_fst a b _
+
+@[simp]
+theorem portSecond_encodePort {d₂ : ℕ} (hd₂ : 0 < d₂) (a b : Fin d₂) :
+    portSecond hd₂ (encodePort a b) = b :=
+  fin_encode_snd a b _
+
+@[simp]
+theorem encodePort_portFirst_portSecond {d₂ : ℕ} (hd₂ : 0 < d₂) (ab : Fin (d₂ * d₂)) :
+    encodePort (portFirst hd₂ ab) (portSecond hd₂ ab) = ab :=
+  fin_div_add_mod ab _
+
+/-- Summing over the port product space via encodePort equals summing over all ports.
+    This is the bijection between Fin d₂ × Fin d₂ and Fin (d₂ * d₂). -/
+theorem sum_encodePort_eq_sum {d₂ : ℕ} (hd₂ : 0 < d₂) (f : Fin (d₂ * d₂) → ℝ) :
+    ∑ a : Fin d₂, ∑ b : Fin d₂, f (encodePort a b) = ∑ ab : Fin (d₂ * d₂), f ab := by
+  simp_rw [← Fintype.sum_prod_type']
+  refine Finset.sum_bij' (fun (p : Fin d₂ × Fin d₂) _ => encodePort p.1 p.2)
+    (fun ab _ => (portFirst hd₂ ab, portSecond hd₂ ab))
+    (fun _ _ => Finset.mem_univ _)
+    (fun _ _ => Finset.mem_univ _)
+    (fun p _ => ?_)
+    (fun ab _ => encodePort_portFirst_portSecond hd₂ ab)
+    (fun p _ => ?_)
+  · simp [portFirst_encodePort, portSecond_encodePort]
+  · rfl
+
+
 /-! **Within-Cluster Walk Operator (B = I ⊗ W_{G₂})** -/
 
 /-- The within-cluster walk function: applies G₂'s walk independently
@@ -256,28 +301,33 @@ theorem zigzag_walkCLM_eq {n₁ d₁ d₂ : ℕ}
     withinClusterCLM G₂ hd₁ * stepPermCLM G₁ hd₁ * withinClusterCLM G₂ hd₁ := by
   -- Both sides are CLMs on EuclideanSpace, so prove pointwise equality
   ext f vk
-  -- Unfold the zigzag walk operator
-  simp only [RegularGraph.walkCLM_apply, RegularGraph.zigzag, RegularGraph.neighbor]
-  -- LHS: (1/(d₂²)) ∑_{i : Fin(d₂²)} f((zigzag_rot G₁ G₂ (vk, i)).1)
-
-  -- Unfold RHS: B·Σ·B
-  simp only [ContinuousLinearMap.mul_apply, withinClusterCLM_apply,
+  -- Unfold both sides
+  simp only [RegularGraph.walkCLM_apply, RegularGraph.zigzag, RegularGraph.neighbor,
+             ContinuousLinearMap.mul_apply, withinClusterCLM_apply,
              stepPermCLM_apply, cluster_encode, port_encode]
+
+  -- Goal: Show these two averages are equal:
+  -- LHS: (1/(d₂²)) ∑_{ab : Fin(d₂²)} f((zigzag_rot (vk, ab)).1)
   -- RHS: (1/d₂) ∑_a (1/d₂) ∑_b f(encode v' k''')
-  -- where (v', k''') comes from zig-step-zag
+  --      where v' = (G₁.rot (v, G₂.neighbor k a)).1
+  --            k''' = G₂.neighbor (G₁.rot (v, G₂.neighbor k a)).2 b
 
-  -- Goal: show the zigzag walk equals B·Σ·B
-  -- Both compute averages, need to show they average over the same vertices
+  -- Strategy:
+  -- 1. Convert LHS sum over Fin(d₂²) to ∑_a ∑_b using sum_encodePort_eq_sum
+  -- 2. Show division structures match: 1/(d₂²) = (1/d₂)·(1/d₂)
+  -- 3. Show summands match: zigzag_rot(vk, encodePort a b) computes same vertex
 
-  -- Mathematical insight:
-  -- LHS: Zigzag walk averages over d₂² neighbors via zigzag_rot
-  -- RHS: B·Σ·B does three operations:
-  --   1. B (zig): walk in G₂
-  --   2. Σ (step): permute via G₁
-  --   3. B (zag): walk in G₂ again
-  -- These are the same three-step process!
+  -- The key insight: zigzag_rot performs the same zig-step-zag as B·Σ·B:
+  --   zigzag_rot decodes port ab into (a,b), then:
+  --   - Zig: G₂.rot(k, a) → reach k'
+  --   - Step: G₁.rot(v, k') → reach (v', k'')
+  --   - Zag: G₂.rot(k'', b) → reach k'''
+  --   Result: encode(v', k''')
+  --
+  --   This matches RHS which does:
+  --   - B with port a: reach G₂.neighbor k a = k'
+  --   - Σ: reach (G₁.rot (v, k')).1 = v' and (G₁.rot (v, k')).2 = k''
+  --   - B with port b: reach G₂.neighbor k'' b = k'''
+  --   Result: encode(v', k''')
 
-  -- The proof requires showing that summing over Fin(d₂²) equals the nested sums
-  -- and that zigzag_rot computes the same final vertex as the composition.
-  -- This is tedious index manipulation that follows from the definitions.
   sorry
