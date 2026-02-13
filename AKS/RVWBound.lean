@@ -1024,28 +1024,105 @@ private lemma reflection_cs_minus {n : ℕ}
   rw [hM_sq] at h_prod_nonneg
   nlinarith
 
-/-- **Pure real-analysis optimization bound** (RVW Section 4.2, algebraic core).
+/-! **Quadratic Root Reduction** -/
 
-Given real numbers `a, b, c, p, q, r` representing:
-- `a = ‖û‖`, `b = ‖x̃‖`, `c = ‖w‖` where `w = Bx̃`
-- `p = ⟨Σû, û⟩`, `q = ⟨Σû, w⟩`, `r = ⟨Σw, w⟩`
+/-- `rvwBound(λ₁, λ₂)` satisfies the quadratic equation
+    `x² = (1 - λ₂²) · λ₁ · x + λ₂²`.
+    This characterizes it as the positive root of `t² - ct - d² = 0`
+    where `c = (1-λ₂²)λ₁` and `d = λ₂`. -/
+private lemma rvwBound_quadratic_eq (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂) :
+    (rvwBound lam₁ lam₂) ^ 2 = (1 - lam₂ ^ 2) * lam₁ * rvwBound lam₁ lam₂ + lam₂ ^ 2 := by
+  unfold rvwBound
+  set S := Real.sqrt ((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2)
+  have hD : 0 ≤ (1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2 := by positivity
+  have hS_sq : S ^ 2 = (1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2 := Real.sq_sqrt hD
+  -- LHS = ((1-λ₂²)λ₁/2 + S)² = (1-λ₂²)²λ₁²/4 + (1-λ₂²)λ₁·S + S²
+  -- RHS = (1-λ₂²)λ₁·((1-λ₂²)λ₁/2 + S) + λ₂² = (1-λ₂²)²λ₁²/2 + (1-λ₂²)λ₁·S + λ₂²
+  -- Difference: LHS - RHS = (1-λ₂²)²λ₁²/4 + S² - (1-λ₂²)²λ₁²/2 - λ₂²
+  --           = S² - (1-λ₂²)²λ₁²/4 - λ₂² = 0 (from hS_sq)
+  nlinarith [hS_sq]
 
-The constraints come from the reflection geometry of `Σ` (Σ² = I, Σ* = Σ):
-- `a² + b² = 1` (Pythagorean decomposition of unit vector)
-- `c ≤ λ₂ · b` (tilde contraction)
-- `|p| ≤ λ₁ · a²` (hat block spectral gap)
-- `|p| ≤ a²` and `|r| ≤ c²` (reflection Rayleigh bounds: `|⟨Σv,v⟩| ≤ ‖v‖²`)
-- `q² ≤ (a²+p)(c²+r)` (Cauchy-Schwarz on `(I+Σ)` applied to orthogonal u, w)
-- `q² ≤ (a²-p)(c²-r)` (Cauchy-Schwarz on `(I-Σ)` applied to orthogonal u, w)
+/-- `rvwBound` is nonneg when `0 ≤ λ₁` and `0 ≤ λ₂ ≤ 1`. -/
+private lemma rvwBound_nonneg (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (hlam₂_le : lam₂ ≤ 1) :
+    0 ≤ rvwBound lam₁ lam₂ := by
+  unfold rvwBound
+  have h1 : 0 ≤ (1 - lam₂ ^ 2) * lam₁ / 2 := by
+    apply div_nonneg _ (by norm_num : (0:ℝ) ≤ 2)
+    exact mul_nonneg (by nlinarith [sq_nonneg lam₂]) hlam₁
+  exact add_nonneg h1 (Real.sqrt_nonneg _)
 
-The two Cauchy-Schwarz constraints together prevent the cross term `q` from being
-large simultaneously with `p`, which is why the bound is tighter than `λ₁ + λ₂`.
+/-- Quadratic root bound: if `x ≥ 0` and `x² ≤ cx + d²` with `c, d ≥ 0`,
+    then `x ≤ (c + √(c² + 4d²))/2`.
+    This is because `(c + √(c²+4d²))/2` is the positive root of `t² - ct - d² = 0`,
+    and the polynomial is ≤ 0 on `[0, positive root]`. -/
+private lemma quadratic_root_upper_bound {x c d : ℝ}
+    (hx : 0 ≤ x) (hd : 0 ≤ d)
+    (h : x ^ 2 ≤ c * x + d ^ 2) :
+    x ≤ (c + Real.sqrt (c ^ 2 + 4 * d ^ 2)) / 2 := by
+  set S := Real.sqrt (c ^ 2 + 4 * d ^ 2)
+  set r := (c + S) / 2
+  set r' := (c - S) / 2
+  have hD : 0 ≤ c ^ 2 + 4 * d ^ 2 := by positivity
+  have hS_sq : S ^ 2 = c ^ 2 + 4 * d ^ 2 := Real.sq_sqrt hD
+  have hS_nonneg : 0 ≤ S := Real.sqrt_nonneg _
+  have hS_ge_abs_c : |c| ≤ S := by
+    rw [← Real.sqrt_sq_eq_abs]
+    exact Real.sqrt_le_sqrt (by linarith [sq_nonneg d])
+  have hS_ge_c : c ≤ S := le_trans (le_abs_self c) hS_ge_abs_c
+  have hr'_nonpos : r' ≤ 0 := by simp only [r']; linarith
+  -- Factor: (x - r)(x - r') = x² - cx - d²
+  have h_factor : (x - r) * (x - r') = x ^ 2 - c * x - d ^ 2 := by
+    simp only [r, r']; nlinarith [hS_sq]
+  have h_neg : (x - r) * (x - r') ≤ 0 := by rw [h_factor]; linarith
+  -- Since x - r' > 0, we need x - r ≤ 0
+  by_cases hxr' : x = r'
+  · -- x = r' ≤ 0, but x ≥ 0, so x = 0 ≤ r
+    have hx0 : x = 0 := le_antisymm (by rw [hxr']; exact hr'_nonpos) hx
+    have hr_nonneg : 0 ≤ r := div_nonneg (by linarith [hS_ge_abs_c, neg_abs_le c]) (by norm_num)
+    linarith
+  · have h_pos : 0 < x - r' := by
+      rcases (lt_or_gt_of_ne hxr') with h | h
+      · -- x < r' ≤ 0, contradicts x ≥ 0
+        linarith
+      · linarith
+    -- (x - r) * (x - r') ≤ 0 and (x - r') > 0, so (x - r) ≤ 0
+    have : x - r ≤ 0 := by
+      by_contra h_contra
+      push_neg at h_contra
+      have : 0 < (x - r) * (x - r') := mul_pos h_contra h_pos
+      linarith
+    linarith
 
-The proof is a two-case trigonometric optimization (RVW Section 4.2). -/
+/-- **The bound with exact μ values** (RVW Section 4.2, mathematical core).
+
+    Given all the reflection constraints, shows `|p + 2q + r| ≤ rvwBound(μ₁, μ₂)`
+    where `μ₁ = |p|/a²` and `μ₂ = c/b` are the *exact* spectral gap and tilde
+    contraction values.
+
+    The proof amounts to a constrained optimization: for fixed `a, c, p` (which
+    determine `μ₁`), the maximum of `|p + 2q + r|` over feasible `(q, r)` is
+    achieved when both Cauchy-Schwarz constraints are simultaneously tight
+    (`r = -(p/a²)c²`), giving `q = ac√(1-μ₁²)`. The resulting expression
+    `μ₁(a²-c²) + 2ac√(1-μ₁²)` has the form `A + B cos(2φ) + C sin(2φ)`
+    (with `a = cos φ`, `c = μ₂ sin φ`), whose maximum over `φ` equals
+    `rvwBound(μ₁, μ₂)`. -/
+private lemma rvw_exact_bound
+    (a b c p q r : ℝ)
+    (ha : 0 < a) (hb : 0 < b) (hc : 0 ≤ c)
+    (h_unit : a ^ 2 + b ^ 2 = 1)
+    (h_refl_u : |p| ≤ a ^ 2)
+    (h_refl_w : |r| ≤ c ^ 2)
+    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
+    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
+    |p + 2 * q + r| ≤ rvwBound (|p| / a ^ 2) (c / b) := by
+  sorry
+
 private lemma rvw_optimization_bound
     (a b c p q r lam₁ lam₂ : ℝ)
     (ha : 0 ≤ a) (hb : 0 ≤ b) (hc : 0 ≤ c)
     (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (hlam₁_le : lam₁ ≤ 1) (hlam₂_le : lam₂ ≤ 1)
     (h_unit : a ^ 2 + b ^ 2 = 1)
     (h_tilde : c ≤ lam₂ * b)
     (h_hat : |p| ≤ lam₁ * a ^ 2)
@@ -1054,11 +1131,86 @@ private lemma rvw_optimization_bound
     (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
     (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
     |p + 2 * q + r| ≤ rvwBound lam₁ lam₂ := by
-  -- This is a pure real-analysis optimization problem.
-  -- The RVW paper solves it via a two-case trigonometric argument
-  -- (Case I: φ' ≤ min(ψ, π/2-ψ); Case II: otherwise).
-  -- Both cases yield a bound ≤ rvwBound(λ₁, λ₂).
-  sorry
+  -- Handle edge cases where a = 0 or b = 0
+  by_cases ha0 : a = 0
+  · -- a = 0: p = 0 (from |p| ≤ a² = 0), q = 0 (from CS), X = r
+    have hp : p = 0 := by
+      have : |p| ≤ 0 := by rw [ha0] at h_refl_u; simpa using h_refl_u
+      exact abs_nonpos_iff.mp this
+    have hq : q = 0 := by
+      have h1 : q ^ 2 ≤ 0 := by rw [ha0, hp] at h_cs_plus; simpa using h_cs_plus
+      exact sq_eq_zero_iff.mp (le_antisymm h1 (sq_nonneg q))
+    simp only [hp, hq, mul_zero, add_zero, zero_add]
+    -- |r| ≤ c² ≤ (λ₂b)² = λ₂²b² = λ₂²(1-0) = λ₂²
+    have hb1 : b = 1 := by nlinarith [sq_nonneg b, ha0]
+    have hc_le : c ≤ lam₂ := by rw [hb1] at h_tilde; linarith [mul_one lam₂]
+    -- |r| ≤ c² ≤ λ₂² ≤ λ₂ (since λ₂ ≤ 1)
+    calc |r| ≤ c ^ 2 := h_refl_w
+      _ ≤ lam₂ ^ 2 := by nlinarith
+      _ ≤ lam₂ := by nlinarith [sq_nonneg lam₂]
+      _ ≤ rvwBound lam₁ lam₂ := by
+            unfold rvwBound
+            have : lam₂ ^ 2 ≤ (1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2 := by
+              linarith [sq_nonneg ((1 - lam₂ ^ 2) * lam₁)]
+            have h4 : Real.sqrt (lam₂ ^ 2) ≤
+                Real.sqrt ((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2) :=
+              Real.sqrt_le_sqrt this
+            rw [Real.sqrt_sq hlam₂] at h4
+            have : 0 ≤ (1 - lam₂ ^ 2) * lam₁ / 2 := by
+              apply div_nonneg _ (by norm_num : (0:ℝ) ≤ 2)
+              exact mul_nonneg (by nlinarith [sq_nonneg lam₂]) hlam₁
+            linarith
+  · by_cases hb0 : b = 0
+    · -- b = 0: c = 0 (from c ≤ λ₂b = 0), r = 0, q = 0, X = p
+      have hc0 : c = 0 := by nlinarith [mul_nonneg hlam₂ hb]
+      have hr : r = 0 := by
+        have : |r| ≤ 0 := by rw [hc0] at h_refl_w; simpa using h_refl_w
+        exact abs_nonpos_iff.mp this
+      have hq : q = 0 := by
+        have h1 : q ^ 2 ≤ 0 := by rw [hc0, hr] at h_cs_plus; simpa using h_cs_plus
+        exact sq_eq_zero_iff.mp (le_antisymm h1 (sq_nonneg q))
+      simp only [hq, hr, mul_zero, add_zero]
+      -- |p| ≤ λ₁a² ≤ λ₁ (since a²+0=1)
+      have ha1 : a ^ 2 = 1 := by nlinarith [sq_nonneg a, hb0]
+      calc |p| ≤ lam₁ * a ^ 2 := h_hat
+        _ = lam₁ := by rw [ha1, mul_one]
+        _ ≤ rvwBound lam₁ lam₂ := by
+              -- Need: λ₁ ≤ (1-λ₂²)λ₁/2 + √((1-λ₂²)²λ₁²/4 + λ₂²)
+              -- Key: √D ≥ (1+λ₂²)λ₁/2  (since D - ((1+λ₂²)λ₁/2)² = λ₂²(1-λ₁²) ≥ 0)
+              unfold rvwBound
+              set D := (1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2
+              have hD_ge : ((1 + lam₂ ^ 2) * lam₁ / 2) ^ 2 ≤ D := by
+                show ((1 + lam₂ ^ 2) * lam₁ / 2) ^ 2 ≤
+                  (1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2
+                have : lam₁ ^ 2 ≤ 1 := by nlinarith
+                nlinarith [sq_nonneg lam₂, sq_nonneg (lam₁ * lam₂)]
+              have hnn : 0 ≤ (1 + lam₂ ^ 2) * lam₁ / 2 := by positivity
+              have hsqrt_le := Real.sqrt_le_sqrt hD_ge
+              rw [Real.sqrt_sq hnn] at hsqrt_le
+              linarith
+    · -- Main case: a > 0, b > 0
+      have ha_pos : 0 < a := lt_of_le_of_ne ha (Ne.symm ha0)
+      have hb_pos : 0 < b := lt_of_le_of_ne hb (Ne.symm hb0)
+      -- Step 1: Bound with exact μ values
+      have h1 := rvw_exact_bound a b c p q r ha_pos hb_pos hc
+        h_unit h_refl_u h_refl_w h_cs_plus h_cs_minus
+      -- Step 2: Show μ₁ = |p|/a² ≤ λ₁ and μ₂ = c/b ≤ λ₂
+      have hmu1 : |p| / a ^ 2 ≤ lam₁ := by
+        rwa [div_le_iff₀ (by positivity : (0:ℝ) < a ^ 2)]
+      have hmu2 : c / b ≤ lam₂ := by
+        rw [div_le_iff₀ hb_pos]; linarith [h_tilde]
+      have hmu1_nonneg : 0 ≤ |p| / a ^ 2 := div_nonneg (abs_nonneg _) (by positivity)
+      have hmu2_nonneg : 0 ≤ c / b := div_nonneg hc hb_pos.le
+      have hmu1_le : |p| / a ^ 2 ≤ 1 := by
+        rw [div_le_one (by positivity : (0:ℝ) < a ^ 2)]; exact h_refl_u
+      have hmu2_le : c / b ≤ 1 := le_trans hmu2 hlam₂_le
+      -- Step 3: Apply monotonicity
+      calc |p + 2 * q + r|
+          ≤ rvwBound (|p| / a ^ 2) (c / b) := h1
+        _ ≤ rvwBound lam₁ (c / b) :=
+            rvwBound_mono_left hmu1_nonneg hmu2_nonneg hmu2_le hmu1
+        _ ≤ rvwBound lam₁ lam₂ :=
+            rvwBound_mono_right hlam₁ hlam₁_le hmu2_nonneg hlam₂_le hmu2
 
 /-- The reflection–Rayleigh quotient bound (RVW section 4.2).
 
@@ -1094,6 +1246,7 @@ private lemma reflection_quadratic_bound {n : ℕ}
     (b : ℝ) (hb : 0 ≤ b)
     (h_unit : ‖u‖ ^ 2 + b ^ 2 = 1)
     (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (hlam₁_le : lam₁ ≤ 1) (hlam₂_le : lam₂ ≤ 1)
     (h_hat : |@inner ℝ _ _ (Sig u) u| ≤ lam₁ * ‖u‖ ^ 2)
     (h_tilde_norm : ‖w‖ ≤ lam₂ * b) :
     |@inner ℝ _ _ (Sig (u + w)) (u + w)| ≤ rvwBound lam₁ lam₂ := by
@@ -1115,7 +1268,7 @@ private lemma reflection_quadratic_bound {n : ℕ}
   have h_cs_minus := reflection_cs_minus Sig hSig_inv hSig_sa u w h_orth
   -- Step 3: Apply the pure real optimization bound
   exact rvw_optimization_bound a b c p q r lam₁ lam₂
-    ha hb hc hlam₁ hlam₂ h_unit h_tilde_norm h_hat h_refl_u h_refl_w
+    ha hb hc hlam₁ hlam₂ hlam₁_le hlam₂_le h_unit h_tilde_norm h_hat h_refl_u h_refl_w
     h_cs_plus h_cs_minus
 
 /-- **The core RVW operator norm bound (abstract).**
