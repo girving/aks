@@ -317,7 +317,7 @@ No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
 - *Done (11/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`, `hat_block_norm` (‖QΣQ - P‖ ≤ spectralGap G₁), `withinCluster_tilde_contraction` (‖B(I-Q)‖ ≤ spectralGap G₂, 1 sorry in d₂=0 degenerate case)
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
-- *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`)
+- *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`). **Status doc:** `scripts/RVW_QUADRATIC_PROOF_STATUS.md` — documents LP infeasibility of nlinarith, numerical analysis, and viable proof paths. Key finding: scalar multiplier nlinarith is PROVEN infeasible (LP, twice); need mathematical proof via variable elimination + case analysis or full SOS Positivstellensatz.
 
 **Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
 
