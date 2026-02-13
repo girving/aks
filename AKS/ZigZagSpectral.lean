@@ -245,18 +245,38 @@ theorem stepPermCLM_sq_eq_one {n₁ d₁ : ℕ}
 theorem stepPermCLM_isSelfAdjoint {n₁ d₁ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (hd₁ : 0 < d₁) :
     IsSelfAdjoint (stepPermCLM G₁ hd₁) := by
-  -- Use the fact that Σ² = 1 and Σ is a permutation
-  -- For permutations: if Σ² = 1, then Σ* = Σ⁻¹ = Σ
-  have h_sq := stepPermCLM_sq_eq_one G₁ hd₁
   rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric]
   intro f g
-  -- Show ⟨Σf, g⟩ = ⟨f, Σg⟩ using that Σ is a permutation
-  -- Mathematically: Σ permutes coordinates via rotation map.
-  -- Since rot² = id, we have ⟨Σf, g⟩ = ∑ vk, f(rot(vk)) · g(vk)
-  --                                   = ∑ vk, f(vk) · g(rot(vk))  [by reindexing w = rot(vk)]
-  --                                   = ⟨f, Σg⟩
-  -- Implementation requires: rotation bijection lemma + sum reindexing
-  sorry
+  simp only [PiLp.inner_apply, RCLike.inner_apply, conj_trivial]
+  -- Unfold stepPermCLM
+  show ∑ vk, g.ofLp vk * (stepPermCLM G₁ hd₁ f).ofLp vk =
+       ∑ vk, (stepPermCLM G₁ hd₁ g).ofLp vk * f.ofLp vk
+  simp only [stepPermCLM_apply]
+  -- LHS: ∑ vk, g(vk) * f(σ(vk)) where σ = encode ∘ G₁.rot ∘ (cluster, port)
+  -- RHS: ∑ vk, g(σ(vk)) * f(vk)
+  -- These are equal by reindexing LHS via the bijection σ
+
+  -- Define the permutation σ
+  let σ := fun vk => encode (G₁.rot (cluster hd₁ vk, port hd₁ vk)).1
+                            (G₁.rot (cluster hd₁ vk, port hd₁ vk)).2
+
+  -- Convert to product space and use rotation bijection
+  conv_lhs => rw [← sum_encode_eq_sum hd₁]
+  conv_rhs => rw [← sum_encode_eq_sum hd₁]
+  simp only [cluster_encode, port_encode]
+
+  -- Now both are ∑ over Fin n₁ × Fin d₁
+  simp_rw [← Fintype.sum_prod_type']
+
+  -- Simplify (x.1, x.2) to x using Prod.mk.eta
+  simp only [Prod.mk.eta]
+
+  -- Apply rotation bijection
+  have h := G₁.rotEquiv.sum_comp (fun p : Fin n₁ × Fin d₁ ↦
+    g.ofLp (encode p.1 p.2) * f.ofLp (encode (G₁.rot p).1 (G₁.rot p).2))
+  simp only [show ∀ p, (G₁.rotEquiv p : Fin n₁ × Fin d₁) = G₁.rot p from fun _ ↦ rfl,
+    G₁.rot_involution] at h
+  exact h.symm
 
 
 /-! **Spectral Bounds** -/
