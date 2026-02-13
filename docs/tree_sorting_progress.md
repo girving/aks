@@ -1,8 +1,23 @@
 # Tree-Based AKS Sorting: Implementation Progress
 
 **Date:** 2026-02-13
-**Status:** Architecture COMPLETE, proof implementation pending
-**File:** `AKS/TreeSorting.lean` (522 lines, fully compiling)
+**Status:** Architecture COMPLETE, Lemma 2 helpers in progress
+**File:** `AKS/TreeSorting.lean` (660+ lines, fully compiling)
+
+## Recent Progress (2026-02-13)
+
+**Lemma 2 Risk Reduction: SUCCESS ✅**
+- Created comprehensive analysis document (`docs/lemma2_analysis.md`, 320 lines)
+- **Risk reduced from MEDIUM-HIGH → MEDIUM**
+- Identified all 5 required helper lemmas with clear proof strategy
+- Implemented Cherry structure and helper lemma stubs
+- Added tree distance properties and cherry properties
+- Expanded zig_step_bounded_increase with 5-step proof structure
+- **Key insight:** Halver property → ε-nearsort forcing → bounded wrongness via Δᵣ + ε·Δᵣ₋₂
+
+**Next Steps:**
+- Phase 2: Implement helper lemma proofs (focus on halver_implies_nearsort_property)
+- Phase 3: Complete Lemma 2 main proof assembly
 
 ## Executive Summary
 
@@ -215,12 +230,22 @@ Break into phases with risk levels. Document fallbacks (axiomatize, defer, refor
 - **Phase T.1:** Tree structure with interval assignments (250 lines)
 - **Phase T.2:** Tree-based wrongness measure Δᵣ(J) (150 lines)
 - **Phases T.3-T.8:** Complete lemma architecture (122 lines)
-- **Total:** 522 lines, fully compiling, clear proof structure
+- **Lemma 2 Phase 1:** Cherry structure + helper lemma stubs (completed 2026-02-13)
+  - Cherry structure fixed and compiling
+  - 9 helper lemmas stubbed with clear signatures
+  - Tree distance properties (symmetry, reflexivity, triangle inequality)
+  - Proof structure skeleton in place
+- **Total:** 660+ lines, fully compiling, clear proof structure
 
 ### Pending ⚠️
 - **Helper lemmas:** treeDistance, sections, distanceToInterval (1-2 days, LOW-MEDIUM risk)
+  - **Status:** Basic properties added (symmetry, reflexivity, triangle inequality)
+  - **Remaining:** Implement cherry_containing, section definitions, distance calculations
+- **Lemma 2:** Zig step proof - CORE (3-5 days, MEDIUM risk) ✅ **RISK REDUCED**
+  - **Phase 1 COMPLETE:** Cherry structure defined, helper lemmas stubbed
+  - **Phase 2:** Implement helper proofs (halver_implies_nearsort_property is KEY)
+  - **Phase 3:** Complete main proof assembly
 - **Lemma 1:** Register reassignment proof (2-3 days, MEDIUM risk)
-- **Lemma 2:** Zig step proof - CORE (3-5 days, MEDIUM-HIGH risk) ⚠️
 - **Lemma 3:** ZigZag combined proof (2-3 days, MEDIUM risk)
 - **Lemma 4:** Displacement summation proof (2-3 days, MEDIUM risk)
 - **Main theorem:** Assembly via induction (1-2 days, LOW-MEDIUM risk)
