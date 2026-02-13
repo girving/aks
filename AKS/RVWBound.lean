@@ -946,12 +946,24 @@ private lemma quadratic_form_bound {n : ℕ}
         _ = lam₁ / 2 + Real.sqrt (lam₁ ^ 2 / 4) := this.symm
 
   -- Main case: lam₂ ≠ 0
-  -- Strategy: Use Cauchy-Schwarz-like inequality
-  -- The maximum of the quadratic form over the unit circle is achieved
-  -- and equals the formula given by rvwBound
+  -- Strategy: The quadratic form can be bounded by completing the square
+  -- and using Cauchy-Schwarz.
 
-  sorry -- Requires: detailed algebraic manipulation or eigenvalue computation
-        -- for 2×2 matrix M = [[λ₁, λ₂], [λ₂, λ₂²]]
+  -- Rewrite using β² = 1 - α²
+  have h_rewrite : lam₁ * alpha ^ 2 + 2 * lam₂ * alpha * beta + lam₂ ^ 2 * beta ^ 2 =
+      (lam₁ - lam₂ ^ 2) * alpha ^ 2 + 2 * lam₂ * alpha * beta + lam₂ ^ 2 := by
+    have : beta ^ 2 = 1 - alpha ^ 2 := by linarith [h_unit]
+    linear_combination lam₂ ^ 2 * this
+
+  rw [h_rewrite]
+
+  -- For nonnegative lam₁, lam₂, the bound follows from algebraic manipulation
+  -- The key is that the quadratic form is maximized when the gradient condition holds
+  -- This reduces to showing the bound via completing the square
+
+  sorry -- Requires: Either prove the algebraic identity relating the eigenvalue formula
+        -- to rvwBound, or use calculus to find the maximum and verify it equals rvwBound.
+        -- Both are substantial algebraic proofs.
 
 /-- **The core RVW operator norm bound (abstract).**
 
