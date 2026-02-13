@@ -291,6 +291,15 @@ theorem withinCluster_tilde_contraction {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) :
     ‖withinClusterCLM (n₁ := n₁) G₂ hd₁ *
      (1 - clusterMeanCLM hd₁)‖ ≤ spectralGap G₂ := by
+  -- Key insight: B(I-Q) = B - BQ = B - Q (using BQ = Q from withinCluster_comp_clusterMean)
+  -- This operator acts block-diagonally: within each cluster v, it's like (W_{G₂} - P_{d₁})
+  -- where W_{G₂} is G₂'s walk operator and P_{d₁} is the mean projection on that cluster
+
+  -- Strategy:
+  -- 1. Use opNorm_le_bound to reduce to showing ‖(B-Q)f‖ ≤ (spectralGap G₂) * ‖f‖
+  -- 2. Decompose f by clusters and use block-diagonal structure
+  -- 3. Each block has norm ≤ spectralGap G₂ by definition of spectral gap
+
   sorry
 
 /-- **Hat block spectral gap:** `Q · Σ · Q` restricted to the hat subspace
