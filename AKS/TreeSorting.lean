@@ -315,17 +315,24 @@ def treeDistance (node₁ node₂ : TreeNode) : ℕ :=
 lemma treeDistance_comm (node₁ node₂ : TreeNode) :
     treeDistance node₁ node₂ = treeDistance node₂ node₁ := by
   simp only [treeDistance]
-  -- Common ancestor is the same regardless of order
-  -- (this would follow from commutativity of the definition)
-  sorry
+  -- Need to prove commonAncestor is commutative first
+  have h_comm : commonAncestor node₁ node₂ = commonAncestor node₂ node₁ := by sorry
+  rw [h_comm]
+  ring
 
 /-- Tree distance from a node to itself is 0. -/
 lemma treeDistance_self (node : TreeNode) :
     treeDistance node node = 0 := by
   simp only [treeDistance]
   -- Common ancestor of node with itself is node
-  -- So (node.level - node.level) + (node.level - node.level) = 0
-  sorry
+  -- The commonAncestor definition should return node when both inputs are the same
+  have h_ancestor : commonAncestor node node = node := by
+    simp only [commonAncestor]
+    -- When levels are equal and indices are equal, return node
+    sorry
+  rw [h_ancestor]
+  -- (node.level - node.level) + (node.level - node.level) = 0
+  omega
 
 /-- Tree distance satisfies triangle inequality. -/
 lemma treeDistance_triangle (node₁ node₂ node₃ : TreeNode) :
@@ -388,6 +395,22 @@ def elementsAtDistance (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : �
   -- Elements in J that belong at tree-distance ≥ r from J
   sorry
 
+/-- The tree wrongness Δᵣ(J) is the proportion of elements at distance ≥ r. -/
+lemma treeWrongness_eq_proportion {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongness n t v J r = (elementsAtDistance n t v J r).card / J.size := by
+  sorry
+
+/-- Tree wrongness is monotone decreasing in r: Δᵣ₊₁ ≤ Δᵣ.
+    Elements at distance r+1 are a subset of elements at distance r. -/
+lemma treeWrongness_monotone {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongness n t v J (r + 1) ≤ treeWrongness n t v J r := by
+  sorry
+
+/-- Global wrongness is the supremum over all intervals. -/
+lemma globalWrongness_ge {n t : ℕ} (v : Fin n → Bool) (r : ℕ) (J : Interval n) :
+    treeWrongness n t v J r ≤ globalWrongness n t v r := by
+  sorry
+
 /-- Monotone Boolean sequences have the 0*1* pattern: all 0s before all 1s. -/
 lemma monotone_bool_zeros_then_ones {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
     ∃ k : ℕ, k ≤ n ∧
@@ -403,6 +426,27 @@ lemma cherry_nearsort_moves_elements
     -- - At least (1-ε) fraction of elements in wrong positions move toward correct sections
     -- - At most ε fraction remain in wrong positions (exceptions)
     (sorry : Prop) := by
+  sorry
+
+/-- Applying an ε-halver to a monotone sequence preserves monotonicity.
+    This follows from comparators preserving monotonicity (already proved in Basic.lean). -/
+lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
+    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (w : Fin n → Bool) (hw : Monotone w) :
+    Monotone (net.exec w) := by
+  -- This should follow from ComparatorNetwork.exec preserving monotonicity
+  -- which we need to prove in Basic.lean or here
+  sorry
+
+/-- Key inequality for Lemma 2: combining moved elements and exceptions.
+    After ε-nearsort on a cherry, the new wrongness is bounded by:
+    (fraction that stayed at distance r) + (ε × fraction from distance r-2). -/
+lemma cherry_wrongness_after_nearsort
+    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
+    (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
+    treeWrongness n t (net.exec v) J r ≤
+      treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
   sorry
 
 /-- After applying ε-nearsort to a cherry, elements are pushed toward
@@ -435,14 +479,35 @@ lemma halver_implies_nearsort_property
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
 
-/-- Lower section L(J): all intervals at the same or lower tree level
-    that come "before" interval J in the natural ordering of registers. -/
+/-- Lower section L(J): all intervals that come "before" interval J
+    in the natural ordering of registers (by start position).
+
+    From AKS: L(J) represents the "left" or "bottom" part of the register space
+    relative to J. Elements from J that belong in L(J) are "too high up". -/
 def LowerSection (n t : ℕ) (J : Interval n) : Finset (Interval n) :=
+  -- All intervals I where I.b < J.a (I completely before J)
+  -- This is a simplification; full definition needs tree structure
   sorry
 
-/-- Upper section U(J): all intervals at the same or higher tree level
-    that come "after" interval J in the natural ordering of registers. -/
+/-- Upper section U(J): all intervals that come "after" interval J
+    in the natural ordering of registers (by start position).
+
+    From AKS: U(J) represents the "right" or "top" part of the register space
+    relative to J. Elements from J that belong in U(J) are "too low down". -/
 def UpperSection (n t : ℕ) (J : Interval n) : Finset (Interval n) :=
+  -- All intervals I where I.a > J.b (I completely after J)
+  -- This is a simplification; full definition needs tree structure
+  sorry
+
+/-- Lower and upper sections are disjoint. -/
+lemma sections_disjoint {n t : ℕ} (J : Interval n) :
+    Disjoint (LowerSection n t J) (UpperSection n t J) := by
+  sorry
+
+/-- An interval belongs to at most one of: LowerSection, the interval itself, UpperSection. -/
+lemma sections_partition {n t : ℕ} (J K : Interval n) :
+    (K ∈ LowerSection n t J ∨ K = J ∨ K ∈ UpperSection n t J) ∨
+    (K ∉ LowerSection n t J ∧ K ≠ J ∧ K ∉ UpperSection n t J) := by
   sorry
 
 /-- Contents of registers in interval J at time t.
