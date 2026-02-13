@@ -731,7 +731,93 @@ private lemma rvw_quadratic_ineq
     (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
     (p + 2 * q + r) ^ 2 ≤
       (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |p + 2 * q + r| + (c / b) ^ 2 := by
-  sorry
+  sorry /- nlinarith needs >1.6M heartbeats; TODO: fix or use polyrith -/
+  /-  -- Derive useful positivity/bound facts
+  have ha2 : (0:ℝ) < a ^ 2 := by positivity
+  have hb2 : (0:ℝ) < b ^ 2 := by positivity
+  have hab : a ^ 2 ≤ 1 := by linarith [sq_nonneg b]
+  have hap : 0 ≤ a ^ 2 + p := by linarith [neg_abs_le p]
+  have ham : 0 ≤ a ^ 2 - p := by linarith [le_abs_self p]
+  have hcr : 0 ≤ c ^ 2 + r := by linarith [neg_abs_le r]
+  have hcm : 0 ≤ c ^ 2 - r := by linarith [le_abs_self r]
+  have hbc : c ^ 2 ≤ b ^ 2 := by nlinarith
+  -- Weighted CS: (a²-p)*CS+ + (a²+p)*CS- gives a²q² ≤ c²(a⁴-p²)
+  have h_weighted : a ^ 2 * q ^ 2 ≤ c ^ 2 * (a ^ 4 - p ^ 2) := by
+    nlinarith [mul_le_mul_of_nonneg_left h_cs_plus ham,
+              mul_le_mul_of_nonneg_left h_cs_minus hap]
+  -- Suffices to show the cleared-denominator form: a²b²X² ≤ (b²-c²)|p||X| + a²c²
+  set X := p + 2 * q + r
+  -- Clear denominators
+  have hab2 : (0:ℝ) < a ^ 2 * b ^ 2 := by positivity
+  have rhs_eq : (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |X| + (c / b) ^ 2 =
+      ((b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2) / (a ^ 2 * b ^ 2) := by
+    field_simp
+  -- Goal: X² ≤ (1-(c/b)²)(|p|/a²)|X| + (c/b)²
+  -- Rewrite RHS to fraction, then clear denominator
+  suffices h : X ^ 2 * (a ^ 2 * b ^ 2) ≤
+      (b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2 by
+    rw [rhs_eq, le_div_iff₀ hab2]; linarith
+  -- Use b² = 1 - a²
+  have hb_eq : b ^ 2 = 1 - a ^ 2 := by linarith
+  -- Key: X - p - r = 2q
+  have h_Xpr : (X - p - r) ^ 2 = 4 * q ^ 2 := by simp [X]; ring
+  -- Sum of CS: q² ≤ a²c² + pr
+  have h_sum : q ^ 2 ≤ a ^ 2 * c ^ 2 + p * r := by nlinarith
+  -- The opposite-sign cases (p and X have different signs) are easier:
+  -- |p|·|X| = -pX ≥ 0, giving extra room in the bound.
+  -- For same-sign case: use degree-4 products of CS constraints.
+  -- Nonneg slacks
+  have hV1 : 0 ≤ (a ^ 2 + p) * (c ^ 2 + r) - q ^ 2 := by linarith
+  have hV2 : 0 ≤ (a ^ 2 - p) * (c ^ 2 - r) - q ^ 2 := by linarith
+  have hbc' : 0 ≤ b ^ 2 - c ^ 2 := by linarith
+  -- Key products of CS constraints with variables (all ≥ 0)
+  have hp1 := mul_nonneg ham hV1  -- (a²-p)·V₁ ≥ 0
+  have hp2 := mul_nonneg hap hV2  -- (a²+p)·V₂ ≥ 0
+  by_cases hp : 0 ≤ p <;> by_cases hX : 0 ≤ X
+  · -- Case p ≥ 0, X ≥ 0
+    rw [abs_of_nonneg hp, abs_of_nonneg hX]
+    have hp3 := mul_nonneg hp hV2      -- p·V₂ ≥ 0
+    have hp4 := mul_nonneg hX hV1      -- X·V₁ ≥ 0
+    have hp5 := mul_nonneg hX hV2      -- X·V₂ ≥ 0
+    have hp6 := mul_nonneg hcm hV1     -- (c²-r)·V₁ ≥ 0
+    have hp7 := mul_nonneg hcr hV2     -- (c²+r)·V₂ ≥ 0
+    have hpX := mul_nonneg hp hX       -- pX ≥ 0
+    have hbpX := mul_nonneg hbc' hpX   -- (b²-c²)pX ≥ 0
+    set_option maxHeartbeats 1600000 in
+    nlinarith [h_Xpr, h_weighted, h_sum,
+               hp1, hp2, hp3, hp4, hp5, hp6, hp7, hpX, hbpX,
+               sq_nonneg (p - r), sq_nonneg (2 * a ^ 2 - 1),
+               sq_nonneg q, sq_nonneg p, sq_nonneg r, sq_nonneg c]
+  · -- Case p ≥ 0, X < 0
+    push_neg at hX; rw [abs_of_nonneg hp, abs_of_neg hX]
+    -- -(b²-c²)pX ≥ 0 since p ≥ 0, X < 0, b²≥c²
+    have hnpX : 0 ≤ -(p * X) := by nlinarith
+    set_option maxHeartbeats 400000 in
+    nlinarith [h_Xpr, h_weighted, h_sum, hp1, hp2, hnpX,
+               sq_nonneg (p - r), sq_nonneg (2 * a ^ 2 - 1)]
+  · -- Case p < 0, X ≥ 0
+    push_neg at hp; rw [abs_of_neg hp, abs_of_nonneg hX]
+    have hnpX : 0 ≤ -(p * X) := by nlinarith
+    set_option maxHeartbeats 400000 in
+    nlinarith [h_Xpr, h_weighted, h_sum, hp1, hp2, hnpX,
+               sq_nonneg (p - r), sq_nonneg (2 * a ^ 2 - 1)]
+  · -- Case p < 0, X < 0
+    push_neg at hp hX; rw [abs_of_neg hp, abs_of_neg hX]
+    have hnp : 0 ≤ -p := by linarith
+    have hnX : 0 ≤ -X := by linarith
+    have hp3 := mul_nonneg hnp hV2
+    have hp4 := mul_nonneg hnX hV1
+    have hp5 := mul_nonneg hnX hV2
+    have hp6 := mul_nonneg hcm hV1
+    have hp7 := mul_nonneg hcr hV2
+    have hpX := mul_nonneg hnp hnX
+    have hbpX := mul_nonneg hbc' hpX
+    set_option maxHeartbeats 1600000 in
+    nlinarith [h_Xpr, h_weighted, h_sum,
+               hp1, hp2, hp3, hp4, hp5, hp6, hp7, hpX, hbpX,
+               sq_nonneg (p - r), sq_nonneg (2 * a ^ 2 - 1),
+               sq_nonneg q, sq_nonneg p, sq_nonneg r, sq_nonneg c]
+-/
 
 private lemma rvw_exact_bound
     (a b c p q r : ℝ)
@@ -924,6 +1010,190 @@ private lemma reflection_quadratic_bound {n : ℕ}
     ha hb hc hlam₁ hlam₂ hlam₁_le hlam₂_le h_unit h_tilde_norm h_hat h_refl_u h_refl_w
     h_cs_plus h_cs_minus
 
+/-- For self-adjoint operators, an inner product bound implies an operator norm bound.
+    If `∀ x, |⟨Ax, x⟩| ≤ c · ‖x‖²`, then `‖A‖ ≤ c`.
+    Proof via polarization identity + parallelogram law. -/
+private lemma sa_opNorm_le_of_inner_le {n : ℕ}
+    (T : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hT_sa : IsSelfAdjoint T) (c : ℝ) (hc : 0 ≤ c)
+    (h : ∀ x, |@inner ℝ _ _ (T x) x| ≤ c * ‖x‖ ^ 2) :
+    ‖T‖ ≤ c := by
+  apply ContinuousLinearMap.opNorm_le_bound _ hc
+  intro x
+  by_cases hx : x = 0
+  · simp [hx]
+  by_cases hTx : T x = 0
+  · simp [hTx]; positivity
+  -- Self-adjointness: ⟨Ty, x⟩ = ⟨Tx, y⟩
+  have hT_sym : ∀ u v : EuclideanSpace ℝ (Fin n),
+      @inner ℝ _ _ (T u) v = @inner ℝ _ _ u (T v) :=
+    ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hT_sa
+  have hTx_pos : (0 : ℝ) < ‖T x‖ := norm_pos_iff.mpr hTx
+  -- Choose y = (‖x‖/‖Tx‖) • Tx so that ‖y‖ = ‖x‖
+  set y := (‖x‖ / ‖T x‖) • T x
+  have hy_norm : ‖y‖ = ‖x‖ := by
+    simp only [y, norm_smul, Real.norm_eq_abs,
+      abs_of_nonneg (div_nonneg (norm_nonneg _) hTx_pos.le)]
+    exact div_mul_cancel₀ _ (ne_of_gt hTx_pos)
+  -- ⟨Tx, y⟩ = ‖x‖ · ‖Tx‖
+  have hTxy : @inner ℝ _ _ (T x) y = ‖x‖ * ‖T x‖ := by
+    simp only [y, inner_smul_right, real_inner_self_eq_norm_sq]
+    field_simp
+  -- Polarization: ⟨T(x+y), x+y⟩ - ⟨T(x-y), x-y⟩ = 4⟨Tx, y⟩
+  have h_polar : @inner ℝ _ _ (T (x + y)) (x + y) - @inner ℝ _ _ (T (x - y)) (x - y) =
+      4 * @inner ℝ _ _ (T x) y := by
+    have hsym : @inner ℝ _ _ (T y) x = @inner ℝ _ _ (T x) y := by
+      rw [hT_sym y x, real_inner_comm]
+    simp only [map_add, map_sub, inner_add_left, inner_add_right,
+      inner_sub_left, inner_sub_right]
+    linarith
+  -- Bound: 4⟨Tx,y⟩ ≤ |⟨T(x+y),x+y⟩| + |⟨T(x-y),x-y⟩| ≤ c(‖x+y‖² + ‖x-y‖²)
+  have h_bound : 4 * (‖x‖ * ‖T x‖) ≤ c * (‖x + y‖ ^ 2 + ‖x - y‖ ^ 2) := by
+    calc 4 * (‖x‖ * ‖T x‖)
+        = 4 * @inner ℝ _ _ (T x) y := by rw [hTxy]
+      _ = @inner ℝ _ _ (T (x + y)) (x + y) -
+            @inner ℝ _ _ (T (x - y)) (x - y) := by linarith [h_polar]
+      _ ≤ |@inner ℝ _ _ (T (x + y)) (x + y)| +
+            |@inner ℝ _ _ (T (x - y)) (x - y)| := by
+          linarith [le_abs_self (@inner ℝ _ _ (T (x + y)) (x + y)),
+                    neg_abs_le (@inner ℝ _ _ (T (x - y)) (x - y))]
+      _ ≤ c * ‖x + y‖ ^ 2 + c * ‖x - y‖ ^ 2 := by linarith [h (x + y), h (x - y)]
+      _ = c * (‖x + y‖ ^ 2 + ‖x - y‖ ^ 2) := by ring
+  -- Parallelogram: ‖x+y‖² + ‖x-y‖² = 2(‖x‖² + ‖y‖²)
+  have h_para : ‖x + y‖ ^ 2 + ‖x - y‖ ^ 2 = 2 * (‖x‖ ^ 2 + ‖y‖ ^ 2) := by
+    have := parallelogram_law_with_norm (𝕜 := ℝ) x y
+    nlinarith [sq (‖x + y‖), sq (‖x - y‖), sq ‖x‖, sq ‖y‖]
+  rw [h_para, hy_norm] at h_bound
+  -- h_bound : 4 * (‖x‖ * ‖T x‖) ≤ c * (2 * (‖x‖ ^ 2 + ‖x‖ ^ 2)) = 4c‖x‖²
+  have hx_pos : (0 : ℝ) < ‖x‖ := norm_pos_iff.mpr hx
+  have h_ineq : ‖x‖ * ‖T x‖ ≤ ‖x‖ * (c * ‖x‖) := by nlinarith
+  exact le_of_mul_le_mul_left h_ineq hx_pos
+
+/-- `WP = P` from the factorization `W = BΣB` and operator identities. -/
+private lemma walk_proj_fixed {n : ℕ}
+    (W B Sig P Q : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hfact : W = B * Sig * B)
+    (hBQ : B * Q = Q) (hQP : Q * P = P) (hSigP : Sig * P = P) :
+    W * P = P := by
+  have hBP : B * P = P := by rw [← hQP, ← mul_assoc, hBQ]
+  rw [hfact]; simp only [mul_assoc]; rw [hBP, hSigP, hBP]
+
+/-- For `y` with `Py = 0`: `⟨Wy, y⟩ = ⟨Σ(By), By⟩` by B self-adjointness. -/
+private lemma walk_inner_eq_sig {n : ℕ}
+    (W B Sig : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hfact : W = B * Sig * B) (hB_sa : IsSelfAdjoint B)
+    (y : EuclideanSpace ℝ (Fin n)) :
+    @inner ℝ _ _ (W y) y = @inner ℝ _ _ (Sig (B y)) (B y) := by
+  have hB_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hB_sa
+  rw [hfact, show (B * Sig * B) y = B (Sig (B y)) from rfl]
+  exact hB_sym (Sig (B y)) y
+
+/-- `By = Qy + B((1-Q)y)` with orthogonality `⟨Qy, B((1-Q)y)⟩ = 0`. -/
+private lemma B_decomp_orthog {n : ℕ}
+    (B Q : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hBQ : B * Q = Q) (hQB : Q * B = Q)
+    (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q)
+    (y : EuclideanSpace ℝ (Fin n)) :
+    B y = Q y + B ((1 - Q) y) ∧ @inner ℝ _ _ (Q y) (B ((1 - Q) y)) = 0 := by
+  have hQ_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hQ_sa
+  have hQ_tilde : Q ((1 - Q) y) = 0 := by
+    change (Q * (1 - Q)) y = 0
+    rw [mul_sub, mul_one, hQ_proj, sub_self, ContinuousLinearMap.zero_apply]
+  constructor
+  · have : y = Q y + (1 - Q) y := by
+      simp [ContinuousLinearMap.sub_apply, ContinuousLinearMap.one_apply]
+    conv_lhs => rw [this]
+    rw [map_add, show B (Q y) = (B * Q) y from rfl, hBQ]
+  · calc @inner ℝ _ _ (Q y) (B ((1 - Q) y))
+        = @inner ℝ _ _ y ((Q * B) ((1 - Q) y)) := hQ_sym y (B ((1 - Q) y))
+      _ = @inner ℝ _ _ y (Q ((1 - Q) y)) := by rw [hQB]
+      _ = 0 := by rw [hQ_tilde, inner_zero_right]
+
+/-- `|⟨Σ(Qy), Qy⟩| ≤ λ₁ · ‖Qy‖²` when `Py = 0` and `‖QΣQ - P‖ ≤ λ₁`. -/
+private lemma hat_sig_inner_bound {n : ℕ}
+    (Sig Q P : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q)
+    (hPQ : P * Q = P) (lam₁ : ℝ) (h_hat_norm : ‖Q * Sig * Q - P‖ ≤ lam₁)
+    (y : EuclideanSpace ℝ (Fin n)) (hPy : P y = 0) :
+    |@inner ℝ _ _ (Sig (Q y)) (Q y)| ≤ lam₁ * ‖Q y‖ ^ 2 := by
+  have hQ_Qy : Q (Q y) = Q y := by show (Q * Q) y = Q y; rw [hQ_proj]
+  have hP_Qy : P (Q y) = 0 := by show (P * Q) y = 0; rw [hPQ]; exact hPy
+  -- ⟨Σ(Qy), Qy⟩ = ⟨(QΣQ - P)(Qy), Qy⟩ since P(Qy) = 0 and Q(Qy) = Qy
+  have hQ_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hQ_sa
+  have key : @inner ℝ _ _ (Sig (Q y)) (Q y) =
+      @inner ℝ _ _ ((Q * Sig * Q - P) (Q y)) (Q y) := by
+    simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.mul_apply,
+      hQ_Qy, hP_Qy, sub_zero]
+    -- Goal: inner (Sig (Q y)) (Q y) = inner (Q (Sig (Q y))) (Q y)
+    -- By Q-symmetry: inner (Q u) v = inner u (Q v), applied with u = Sig(Qy), v = Qy
+    have h := hQ_sym (Sig (Q y)) (Q y)
+    -- h : inner (Q (Sig (Q y))) (Q y) = inner (Sig (Q y)) (Q (Q y))
+    -- Since Q(Qy) = Qy, the RHS is inner (Sig (Q y)) (Q y)
+    conv_rhs at h => rw [show (↑Q : _ →ₗ[ℝ] _) (Q y) = (Q * Q) y from rfl, hQ_proj]
+    exact h.symm
+  rw [key]; exact hat_block_bound Sig Q P lam₁ h_hat_norm (Q y)
+
+/-- For `y` with `Py = 0`: `|⟨Σ(By), By⟩| ≤ rvwBound(λ₁, λ₂) · ‖y‖²`. -/
+private lemma sig_inner_perp_bound {n : ℕ}
+    (B Sig Q P : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
+    (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q)
+    (hBQ : B * Q = Q) (hQB : Q * B = Q)
+    (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
+    (hPQ : P * Q = P)
+    (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (hlam₁_le : lam₁ ≤ 1) (hlam₂_le : lam₂ ≤ 1)
+    (h_tilde : ∀ x, Q x = 0 → ‖B x‖ ≤ lam₂ * ‖x‖)
+    (h_hat : ‖Q * Sig * Q - P‖ ≤ lam₁)
+    (y : EuclideanSpace ℝ (Fin n)) (hPy : P y = 0) :
+    |@inner ℝ _ _ (Sig (B y)) (B y)| ≤ rvwBound lam₁ lam₂ * ‖y‖ ^ 2 := by
+  -- Decompose By = Qy + B((1-Q)y)
+  obtain ⟨hBdecomp, h_orth⟩ := B_decomp_orthog B Q hBQ hQB hQ_proj hQ_sa y
+  set u₀ := Q y; set w₀ := B ((1 - Q) y)
+  rw [hBdecomp]
+  -- Handle y = 0
+  by_cases hy : y = 0
+  · have hu : u₀ = 0 := by simp [u₀, hy]
+    have hw : w₀ = 0 := by simp [w₀, hy]
+    simp [hu, hw, hy]
+  have hy_pos : (0 : ℝ) < ‖y‖ := norm_pos_iff.mpr hy
+  -- Normalize: set s = ‖y‖⁻¹
+  set s := ‖y‖⁻¹ with s_def
+  have hs_pos : 0 < s := inv_pos.mpr hy_pos
+  set u := s • u₀; set w := s • w₀
+  -- Scale inner product: ⟨Σ(u₀+w₀), u₀+w₀⟩ = ‖y‖² · ⟨Σ(u+w), u+w⟩
+  have huw : u₀ + w₀ = ‖y‖ • (u + w) := by
+    simp only [u, w, s_def, smul_add, ← mul_smul,
+      mul_inv_cancel₀ (ne_of_gt hy_pos), one_smul]
+  have hscale : @inner ℝ _ _ (Sig (u₀ + w₀)) (u₀ + w₀) =
+      ‖y‖ ^ 2 * @inner ℝ _ _ (Sig (u + w)) (u + w) := by
+    rw [huw, map_smul, inner_smul_left, inner_smul_right, conj_trivial]; ring
+  rw [hscale, abs_mul, abs_of_nonneg (by positivity : 0 ≤ ‖y‖ ^ 2), mul_comm]
+  apply mul_le_mul_of_nonneg_right _ (by positivity)
+  -- Prepare arguments for reflection_quadratic_bound
+  have h_orth_scaled : @inner ℝ _ _ u w = 0 := by
+    simp only [u, w, inner_smul_left, inner_smul_right, conj_trivial, h_orth, mul_zero]
+  have h_unit : ‖u‖ ^ 2 + (s * ‖(1 - Q) y‖) ^ 2 = 1 := by
+    simp only [u, norm_smul, Real.norm_eq_abs, abs_of_nonneg hs_pos.le, mul_pow]
+    rw [← mul_add, ← hat_tilde_norm_sq Q hQ_proj hQ_sa y, s_def, inv_pow,
+        inv_mul_cancel₀ (pow_ne_zero 2 (ne_of_gt hy_pos))]
+  have h_hat_scaled : |@inner ℝ _ _ (Sig u) u| ≤ lam₁ * ‖u‖ ^ 2 := by
+    simp only [u, map_smul, inner_smul_left, inner_smul_right, conj_trivial,
+      norm_smul, Real.norm_eq_abs, abs_of_nonneg hs_pos.le, mul_pow]
+    rw [show |s * (s * @inner ℝ _ _ (Sig u₀) u₀)| =
+          s ^ 2 * |@inner ℝ _ _ (Sig u₀) u₀| from by
+      rw [show s * (s * @inner ℝ _ _ (Sig u₀) u₀) = s ^ 2 * @inner ℝ _ _ (Sig u₀) u₀ from
+        by ring, abs_mul, abs_of_nonneg (by positivity : 0 ≤ s ^ 2)]]
+    rw [show lam₁ * (s ^ 2 * ‖u₀‖ ^ 2) = s ^ 2 * (lam₁ * ‖u₀‖ ^ 2) from by ring]
+    exact mul_le_mul_of_nonneg_left
+      (hat_sig_inner_bound Sig Q P hQ_proj hQ_sa hPQ lam₁ h_hat y hPy) (by positivity)
+  have h_tilde_scaled : ‖w‖ ≤ lam₂ * (s * ‖(1 - Q) y‖) := by
+    simp only [w, w₀, norm_smul, Real.norm_eq_abs, abs_of_nonneg hs_pos.le]
+    have h_tc := tilde_contraction_bound B Q lam₂ h_tilde hQ_proj y
+    nlinarith
+  exact reflection_quadratic_bound Sig hSig_inv hSig_sa u w
+    h_orth_scaled (s * ‖(1 - Q) y‖) (by positivity) h_unit
+    lam₁ lam₂ hlam₁ hlam₂ hlam₁_le hlam₂_le h_hat_scaled h_tilde_scaled
+
 /-- **The core RVW operator norm bound (abstract).**
 
     Given operators on a real inner product space satisfying:
@@ -935,36 +1205,7 @@ private lemma reflection_quadratic_bound {n : ℕ}
     - `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖` (within-cluster contraction on tilde subspace)
     - `‖QΣQ - P‖ ≤ λ₁` (hat-block spectral gap)
 
-    Then `‖W - P‖ ≤ rvwBound(λ₁, λ₂)`.
-
-    ## Proof Strategy (RVW Section 4.2)
-
-    The proof uses the Rayleigh quotient characterization for self-adjoint operators:
-    ```
-    ‖W - P‖ = sup { |⟨(W-P)x, x⟩| : ‖x‖ = 1 }
-    ```
-
-    **Step 1: Reduce to x ⊥ P.** Since `ΣP = P`, we get `WP = BΣBP = BΣP = BP = P`,
-    so `(W-P)` annihilates `range(P)`. The sup is achieved on `range(P)⊥`.
-
-    **Step 2: For x ⊥ P with ‖x‖ = 1**, decompose `x = x̂ + x̃` where `x̂ = Qx`,
-    `x̃ = (I-Q)x`. By self-adjointness of B: `⟨(W-P)x, x⟩ = ⟨Σv, v⟩` where
-    `v = x̂ + Bx̃` (using `Bx̂ = x̂` and `Px = 0 ⟹ Px̂ = 0`).
-
-    **Step 3: Apply the reflection bound.** Since `Σ` is a reflection (`Σ² = I`,
-    `Σ* = Σ`), `⟨Σv, v⟩ = cos(2θ)·‖v‖²` where `θ` is the angle of `v` from the
-    `+1`-eigenspace of `Σ`. The constraints `|⟨Σx̂, x̂⟩| ≤ λ₁·‖x̂‖²` (hat block) and
-    `‖Bx̃‖ ≤ λ₂·‖x̃‖` (tilde contraction) restrict the geometry. A two-case
-    optimization (RVW Section 4.2) shows `|⟨Σv, v⟩| ≤ rvwBound(λ₁, λ₂)`.
-
-    **Key insight (why triangle inequality fails):** Bounding the three terms
-    `|⟨Σx̂,x̂⟩| + 2|⟨Σx̂,Bx̃⟩| + |⟨Σ(Bx̃),Bx̃⟩|` independently gives the weaker
-    bound `λ₁ + λ₂`, not `rvwBound`. The reflection structure of `Σ` constrains
-    all terms simultaneously — when the hat term is large, the cross terms are small,
-    and vice versa.
-
-    This is the mathematical core of the Reingold–Vadhan–Wigderson (2002)
-    spectral composition theorem. -/
+    Then `‖W - P‖ ≤ rvwBound(λ₁, λ₂)`. -/
 theorem rvw_operator_norm_bound
     {n : ℕ} (hn : 0 < n)
     (W B Sig Q P : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
@@ -977,12 +1218,64 @@ theorem rvw_operator_norm_bound
     (hP_proj : P * P = P) (hP_sa : IsSelfAdjoint P)
     (hPQ : P * Q = P) (hQP : Q * P = P)
     (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+    (hlam₁_le : lam₁ ≤ 1) (hlam₂_le : lam₂ ≤ 1)
     (h_tilde : ∀ x, Q x = 0 → ‖B x‖ ≤ lam₂ * ‖x‖)
     (h_hat : ‖Q * Sig * Q - P‖ ≤ lam₁) :
     ‖W - P‖ ≤ rvwBound lam₁ lam₂ := by
-  -- Full proof requires:
-  -- 1. rayleigh_quotient_bound (self-adjoint operator norm = Rayleigh quotient)
-  -- 2. WP = P reduction (from hSigP, hBQ, hPQ)
-  -- 3. Decomposition x = x̂ + x̃ and v = x̂ + Bx̃
-  -- 4. reflection_quadratic_bound (the geometric core)
-  sorry
+  -- W is self-adjoint (via B*·Σ*·B* = B·Σ·B since all are self-adjoint)
+  have hB_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hB_sa
+  have hSig_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hSig_sa
+  have hP_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hP_sa
+  have hW_sym : (W : EuclideanSpace ℝ (Fin n) →ₗ[ℝ] _).IsSymmetric := by
+    intro u v; rw [hfact]
+    calc @inner ℝ _ _ ((B * Sig * B) u) v
+        = @inner ℝ _ _ (Sig (B u)) (B v) := hB_sym (Sig (B u)) v
+      _ = @inner ℝ _ _ (B u) (Sig (B v)) := hSig_sym (B u) (B v)
+      _ = @inner ℝ _ _ u ((B * Sig * B) v) := hB_sym u (Sig (B v))
+  have hW_sa : IsSelfAdjoint W :=
+    ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mpr hW_sym
+  -- W - P is self-adjoint (Star diamond workaround)
+  have hWP_sa : IsSelfAdjoint (W - P) := by
+    rw [ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric, ContinuousLinearMap.coe_sub]
+    exact hW_sym.sub hP_sym
+  have hWP_sym := ContinuousLinearMap.isSelfAdjoint_iff_isSymmetric.mp hWP_sa
+  -- WP = P, so (W-P)P = 0
+  have hWP := walk_proj_fixed W B Sig P Q hfact hBQ hQP hSigP
+  -- Apply polarization: suffices to bound |⟨(W-P)x, x⟩| ≤ rvwBound · ‖x‖²
+  apply sa_opNorm_le_of_inner_le _ hWP_sa _ (rvwBound_nonneg _ _ hlam₁ hlam₂ hlam₂_le)
+  intro x
+  -- Reduce to y = x - Px (since (W-P) annihilates range(P))
+  set y := x - P x
+  have hPy : P y = 0 := by
+    simp [y, map_sub, show P (P x) = (P * P) x from rfl, hP_proj]
+  have hWP_annihil : (W - P) (P x) = 0 := by
+    simp [ContinuousLinearMap.sub_apply, show W (P x) = (W * P) x from rfl, hWP,
+          show P (P x) = (P * P) x from rfl, hP_proj]
+  -- ⟨(W-P)y, Px⟩ = 0 by self-adjointness + annihilation
+  have h_cross_zero : @inner ℝ _ _ ((W - P) y) (P x) = 0 := by
+    calc @inner ℝ _ _ ((W - P) y) (P x)
+        = @inner ℝ _ _ y ((W - P) (P x)) := hWP_sym y (P x)
+      _ = 0 := by rw [hWP_annihil, inner_zero_right]
+  -- ⟨(W-P)x, x⟩ = ⟨(W-P)y, y⟩
+  have hreduce : @inner ℝ _ _ ((W - P) x) x = @inner ℝ _ _ ((W - P) y) y := by
+    have hx_eq : x = P x + y := by simp [y]
+    conv_lhs => rw [hx_eq]; rw [map_add, hWP_annihil, zero_add]
+    rw [inner_add_right, h_cross_zero, zero_add]
+  -- ⟨(W-P)y, y⟩ = ⟨Wy, y⟩ since Py = 0
+  have hWP_to_W : @inner ℝ _ _ ((W - P) y) y = @inner ℝ _ _ (W y) y := by
+    simp [ContinuousLinearMap.sub_apply, hPy]
+  -- ⟨Wy, y⟩ = ⟨Σ(By), By⟩
+  have hW_to_sig := walk_inner_eq_sig W B Sig hfact hB_sa y
+  rw [hreduce, hWP_to_W, hW_to_sig]
+  -- |⟨Σ(By), By⟩| ≤ rvwBound · ‖y‖² ≤ rvwBound · ‖x‖²
+  have h_bound := sig_inner_perp_bound B Sig Q P hQ_proj hQ_sa hBQ hQB
+    hSig_inv hSig_sa hPQ lam₁ lam₂ hlam₁ hlam₂ hlam₁_le hlam₂_le h_tilde h_hat y hPy
+  -- ‖y‖² ≤ ‖x‖² (orthogonal decomposition)
+  have h_norm_le : ‖y‖ ^ 2 ≤ ‖x‖ ^ 2 := by
+    have : ‖x‖ ^ 2 = ‖P x‖ ^ 2 + ‖y‖ ^ 2 := hat_tilde_norm_sq P hP_proj hP_sa x
+    linarith [sq_nonneg ‖P x‖]
+  calc |@inner ℝ _ _ (Sig (B y)) (B y)|
+      ≤ rvwBound lam₁ lam₂ * ‖y‖ ^ 2 := h_bound
+    _ ≤ rvwBound lam₁ lam₂ * ‖x‖ ^ 2 := by
+        exact mul_le_mul_of_nonneg_left h_norm_le
+          (rvwBound_nonneg _ _ hlam₁ hlam₂ hlam₂_le)
