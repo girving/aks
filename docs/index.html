@@ -279,12 +279,12 @@ const PROOF_DATA = {
     { id: "rvwBound_mono_right", file: "AKS/RVWBound.lean", line: 206, status: "proved", kind: "theorem",
       sig: "rvwBound_mono_right : b₁ ≤ b₂ → rvwBound a b₁ ≤ rvwBound a b₂",
       desc: "RVW bound is monotone in the second argument." },
-    { id: "rayleigh_quotient_bound", file: "AKS/RVWBound.lean", line: 331, status: "sorry", kind: "lemma",
-      sig: "rayleigh_quotient_bound : ‖A‖ = ⨆ (x : {x // x ≠ 0}), |⟨A x, x⟩| / ‖x‖²",
-      desc: "Self-adjoint operator norm equals Rayleigh quotient supremum. Key bridge from operator norms to quadratic forms.", difficulty: "1-2 weeks" },
-    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 968, status: "sorry", kind: "theorem",
+    { id: "rvw_quadratic_ineq", file: "AKS/RVWBound.lean", line: 725, status: "sorry", kind: "lemma",
+      sig: "rvw_quadratic_ineq : (p+2q+r)² ≤ (1-μ₂²)μ₁|p+2q+r| + μ₂²",
+      desc: "Core quadratic inequality for RVW bound. Needs manual polynomial factoring (nlinarith exceeds heartbeat limit).", difficulty: "1-2 weeks" },
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1123, status: "proved", kind: "theorem",
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
-      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Mathematical heart of the zig-zag analysis. Uses hat/tilde decomposition and Rayleigh quotient characterization." },
+      desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Uses hat/tilde decomposition, reflection Rayleigh quotients, and the RVW quadratic inequality." },
 
     // ── Random.lean ──
     { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
@@ -452,8 +452,8 @@ const PROOF_DATA = {
     // RVW bound
     ["rvwBound", "rvwBound_mono_left"],
     ["rvwBound", "rvwBound_mono_right"],
-    ["rvwBound", "rayleigh_quotient_bound"],
-    ["rayleigh_quotient_bound", "rvw_operator_norm_bound"],
+    ["rvwBound", "rvw_quadratic_ineq"],
+    ["rvw_quadratic_ineq", "rvw_operator_norm_bound"],
 
     // Zig-zag assembly
     ["zigzag_walkCLM_eq", "zigzag_spectral_bound"],

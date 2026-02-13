@@ -306,18 +306,15 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is decomposed into 16 sublemmas across `ZigZagOperators.lean` (1 sorry), `ZigZagSpectral.lean` (1 sorry — only d₂=0 degenerate case in `withinCluster_tilde_contraction`), `RVWBound.lean` (3 sorry's). Mathematical core: `reflection_quadratic_bound` in `RVWBound.lean` (RVW Section 4.2, cos(2θ) geometry, NOT triangle inequality). **Key:** tilde contraction hypothesis is `∀ x ∈ ker Q, ‖Bx‖ ≤ λ₂·‖x‖` (not `‖B(I-Q)‖ ≤ λ₂`). Base expander: D=12, 20736 vertices, β ≤ 5/9.
+No files have `#exit`. `expander_gives_halver` takes `RegularGraph` directly (no `BipartiteExpander`). `IsEpsilonHalver` uses `onesInTop ≤ totalOnes/2 + ε·(n/2)`. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is now proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` — unused dead code, and `rvw_quadratic_ineq` — nlinarith exceeds heartbeat limit, needs manual polynomial factoring). Base expander: D=12, 20736 vertices, β ≤ 5/9.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap` (both cases), `expander_mixing_lemma`
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all 16 ZigZagSpectral sublemmas, `meanCLM_idempotent`, `meanCLM_isSelfAdjoint`, `stepPermCLM_comp_meanCLM`
 
 **Achievable (weeks):** `halver_convergence`
 
-**Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
-- *Done (11/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`, `hat_block_norm` (‖QΣQ - P‖ ≤ spectralGap G₁), `withinCluster_tilde_contraction` (‖B(I-Q)‖ ≤ spectralGap G₂, 1 sorry in d₂=0 degenerate case)
-- *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
-- *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`)
+**Achievable (days-weeks):** `rvw_quadratic_ineq` in RVWBound.lean (pure polynomial inequality, nlinarith exceeds heartbeat limit — needs manual factoring or polyrith)
 
 **Achievable (weeks):** `expander_gives_halver` (bipartite monotonicity + mixing lemma algebra; no bridge needed since it takes `RegularGraph` directly)
 
