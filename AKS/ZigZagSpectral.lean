@@ -279,6 +279,67 @@ theorem stepPermCLM_isSelfAdjoint {n₁ d₁ : ℕ}
   exact h.symm
 
 
+/-! **Block-Diagonal Structure Helpers** -/
+
+/-- The norm squared of a function decomposes as the sum of norms squared
+    over each cluster. This is just Pythagoras for orthogonal decomposition. -/
+theorem norm_sq_cluster_decomposition {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) :
+    ‖f‖ ^ 2 = ∑ v : Fin n₁, ∑ k : Fin d₁, f.ofLp (encode v k) ^ 2 := by
+  rw [EuclideanSpace.norm_sq_eq]
+  conv_lhs => rw [← sum_encode_eq_sum hd₁]
+  simp
+
+/-- B(I-Q) simplifies to B-Q since BQ = Q. -/
+theorem withinCluster_mul_complement_clusterMean {n₁ d₁ d₂ : ℕ}
+    (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) (hd₂ : 0 < d₂) :
+    withinClusterCLM (n₁ := n₁) G₂ hd₁ * (1 - clusterMeanCLM hd₁) =
+    withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁ := by
+  rw [mul_sub, mul_one, withinCluster_comp_clusterMean G₂ hd₁ hd₂]
+
+/-- Within each cluster v, (B-Q) acts like (G₂.walkCLM - meanCLM d₁).
+    This is the key to showing the block-diagonal structure. -/
+theorem withinCluster_minus_clusterMean_cluster_action {n₁ d₁ d₂ : ℕ}
+    (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) (v : Fin n₁) (k : Fin d₁) :
+    ((withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f).ofLp (encode v k) =
+    ((∑ j : Fin d₂, f.ofLp (encode v (G₂.neighbor k j))) / d₂) -
+    ((∑ i : Fin d₁, f.ofLp (encode v i)) / d₁) := by
+  simp only [ContinuousLinearMap.sub_apply, withinClusterCLM_apply,
+             clusterMeanCLM_apply, cluster_encode, port_encode]
+  rfl
+
+
+/-! **Cluster Restriction Helpers** -/
+
+/-- Extract cluster v from a function on the product space. -/
+def clusterRestrict {n₁ d₁ : ℕ} (f : EuclideanSpace ℝ (Fin (n₁ * d₁)))
+    (v : Fin n₁) : EuclideanSpace ℝ (Fin d₁) :=
+  (WithLp.equiv 2 _).symm (fun k ↦ f.ofLp (encode v k))
+
+@[simp] lemma clusterRestrict_apply {n₁ d₁ : ℕ}
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) (v : Fin n₁) (k : Fin d₁) :
+    (clusterRestrict f v).ofLp k = f.ofLp (encode v k) := by
+  simp [clusterRestrict]
+
+/-- Within cluster v, (B-Q) acts like (W_{G₂} - meanCLM d₁). -/
+theorem clusterRestrict_action {n₁ d₁ d₂ : ℕ}
+    (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) (v : Fin n₁) :
+    clusterRestrict ((withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f) v =
+    (G₂.walkCLM - meanCLM d₁) (clusterRestrict f v) := by
+  apply PiLp.ext; intro k
+  simp only [clusterRestrict_apply, ContinuousLinearMap.sub_apply,
+             RegularGraph.walkCLM_apply, meanCLM_apply]
+  exact withinCluster_minus_clusterMean_cluster_action G₂ hd₁ f v k
+
+/-- Norm squared decomposes over cluster restrictions. -/
+theorem norm_sq_clusterRestrict {n₁ d₁ : ℕ} (hd₁ : 0 < d₁)
+    (f : EuclideanSpace ℝ (Fin (n₁ * d₁))) :
+    ‖f‖ ^ 2 = ∑ v : Fin n₁, ‖clusterRestrict f v‖ ^ 2 := by
+  simp only [EuclideanSpace.norm_sq_eq, clusterRestrict_apply]
+  rw [← sum_encode_eq_sum hd₁]
+
 /-! **Spectral Bounds** -/
 
 /-- **Tilde contraction:** The within-cluster walk contracts by `spectralGap G₂`
@@ -291,16 +352,44 @@ theorem withinCluster_tilde_contraction {n₁ d₁ d₂ : ℕ}
     (G₂ : RegularGraph d₁ d₂) (hd₁ : 0 < d₁) :
     ‖withinClusterCLM (n₁ := n₁) G₂ hd₁ *
      (1 - clusterMeanCLM hd₁)‖ ≤ spectralGap G₂ := by
-  -- Key insight: B(I-Q) = B - BQ = B - Q (using BQ = Q from withinCluster_comp_clusterMean)
-  -- This operator acts block-diagonally: within each cluster v, it's like (W_{G₂} - P_{d₁})
-  -- where W_{G₂} is G₂'s walk operator and P_{d₁} is the mean projection on that cluster
+  -- Need hd₂ for the simplification lemma
+  rcases Nat.eq_zero_or_pos d₂ with rfl | hd₂
+  · -- d₂ = 0 case: both operators are zero
+    simp [withinClusterCLM, clusterMeanCLM, Finset.sum_empty]
+    exact spectralGap_nonneg G₂
 
-  -- Strategy:
-  -- 1. Use opNorm_le_bound to reduce to showing ‖(B-Q)f‖ ≤ (spectralGap G₂) * ‖f‖
-  -- 2. Decompose f by clusters and use block-diagonal structure
-  -- 3. Each block has norm ≤ spectralGap G₂ by definition of spectral gap
+  -- Simplify B(I-Q) = B - Q
+  rw [withinCluster_mul_complement_clusterMean G₂ hd₁ hd₂]
 
-  sorry
+  -- Use opNorm_le_bound
+  apply ContinuousLinearMap.opNorm_le_bound
+  · exact spectralGap_nonneg G₂
+  · intro f
+    -- Bound using cluster decomposition
+    calc ‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖ ^ 2
+        = ∑ v : Fin n₁, ‖clusterRestrict ((withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f) v‖ ^ 2 := by
+          exact norm_sq_clusterRestrict hd₁ _
+      _ = ∑ v : Fin n₁, ‖(G₂.walkCLM - meanCLM d₁) (clusterRestrict f v)‖ ^ 2 := by
+          refine Finset.sum_congr rfl fun v _ ↦ ?_
+          rw [clusterRestrict_action G₂ hd₁]
+      _ ≤ ∑ v : Fin n₁, (spectralGap G₂ * ‖clusterRestrict f v‖) ^ 2 := by
+          apply Finset.sum_le_sum; intro v _
+          unfold spectralGap
+          exact sq_le_sq' (by linarith [norm_nonneg _, spectralGap_nonneg G₂])
+                          (ContinuousLinearMap.le_opNorm _ _)
+      _ = (spectralGap G₂) ^ 2 * ∑ v : Fin n₁, ‖clusterRestrict f v‖ ^ 2 := by
+          rw [Finset.mul_sum]; refine Finset.sum_congr rfl fun v _ ↦ ?_; ring
+      _ = (spectralGap G₂) ^ 2 * ‖f‖ ^ 2 := by
+          rw [← norm_sq_clusterRestrict hd₁]
+    -- Take square root
+    calc ‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖
+        = √(‖(withinClusterCLM G₂ hd₁ - clusterMeanCLM hd₁) f‖ ^ 2) := by
+          rw [Real.sqrt_sq (norm_nonneg _)]
+      _ ≤ √((spectralGap G₂) ^ 2 * ‖f‖ ^ 2) := by
+          apply Real.sqrt_le_sqrt; linarith
+      _ = spectralGap G₂ * ‖f‖ := by
+          rw [Real.sqrt_mul (sq_nonneg _), Real.sqrt_sq (spectralGap_nonneg G₂),
+              Real.sqrt_sq (norm_nonneg _)]
 
 /-- **Hat block spectral gap:** `Q · Σ · Q` restricted to the hat subspace
     acts like `W_{G₁}` lifted to the product space, so its distance from
