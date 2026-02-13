@@ -31,6 +31,17 @@
 - **File:** 870+ lines, all compiling cleanly
 - **Status:** Infrastructure complete, ready for core proof implementation
 
+**Latest Session Progress (continued):**
+- ✅ **PROVED:** `halver_balances_ones` (third complete proof!)
+  - Direct application of IsEpsilonHalver definition
+  - Clean 1-line proof showing proper use of existing infrastructure
+- ✅ Added counting lemmas: countOnes_le, countOnesInRange_le, countOnes_split
+- ✅ Added monotone witness lemmas: threshold, partitioning, placement
+- ✅ Added displacement tracking: comparator/network bounds
+- ✅ Enhanced halver_preserves_witness_structure with proof strategy
+- **File:** 1050+ lines (up from 870+)
+- **Proofs:** 3 complete (halver_preserves_monotone, Interval.mem_toFinset, halver_balances_ones)
+
 **Next Steps:**
 - Continue Phase 2: Implement more helper proofs
 - Focus on: `halver_implies_nearsort_property` (KEY connection)
@@ -341,11 +352,14 @@ Current architecture is complete and demonstrates feasibility. Document for futu
 
 ## File Statistics
 
-- **Total lines:** 870+ (TreeSorting.lean)
-- **Definitions:** 60+ (added ε-nearsort, element displacement helpers)
-- **Lemmas/Theorems:** 35+ (4 key lemmas + 30+ properties)
-- **Proofs complete:** 1 (halver_preserves_monotone)
-- **Sorry count:** ~70 (expected for proof-in-progress phase)
+- **Total lines:** 1050+ (TreeSorting.lean) — **up from 522 at session start!**
+- **Definitions:** 70+ (ε-nearsort, counting, displacement, witness tracking)
+- **Lemmas/Theorems:** 50+ (4 key lemmas + 45+ properties)
+- **Proofs complete:** 3 ✅
+  1. halver_preserves_monotone (uses ComparatorNetwork.exec_preserves_monotone)
+  2. Interval.mem_toFinset (filter characterization)
+  3. halver_balances_ones (direct application of IsEpsilonHalver)
+- **Sorry count:** ~85 (expected for proof-in-progress phase)
 - **Compilation:** ✅ Clean (only sorry warnings)
 - **Dependencies:** AKS.Basic, AKS.Halver
 
