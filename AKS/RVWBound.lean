@@ -379,7 +379,7 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
     have hT_symm : T.IsSymmetric := hA_sa
 
     -- The Rayleigh quotient supremum is an eigenvalue
-    have h_ray_sup : HasEigenvalue T
+    have h_ray_sup : Module.End.hasEigenvalue T
         (⨆ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
           RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 : ℝ) := by
       haveI : Nontrivial (EuclideanSpace ℝ (Fin n)) := by
@@ -388,7 +388,7 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
       exact LinearMap.IsSymmetric.hasEigenvalue_iSup_of_finiteDimensional hT_symm
 
     -- Similarly for infimum
-    have h_ray_inf : HasEigenvalue T
+    have h_ray_inf : Module.End.hasEigenvalue T
         (⨅ x : { x : EuclideanSpace ℝ (Fin n) // x ≠ 0 },
           RCLike.re ⟪T x, x⟫ / ‖(x : EuclideanSpace ℝ (Fin n))‖ ^ 2 : ℝ) := by
       haveI : Nontrivial (EuclideanSpace ℝ (Fin n)) := by
@@ -454,10 +454,10 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
 
     -- λ_max and λ_min bound all eigenvalues
     have h_all_eigenvalues_bounded : ∀ (lambda : ℝ),
-        HasEigenvalue T lambda → lam_min ≤ lambda ∧ lambda ≤ lam_max := by
+        Module.End.hasEigenvalue T lambda → lam_min ≤ lambda ∧ lambda ≤ lam_max := by
       intro lambda hlam
       -- For eigenvalue λ with eigenvector v (normalized), we have λ = ⟨Tv,v⟩
-      obtain ⟨v, hv_ne, hv_eigen⟩ := HasEigenvalue.exists_hasEigenvector hlam
+      obtain ⟨v, hv_ne, hv_eigen⟩ := Module.End.hasEigenvalue.exists_hasEigenvector hlam
       have hv_ne_zero : v ≠ 0 := hv_ne
       set v_normed := (‖v‖⁻¹ : ℝ) • v
       have hv_normed_ne : v_normed ≠ 0 := by
@@ -499,8 +499,8 @@ private lemma rayleigh_quotient_bound {n : ℕ} (hn : 0 < n)
     -- and sup{|⟨Ax,x⟩| : ‖x‖=1} ≥ max(|λ_max|, |λ_min|) = ‖A‖
 
     -- Get unit eigenvectors for λ_max and λ_min
-    obtain ⟨v_max, hv_max_ne, hv_max_eigen⟩ := HasEigenvalue.exists_hasEigenvector h_ray_sup
-    obtain ⟨v_min, hv_min_ne, hv_min_eigen⟩ := HasEigenvalue.exists_hasEigenvector h_ray_inf
+    obtain ⟨v_max, hv_max_ne, hv_max_eigen⟩ := Module.End.hasEigenvalue.exists_hasEigenvector h_ray_sup
+    obtain ⟨v_min, hv_min_ne, hv_min_eigen⟩ := Module.End.hasEigenvalue.exists_hasEigenvector h_ray_inf
 
     -- Normalize them
     set u_max := (‖v_max‖⁻¹ : ℝ) • v_max
@@ -806,18 +806,31 @@ private lemma quadratic_form_bound {n : ℕ}
     (ha : 0 ≤ alpha) (hb : 0 ≤ beta) :
     lam₁ * alpha ^ 2 + 2 * lam₂ * alpha * beta + lam₂ ^ 2 * beta ^ 2 ≤ rvwBound lam₁ lam₂ := by
   -- Strategy: The quadratic form [α β]·M·[α β]ᵀ where M = [[λ₁, λ₂], [λ₂, λ₂²]]
-  -- has maximum eigenvalue at most the RVW bound.
+  -- represents the Rayleigh quotient for the symmetric matrix M.
   --
-  -- We'll prove this by showing the quadratic form can be rewritten to relate
-  -- to the RVW matrix eigenvalue through algebraic manipulation.
+  -- Mathematical approach:
+  -- 1. By Lagrange multipliers, maximizing f(α,β) = λ₁α² + 2λ₂αβ + λ₂²β²
+  --    subject to g(α,β) = α² + β² = 1 gives the eigenvalue equation:
+  --    ∇f = μ·∇g  ⟹  M·[α,β]ᵀ = μ·[α,β]ᵀ
+  --    where M = [[λ₁, λ₂], [λ₂, λ₂²]]
   --
-  -- Key steps:
-  -- 1. Expand: λ₁α² + 2λ₂αβ + λ₂²β²
-  -- 2. Rewrite using α² + β² = 1
-  -- 3. Show this ≤ rvwBound formula through algebraic inequalities
+  -- 2. The characteristic polynomial is:
+  --    det(M - λI) = λ² - (λ₁ + λ₂²)λ + λ₂²(λ₁ - 1)
   --
-  -- The complete proof requires matrix eigenvalue theory or careful calculus.
-  -- The RVW paper derives this bound by analyzing the 2×2 operator structure.
+  -- 3. The largest eigenvalue is:
+  --    λ₊ = [(λ₁ + λ₂²) + √((λ₁ - λ₂²)² + 4λ₂²)] / 2
+  --
+  -- 4. Show λ₊ = rvwBound(λ₁, λ₂) via algebraic manipulation:
+  --    Need: [(λ₁ + λ₂²) + √((λ₁ - λ₂²)² + 4λ₂²)] / 2
+  --        = (1-λ₂²)·λ₁/2 + √((1-λ₂²)²·λ₁²/4 + λ₂²)
+  --
+  --    This follows by expanding both sides and verifying the identity.
+  --
+  -- The proof requires either:
+  -- (a) Matrix eigenvalue theory from Mathlib + quadratic formula algebra, or
+  -- (b) Direct calculus: substitute β = √(1-α²), differentiate, solve for maximum
+  --
+  -- Both approaches are straightforward but require careful algebraic manipulation.
   sorry
 
 /-- **The core RVW operator norm bound (abstract).**
