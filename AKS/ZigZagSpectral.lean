@@ -90,7 +90,19 @@ theorem clusterMeanCLM_isSelfAdjoint {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
 /-- The cluster mean projection has operator norm ≤ 1. -/
 theorem clusterMeanCLM_norm_le_one {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) :
     ‖clusterMeanCLM (n₁ := n₁) hd₁‖ ≤ 1 := by
-  sorry  -- TODO: Prove that averaging operator has norm ≤ 1
+  set Q := clusterMeanCLM (n₁ := n₁) hd₁
+  have hQ_sa : IsSelfAdjoint Q := clusterMeanCLM_isSelfAdjoint hd₁
+  have hQ_idem : Q * Q = Q := clusterMeanCLM_idempotent hd₁
+  -- For self-adjoint idempotent: ‖Q‖² = ‖Q²‖ = ‖Q‖, so ‖Q‖ ∈ {0, 1}
+  have : ‖Q‖ ^ 2 = ‖Q‖ := by
+    rw [← hQ_sa.norm_mul_self, hQ_idem]
+  have : ‖Q‖ * ‖Q‖ = ‖Q‖ := by simpa [sq] using this
+  have : ‖Q‖ * ‖Q‖ - ‖Q‖ = 0 := by linarith
+  have : ‖Q‖ * (‖Q‖ - 1) = 0 := by ring_nf at this ⊢; exact this
+  -- Either ‖Q‖ = 0 or ‖Q‖ = 1
+  rcases eq_zero_or_eq_zero_of_mul_eq_zero this with h | h
+  · linarith [ContinuousLinearMap.opNorm_nonneg Q]
+  · linarith
 
 /-! **Within-Cluster Walk Properties** -/
 
@@ -564,11 +576,12 @@ theorem hat_block_norm {n₁ d₁ : ℕ}
         rw [clusterMeanCLM_idempotent hd₁]
       · -- Pf = P(Qf) using PQ = P
         have hPQ : P * Q = P := meanCLM_eq_clusterMean_comp hd₁
-        calc P f = (P * Q) f + P ((1 - Q) f) := by
-              rw [← add_sub_cancel_left (Q f) f]
+        calc P f = P (Q f + (1 - Q) f) := by
+              congr 1
+              rw [add_sub_cancel]
+          _ = P (Q f) + P ((1 - Q) f) := by
               simp only [map_add, ContinuousLinearMap.sub_apply,
-                         ContinuousLinearMap.one_apply, map_sub]
-          _ = P (Q f) + P ((1 - Q) f) := by rw [hPQ]; rfl
+                         ContinuousLinearMap.one_apply]
           _ = P (Q f) := by
               -- P((I-Q)f) = 0 since (I-Q)f has zero cluster means, so zero global mean
               have : (1 - Q) f = (1 - Q) f := rfl
