@@ -19,31 +19,103 @@ open Matrix BigOperators Finset
 /-! **Cluster Encoding Helpers** -/
 
 /-- Decode the cluster index from a product vertex. -/
-private def cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin n₁ :=
+def cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin n₁ :=
   ⟨vk.val / d₁, (Nat.div_lt_iff_lt_mul hd₁).mpr vk.isLt⟩
 
 /-- Decode the port index from a product vertex. -/
-private def port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin d₁ :=
+def port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) : Fin d₁ :=
   ⟨vk.val % d₁, Nat.mod_lt _ hd₁⟩
 
 /-- Encode a (cluster, port) pair as a product vertex. -/
-private def encode {n₁ d₁ : ℕ} (v : Fin n₁) (k : Fin d₁) : Fin (n₁ * d₁) :=
+def encode {n₁ d₁ : ℕ} (v : Fin n₁) (k : Fin d₁) : Fin (n₁ * d₁) :=
   ⟨v.val * d₁ + k.val, Fin.pair_lt v k⟩
 
 @[simp]
-private theorem cluster_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
+theorem cluster_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
     cluster hd₁ (encode v k) = v :=
   fin_encode_fst v k _
 
 @[simp]
-private theorem port_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
+theorem port_encode {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (v : Fin n₁) (k : Fin d₁) :
     port hd₁ (encode v k) = k :=
   fin_encode_snd v k _
 
 @[simp]
-private theorem encode_cluster_port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) :
+theorem encode_cluster_port {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (vk : Fin (n₁ * d₁)) :
     encode (cluster hd₁ vk) (port hd₁ vk) = vk :=
   fin_div_add_mod vk _
+
+/-- Summing over the product space via encode equals summing over all indices.
+    This is the bijection between Fin n₁ × Fin d₁ and Fin (n₁ * d₁). -/
+theorem sum_encode_eq_sum {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (f : Fin (n₁ * d₁) → ℝ) :
+    ∑ v : Fin n₁, ∑ i : Fin d₁, f (encode v i) = ∑ k : Fin (n₁ * d₁), f k := by
+  simp_rw [← Fintype.sum_prod_type']
+  -- Use Finset.sum_bij' to show bijection
+  refine Finset.sum_bij' (fun (p : Fin n₁ × Fin d₁) _ => encode p.1 p.2)
+    (fun k _ => (cluster hd₁ k, port hd₁ k))
+    (fun _ _ => Finset.mem_univ _)
+    (fun _ _ => Finset.mem_univ _)
+    (fun p _ => ?_)
+    (fun k _ => encode_cluster_port hd₁ k)
+    (fun p _ => ?_)
+  · simp [cluster_encode, port_encode]
+  · rfl
+
+/-- Summing a function of cluster over all product indices counts each cluster d₁ times. -/
+theorem sum_over_cluster {n₁ d₁ : ℕ} (hd₁ : 0 < d₁) (g : Fin n₁ → ℝ) :
+    ∑ j : Fin (n₁ * d₁), g (cluster hd₁ j) = d₁ • ∑ v : Fin n₁, g v := by
+  -- Rewrite using encode/cluster/port bijection
+  conv_lhs => rw [← sum_encode_eq_sum hd₁ (fun j => g (cluster hd₁ j))]
+  simp only [cluster_encode]
+  -- Now LHS = ∑ v, ∑ i, g v
+  rw [show ∑ v, ∑ _i : Fin d₁, g v = ∑ v, d₁ • g v by
+    congr 1; ext v; rw [Finset.sum_const, Finset.card_fin]]
+  rw [Finset.smul_sum]
+
+
+/-! **Port-Space Encoding Helpers** -/
+
+/-- Decode the first port coordinate from a product port (for d₂² ports in zigzag). -/
+def portFirst {d₂ : ℕ} (hd₂ : 0 < d₂) (ab : Fin (d₂ * d₂)) : Fin d₂ :=
+  ⟨ab.val / d₂, (Nat.div_lt_iff_lt_mul hd₂).mpr ab.isLt⟩
+
+/-- Decode the second port coordinate from a product port. -/
+def portSecond {d₂ : ℕ} (hd₂ : 0 < d₂) (ab : Fin (d₂ * d₂)) : Fin d₂ :=
+  ⟨ab.val % d₂, Nat.mod_lt _ hd₂⟩
+
+/-- Encode two port indices as a product port. -/
+def encodePort {d₂ : ℕ} (a : Fin d₂) (b : Fin d₂) : Fin (d₂ * d₂) :=
+  ⟨a.val * d₂ + b.val, Fin.pair_lt a b⟩
+
+@[simp]
+theorem portFirst_encodePort {d₂ : ℕ} (hd₂ : 0 < d₂) (a b : Fin d₂) :
+    portFirst hd₂ (encodePort a b) = a :=
+  fin_encode_fst a b _
+
+@[simp]
+theorem portSecond_encodePort {d₂ : ℕ} (hd₂ : 0 < d₂) (a b : Fin d₂) :
+    portSecond hd₂ (encodePort a b) = b :=
+  fin_encode_snd a b _
+
+@[simp]
+theorem encodePort_portFirst_portSecond {d₂ : ℕ} (hd₂ : 0 < d₂) (ab : Fin (d₂ * d₂)) :
+    encodePort (portFirst hd₂ ab) (portSecond hd₂ ab) = ab :=
+  fin_div_add_mod ab _
+
+/-- Summing over the port product space via encodePort equals summing over all ports.
+    This is the bijection between Fin d₂ × Fin d₂ and Fin (d₂ * d₂). -/
+theorem sum_encodePort_eq_sum {d₂ : ℕ} (hd₂ : 0 < d₂) (f : Fin (d₂ * d₂) → ℝ) :
+    ∑ a : Fin d₂, ∑ b : Fin d₂, f (encodePort a b) = ∑ ab : Fin (d₂ * d₂), f ab := by
+  simp_rw [← Fintype.sum_prod_type']
+  refine Finset.sum_bij' (fun (p : Fin d₂ × Fin d₂) _ => encodePort p.1 p.2)
+    (fun ab _ => (portFirst hd₂ ab, portSecond hd₂ ab))
+    (fun _ _ => Finset.mem_univ _)
+    (fun _ _ => Finset.mem_univ _)
+    (fun p _ => ?_)
+    (fun ab _ => encodePort_portFirst_portSecond hd₂ ab)
+    (fun p _ => ?_)
+  · simp [portFirst_encodePort, portSecond_encodePort]
+  · rfl
 
 
 /-! **Within-Cluster Walk Operator (B = I ⊗ W_{G₂})** -/
@@ -218,6 +290,34 @@ def RegularGraph.zigzag {n₁ d₁ d₂ : ℕ}
 
 /-! **Walk Factorization: W_Z = B · Σ · B** -/
 
+/-- Helper: The vertex computed by zigzag_rot equals what B·Σ·B computes.
+    This unpacks the zig-step-zag computation. -/
+private lemma zigzag_rot_vertex_eq {n₁ d₁ d₂ : ℕ}
+    (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
+    (hd₁ : 0 < d₁) (hd₂ : 0 < d₂)
+    (vk : Fin (n₁ * d₁)) (a b : Fin d₂) :
+    (zigzag_rot G₁ G₂ (vk, encodePort a b)).1 =
+    encode (G₁.rot (cluster hd₁ vk, G₂.neighbor (port hd₁ vk) a)).1
+           (G₂.neighbor (G₁.rot (cluster hd₁ vk, G₂.neighbor (port hd₁ vk) a)).2 b) := by
+  -- First prove the port coordinate equalities
+  have port_fst : (⟨(a.val * d₂ + b.val) / d₂, (Nat.div_lt_iff_lt_mul hd₂).mpr
+      (Fin.pair_lt a b)⟩ : Fin d₂) = a := by
+    apply Fin.ext
+    simp
+    rw [Nat.add_comm, Nat.add_mul_div_right _ _ hd₂, Nat.div_eq_of_lt b.isLt]
+    simp
+  have port_snd : (⟨(a.val * d₂ + b.val) % d₂, Nat.mod_lt _ hd₂⟩ : Fin d₂) = b := by
+    apply Fin.ext
+    show (a.val * d₂ + b.val) % d₂ = b.val
+    rw [Nat.add_comm, Nat.add_mul_mod_self_right]
+    exact Nat.mod_eq_of_lt b.isLt
+  -- Now unfold and rewrite using simp_rw to handle dependent proofs
+  simp only [zigzag_rot, RegularGraph.neighbor, encodePort, cluster, port, encode]
+  simp_rw [port_fst, port_snd]
+
+
+/-! **Walk Factorization: W_Z = B · Σ · B** -/
+
 /-- The zig-zag walk operator factors as the composition of within-cluster
     walk, step permutation, and within-cluster walk: `W_Z = B · Σ · B`.
 
@@ -227,4 +327,47 @@ theorem zigzag_walkCLM_eq {n₁ d₁ d₂ : ℕ}
     (hd₁ : 0 < d₁) (hd₂ : 0 < d₂) :
     (G₁.zigzag G₂).walkCLM =
     withinClusterCLM G₂ hd₁ * stepPermCLM G₁ hd₁ * withinClusterCLM G₂ hd₁ := by
-  sorry
+  -- Both sides are CLMs on EuclideanSpace, so prove pointwise equality
+  ext f vk
+  -- Unfold both sides
+  simp only [RegularGraph.walkCLM_apply, RegularGraph.zigzag, RegularGraph.neighbor,
+             ContinuousLinearMap.mul_apply, withinClusterCLM_apply,
+             stepPermCLM_apply, cluster_encode, port_encode]
+
+  -- Strategy: convert sum and match divisions, then use helper for summands
+  -- Step 1: Convert LHS sum from Fin(d₂²) to double sum
+  have sum_convert : (∑ ab, f.ofLp (zigzag_rot G₁ G₂ (vk, ab)).1) =
+                     (∑ a, ∑ b, f.ofLp (zigzag_rot G₁ G₂ (vk, encodePort a b)).1) := by
+    rw [← sum_encodePort_eq_sum hd₂]
+
+  rw [sum_convert]
+
+  -- Step 2: Match division structure
+  -- LHS: (∑_a ∑_b ...) / (d₂ * d₂)
+  -- RHS: (∑_a (∑_b ...) / d₂) / d₂
+  -- These are equal by division algebra
+
+  -- Now use helper to show summands match, then rearrange divisions
+  have summands_eq : ∀ a b, f.ofLp (zigzag_rot G₁ G₂ (vk, encodePort a b)).1 =
+    f.ofLp (encode (G₁.rot (cluster hd₁ vk, (G₂.rot (port hd₁ vk, a)).1)).1
+                   (G₂.rot ((G₁.rot (cluster hd₁ vk, (G₂.rot (port hd₁ vk, a)).1)).2, b)).1) := by
+    intro a b
+    rw [zigzag_rot_vertex_eq G₁ G₂ hd₁ hd₂]
+    simp only [RegularGraph.neighbor]
+
+  -- Rewrite sums using the equality
+  simp_rw [summands_eq]
+
+  -- Now just need to show division structures match
+  -- LHS: (∑_x ∑_y f) / (d₂ * d₂) = (∑_x ∑_y f) / d₂ / d₂
+  -- RHS: (∑_x (∑_y f) / d₂) / d₂
+  -- These are equal by distributivity of division
+
+  -- First convert / (d₂ * d₂) to / d₂ / d₂
+  rw [show ∀ (x : ℝ), x / ↑(d₂ * d₂) = x / ↑d₂ / ↑d₂ by
+    intro x; field_simp; ring_nf; norm_cast]
+
+  -- Now both have / d₂ / d₂, but RHS has inner division distributed
+  -- Use Finset.sum_div to distribute
+  congr 1
+  rw [Finset.sum_div]
