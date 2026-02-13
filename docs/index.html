@@ -486,7 +486,13 @@ const PROOF_DATA = {
     ["AKS.size_nlogn", "zigzag_implies_aks_network"],
     ["baseExpander_gap", "zigzag_implies_aks_network"],
 
-    // TreeSorting helper lemmas
+    // TreeSorting — edges FROM main proof chain into TreeSorting
+    ["IsEpsilonHalver", "halver_balances_ones"],
+    ["IsEpsilonHalver", "halver_preserves_monotone"],
+    ["IsEpsilonHalver", "halver_implies_nearsort_property"],
+    ["Comparator", "comparator_displacement_bound"],
+
+    // TreeSorting — internal edges
     ["TreeNode", "treeWrongness"],
     ["halver_balances_ones", "halver_bounds_top_excess"],
     ["countOnes_le", "countOnes_split"],
@@ -496,7 +502,10 @@ const PROOF_DATA = {
     ["countOnes_split", "halver_implies_nearsort_property"],
     ["halver_implies_nearsort_property", "zig_step_bounded_increase"],
     ["treeWrongness", "zig_step_bounded_increase"],
-    ["comparator_displacement_bound", "zig_step_bounded_increase"]
+    ["comparator_displacement_bound", "zig_step_bounded_increase"],
+
+    // TreeSorting — edges TO main proof chain (tree sorting proves convergence)
+    ["zig_step_bounded_increase", "halver_convergence"]
   ],
 
   // File groupings with display names
