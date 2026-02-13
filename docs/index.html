@@ -35,6 +35,13 @@ svg { width: 100vw; height: 100vh; }
 .node-circle { cursor: pointer; stroke-width: 1.5; }
 .node-circle:hover { filter: brightness(1.3); }
 .node-label { font-size: 10px; fill: #8b949e; pointer-events: none; text-anchor: middle; }
+#timeline { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 8px 16px; display: none; align-items: center; gap: 10px; font-size: 12px; }
+#timeline button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; line-height: 1; }
+#timeline button:hover { background: #30363d; }
+#timeline select { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 3px 6px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+#timeline input[type=range] { width: 300px; accent-color: #58a6ff; }
+#timeDate { color: #7d8590; width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+#liveBadge { background: #3fb950; color: #0d1117; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; visibility: hidden; }
 </style>
 </head>
 <body>
@@ -74,6 +81,18 @@ svg { width: 100vw; height: 100vh; }
 
 <div id="stats"></div>
 <div id="tooltip"></div>
+
+<div id="timeline">
+  <button id="playBtn" onclick="togglePlay()">&#9654;</button>
+  <select id="speedSelect" onchange="updateSpeed()">
+    <option value="500">1&times;</option>
+    <option value="200" selected>2&times;</option>
+    <option value="100">5&times;</option>
+  </select>
+  <input type="range" id="timeSlider" min="0" max="0" value="0" oninput="scrubTo(this.value)">
+  <span id="timeDate">Current</span>
+  <span id="liveBadge">LIVE</span>
+</div>
 
 <svg></svg>
 
@@ -629,6 +648,28 @@ const simulation = d3.forceSimulation(PROOF_DATA.nodes)
   .alphaDecay(0.025)
   .alpha(0.8);
 
+// Save layout positions after simulation settles
+let simulationDone = false;
+const groupCentroids = new Map();
+let currentSnapshotIndex = null; // null = live mode
+
+simulation.on("end", () => {
+  PROOF_DATA.nodes.forEach(d => { d.liveX = d.x; d.liveY = d.y; });
+  fileGroups.forEach((nodes, fileId) => {
+    groupCentroids.set(fileId, {
+      x: nodes.reduce((s, n) => s + n.liveX, 0) / nodes.length,
+      y: nodes.reduce((s, n) => s + n.liveY, 0) / nodes.length,
+    });
+  });
+  simulationDone = true;
+});
+
+function isNodeVisible(id) {
+  if (currentSnapshotIndex === null || !HISTORY_DATA) return true;
+  if (currentSnapshotIndex >= HISTORY_DATA.snapshots.length) return true;
+  return !!HISTORY_DATA.snapshots[currentSnapshotIndex].nodes[id];
+}
+
 // ── Draw group rects (updated on tick) ──
 const groupRects = g.append("g").selectAll("rect")
   .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
@@ -652,7 +693,7 @@ const linkSel = g.append("g")
   .attr("class", "link")
   .attr("stroke", "#30363d")
   .attr("stroke-width", 1.2)
-  .attr("stroke-opacity", 0.3)
+  .attr("opacity", 0.3)
   .attr("marker-end", "url(#arrowhead)");
 
 // ── Draw nodes ──
@@ -766,19 +807,230 @@ nodeSel.on("mouseover.highlight", (e, d) => {
     if (l.source.id === d.id) connected.add(l.target.id);
     if (l.target.id === d.id) connected.add(l.source.id);
   });
-  nodeSel.attr("opacity", n => connected.has(n.id) ? 1 : 0.15);
-  labelSel.attr("opacity", n => connected.has(n.id) && labelsVisible ? 1 : 0.05);
-  linkSel.attr("stroke-opacity", l =>
-    (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04
-  );
+  nodeSel.attr("opacity", n => {
+    if (!isNodeVisible(n.id)) return 0;
+    return connected.has(n.id) ? 1 : 0.15;
+  });
+  labelSel.attr("opacity", n => {
+    if (!isNodeVisible(n.id)) return 0;
+    return (connected.has(n.id) && labelsVisible) ? 1 : 0.05;
+  });
+  linkSel.attr("opacity", l => {
+    if (!isNodeVisible(l.source.id) || !isNodeVisible(l.target.id)) return 0;
+    return (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04;
+  });
 }).on("mouseout.highlight", () => {
-  nodeSel.attr("opacity", 1);
-  labelSel.attr("opacity", labelsVisible ? 1 : 0);
-  linkSel.attr("stroke-opacity", 0.3);
+  // Restore timeline state
+  const slider = document.getElementById('timeSlider');
+  if (HISTORY_DATA && slider && parseInt(slider.value) < HISTORY_DATA.snapshots.length) {
+    applySnapshot(parseInt(slider.value), false);
+  } else {
+    nodeSel.attr("opacity", 1);
+    labelSel.attr("opacity", labelsVisible ? 1 : 0);
+    linkSel.attr("opacity", 0.3);
+  }
 });
 
 // ── Initial zoom to fit ──
 setTimeout(() => resetZoom(), 100);
+
+// ═══════════════════════════════════════════════════════
+// TIMELINE ANIMATION — loads history.json, scrubs through proof history
+// ═══════════════════════════════════════════════════════
+let HISTORY_DATA = null;
+let playing = false;
+let playInterval = null;
+let playSpeed = 200;
+
+fetch('history.json')
+  .then(r => { if (!r.ok) throw new Error('No history'); return r.json(); })
+  .then(data => { HISTORY_DATA = data; initTimeline(); })
+  .catch(() => { /* No history.json — static mode only */ });
+
+function initTimeline() {
+  if (!HISTORY_DATA || !HISTORY_DATA.snapshots.length) return;
+  const slider = document.getElementById('timeSlider');
+  slider.max = HISTORY_DATA.snapshots.length; // 0..N-1 = snapshots, N = live
+  slider.value = slider.max;
+  document.getElementById('timeline').style.display = 'flex';
+  updateDateDisplay(parseInt(slider.max));
+}
+
+function applySnapshot(index, animated) {
+  const dur = animated ? 120 : 0;
+  const max = HISTORY_DATA.snapshots.length;
+  const isLive = index >= max;
+  const snapshot = isLive ? null : HISTORY_DATA.snapshots[index];
+  currentSnapshotIndex = isLive ? null : index;
+
+  // Build visibility map
+  const vis = new Map();
+  PROOF_DATA.nodes.forEach(d => {
+    vis.set(d.id, isLive || !!snapshot.nodes[d.id]);
+  });
+
+  // Move node positions: visible → layout position, hidden → group centroid
+  if (simulationDone) {
+    PROOF_DATA.nodes.forEach(d => {
+      if (vis.get(d.id)) {
+        d.x = d.liveX;
+        d.y = d.liveY;
+      } else {
+        const c = groupCentroids.get(d.file);
+        if (c) { d.x = c.x; d.y = c.y; }
+      }
+    });
+  }
+
+  // Helper: optionally wrap selection in a transition.
+  // When instant (dur=0), interrupt any in-progress transitions to prevent flickering.
+  function tw(sel) {
+    if (dur > 0) return sel.transition().duration(dur);
+    sel.interrupt();
+    return sel;
+  }
+
+  // Nodes: position, color, size, opacity
+  tw(nodeSel)
+    .attr("cx", d => d.x).attr("cy", d => d.y)
+    .attr("r", d => vis.get(d.id) ? d.radius : 0)
+    .attr("fill", d => {
+      const st = isLive ? d.status : (snapshot.nodes[d.id] || null);
+      return statusColor[st] || statusColor[d.status];
+    })
+    .attr("stroke", d => {
+      const st = isLive ? d.status : (snapshot.nodes[d.id] || null);
+      return d3.color(statusColor[st] || statusColor[d.status]).darker(0.5).formatHex();
+    })
+    .attr("opacity", d => vis.get(d.id) ? 1 : 0);
+
+  // Labels: position and opacity
+  tw(labelSel)
+    .attr("x", d => d.x).attr("y", d => d.y + d.radius + 12)
+    .attr("opacity", d => (vis.get(d.id) && labelsVisible) ? 1 : 0);
+
+  // Edges: path + opacity (opacity hides arrows too, unlike stroke-opacity)
+  tw(linkSel)
+    .attr("d", edgePath)
+    .attr("opacity", l => {
+      return (isLive || (vis.get(l.source.id) && vis.get(l.target.id))) ? 0.3 : 0;
+    });
+
+  // Group rects: recompute bounds from visible nodes only
+  groupRects.each(function(gr) {
+    const nodes = fileGroups.get(gr.id);
+    if (!nodes) return;
+    const vn = nodes.filter(n => vis.get(n.id));
+    const el = tw(d3.select(this));
+    if (vn.length === 0) {
+      el.attr("opacity", 0);
+    } else {
+      const pad = 24;
+      const xs = vn.map(n => n.x), ys = vn.map(n => n.y);
+      el.attr("opacity", 1)
+        .attr("x", Math.min(...xs) - pad).attr("y", Math.min(...ys) - pad)
+        .attr("width", Math.max(...xs) - Math.min(...xs) + 2 * pad)
+        .attr("height", Math.max(...ys) - Math.min(...ys) + 2 * pad);
+    }
+  });
+  groupLabels.each(function(gr) {
+    const nodes = fileGroups.get(gr.id);
+    if (!nodes) return;
+    const vn = nodes.filter(n => vis.get(n.id));
+    const el = tw(d3.select(this));
+    if (vn.length === 0) {
+      el.attr("opacity", 0);
+    } else {
+      const pad = 24;
+      el.attr("opacity", 1)
+        .attr("x", Math.min(...vn.map(n => n.x)) - pad + 6)
+        .attr("y", Math.min(...vn.map(n => n.y)) - pad + 13);
+    }
+  });
+
+  // Stats and date display
+  updateTimelineStats(isLive, snapshot);
+  updateDateDisplay(index);
+}
+
+function updateTimelineStats(isLive, snapshot) {
+  let p, s, a, df;
+  if (isLive) {
+    p = PROOF_DATA.nodes.filter(n => n.status === "proved").length;
+    s = PROOF_DATA.nodes.filter(n => n.status === "sorry").length;
+    a = PROOF_DATA.nodes.filter(n => n.status === "axiom").length;
+    df = PROOF_DATA.nodes.filter(n => n.status === "definition").length;
+  } else {
+    const vals = Object.values(snapshot.nodes);
+    p = vals.filter(v => v === "proved").length;
+    s = vals.filter(v => v === "sorry").length;
+    a = vals.filter(v => v === "axiom").length;
+    df = vals.filter(v => v === "definition").length;
+  }
+  document.getElementById("stats").innerHTML =
+    `<div class="num" style="color:#3fb950">${p}</div> proved<br>` +
+    `<div class="num" style="color:#d29922">${s}</div> sorry<br>` +
+    `<div class="num" style="color:#f85149">${a}</div> axiom<br>` +
+    `<div class="num" style="color:#58a6ff">${df}</div> definitions`;
+}
+
+function updateDateDisplay(index) {
+  const max = HISTORY_DATA.snapshots.length;
+  const isLive = index >= max;
+  const dateEl = document.getElementById('timeDate');
+  const liveEl = document.getElementById('liveBadge');
+  if (isLive) {
+    dateEl.textContent = 'Current';
+    liveEl.style.visibility = 'visible';
+  } else {
+    const s = HISTORY_DATA.snapshots[index];
+    const d = new Date(s.date);
+    const ds = d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'});
+    const msg = s.message.length > 50 ? s.message.substring(0, 47) + '...' : s.message;
+    dateEl.textContent = `${ds} \u2014 ${msg}`;
+    liveEl.style.visibility = 'hidden';
+  }
+}
+
+function scrubTo(value) {
+  applySnapshot(parseInt(value), false);
+}
+
+function advanceFrame() {
+  const slider = document.getElementById('timeSlider');
+  const next = parseInt(slider.value) + 1;
+  if (next > parseInt(slider.max)) {
+    togglePlay();
+    return;
+  }
+  slider.value = next;
+  applySnapshot(next, true);
+}
+
+function startPlaying() {
+  clearInterval(playInterval);
+  playInterval = setInterval(advanceFrame, playSpeed);
+}
+
+function togglePlay() {
+  playing = !playing;
+  document.getElementById('playBtn').innerHTML = playing ? '&#9646;&#9646;' : '&#9654;';
+  if (playing) {
+    const slider = document.getElementById('timeSlider');
+    if (parseInt(slider.value) >= parseInt(slider.max)) {
+      slider.value = 0;
+      applySnapshot(0, false);
+    }
+    startPlaying();
+  } else {
+    clearInterval(playInterval);
+  }
+}
+
+function updateSpeed() {
+  playSpeed = parseInt(document.getElementById('speedSelect').value);
+  if (playing) startPlaying();
+}
 </script>
 </body>
 </html>
