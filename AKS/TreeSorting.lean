@@ -1658,7 +1658,11 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (ht : t ≥ 1) (v : Fin n →
     - depth: recursion depth (for termination)
 
     The construction ensures that at most ε fraction of elements
-    remain out of place relative to their target sections. -/
+    remain out of place relative to their target sections.
+
+    **STUB:** Current implementation just iterates the halver on the full range.
+    The correct AKS construction recursively applies to sub-ranges (top/bottom halves).
+    See `halvers_give_bounded_nearsort` for the correct existential statement. -/
 noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
     (depth : ℕ) : ComparatorNetwork m :=
   if h : depth = 0 ∨ m < 2 then
@@ -1674,16 +1678,12 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
     { comparators := halver.comparators ++ rest.comparators }
   termination_by depth
 
-/-- The recursive nearsort satisfies the bounded-damage property.
-    After applying `epsilonNearsort`, positional displacement at each
-    distance level is controlled. -/
-lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (hε : 0 < ε)
-    (halver : ComparatorNetwork m)
-    (hε₁ : ε₁ < ε / (Nat.log 2 m) ^ 4)  -- AKS condition: ε₁ << ε
-    (hhalver : IsEpsilonHalver halver ε₁)
-    (depth : ℕ) (hdepth : depth ≥ Nat.log 2 m) :
-    HasBoundedDamage (epsilonNearsort m ε ε₁ halver depth) ε := by
-  sorry
+/-- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
+    is a stub (just iterates the halver, doesn't do recursive sub-range application).
+    The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
+    doesn't depend on any particular definition. When `epsilonNearsort` is properly
+    implemented (recursive application to top/bottom halves), a correctness lemma can
+    be re-added. -/
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
 private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
