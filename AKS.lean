@@ -1,31 +1,30 @@
+/-
+  # AKS Sorting Network — Root Module
+
+  Imports all modules. For the main results, see:
+  • `AKS/AKSNetwork.lean` — parameterized construction and `zigzag_implies_aks_network`
+  • `AKS/Main.lean` — concrete instantiation with zig-zag expander family
+-/
+
 import AKS.ComparatorNetwork
 import AKS.Depth
+import AKS.Fin
 import AKS.AKSNetwork
 import AKS.Halver
-import AKS.Random
+import AKS.TreeSorting
+import AKS.RegularGraph
+import AKS.Square
 import AKS.CompleteGraph
 import AKS.Mixing
 import AKS.ZigZagOperators
 import AKS.ZigZagSpectral
 import AKS.RVWBound
 import AKS.ZigZag
+import AKS.Random
 import AKS.Certificate
 import AKS.WalkBound
+import AKS.DiagDominant
+import AKS.SpectralMatrix
 import AKS.CertificateBridge
 import AKS.NpyReader
-
-
-/-- **Connection to AKS:** This result plugs directly into the
-    AKS sorting network construction.
-
-    With an explicit (n, d, lam)-expander family where d and lam are
-    constants, we get:
-    - eps-halvers of size O(n)
-    - AKS sorting network of size O(n log n) -/
-theorem zigzag_implies_aks_network :
-    (∃ (d : ℕ), ∀ n, n > 0 → ∃ (G : RegularGraph n d), spectralGap G ≤ 99/100) →
-    ∃ (c : ℝ), c > 0 ∧ ∀ (n : ℕ), n ≥ 2 →
-    ∃ (net : ComparatorNetwork n),
-      IsSortingNetwork net ∧
-      (net.size : ℝ) ≤ c * n * Real.log n := by
-  sorry
+import AKS.Main

@@ -2,17 +2,16 @@
 //!
 //! Generates a random d-regular graph on n vertices, computes
 //! M = c₁I - c₂B² + c₃J, performs f32 Cholesky factorization in-place,
-//! extracts the unit upper-triangular certificate Z via BLAS triangular
-//! inversion, scales to i32, and outputs a Lean source file.
+//! extracts the unit upper-triangular certificate Z via triangular inverse
+//! of L, scales to i32, and outputs binary data files.
 
 use faer::linalg::cholesky::llt;
 use faer::linalg::cholesky::llt::factor::LltRegularization;
-use faer::linalg::triangular_solve;
+use faer::linalg::triangular_inverse;
 use faer::prelude::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -50,6 +49,29 @@ fn fmt_bytes(b: u64) -> String {
     }
 }
 
+/// Choose parallelism level based on matrix size.
+/// Par::rayon(0) has ~90ms overhead at n=1728 but massive wins at n=20736+.
+fn par_for_n(n: usize) -> Par {
+    if n >= 4000 {
+        Par::rayon(0)
+    } else {
+        Par::Seq
+    }
+}
+
+/// Build a flat neighbor array from the rotation map.
+/// Returns Vec<usize> of size n*d where neighbors[v*d + p] = neighbor of v at port p.
+fn build_neighbors(rot: &[i32], n: usize, d: usize) -> Vec<usize> {
+    let mut neighbors = vec![0usize; n * d];
+    for v in 0..n {
+        for p in 0..d {
+            let k = v * d + p;
+            neighbors[k] = rot[2 * k] as usize;
+        }
+    }
+    neighbors
+}
+
 /// Generate a random d-regular simple graph on n vertices.
 ///
 /// Uses the configuration model to get a d-regular multigraph, then
@@ -75,9 +97,13 @@ fn make_regular_graph(n: usize, d: usize, rng: &mut impl Rng) -> Vec<Vec<usize>>
     }
 
     // Edge switching: fix self-loops and multi-edges
+    // Pre-allocate seen sets to avoid repeated allocation
+    let mut seen: Vec<std::collections::HashSet<usize>> = (0..n)
+        .map(|_| std::collections::HashSet::with_capacity(d))
+        .collect();
     let max_iterations = num_edges * 100;
     for _ in 0..max_iterations {
-        let bad = find_bad_edge(&edges, n);
+        let bad = find_bad_edge(&edges, &mut seen);
         let bad_idx = match bad {
             Some(idx) => idx,
             None => break,
@@ -101,7 +127,7 @@ fn make_regular_graph(n: usize, d: usize, rng: &mut impl Rng) -> Vec<Vec<usize>>
     }
 
     assert!(
-        find_bad_edge(&edges, n).is_none(),
+        find_bad_edge(&edges, &mut seen).is_none(),
         "Edge switching failed to produce a simple graph"
     );
 
@@ -126,9 +152,14 @@ fn make_regular_graph(n: usize, d: usize, rng: &mut impl Rng) -> Vec<Vec<usize>>
 }
 
 /// Find the index of a bad edge (self-loop or multi-edge), or None if all are valid.
-fn find_bad_edge(edges: &[(usize, usize)], n: usize) -> Option<usize> {
-    use std::collections::HashSet;
-    let mut seen: Vec<HashSet<usize>> = vec![HashSet::new(); n];
+/// Takes pre-allocated seen sets; clears them before use.
+fn find_bad_edge(
+    edges: &[(usize, usize)],
+    seen: &mut [std::collections::HashSet<usize>],
+) -> Option<usize> {
+    for s in seen.iter_mut() {
+        s.clear();
+    }
 
     for (i, &(u, v)) in edges.iter().enumerate() {
         if u == v {
@@ -187,23 +218,24 @@ fn compute_j_coeff(c1: i32, c2: i32, d: usize, n: usize) -> i32 {
 }
 
 /// Compute M = c₁I - c₂B² + c₃J in-place into a faer Mat<f32>.
-fn compute_m_inplace(rot: &[i32], n: usize, d: usize, c1: i32, c2: i32, c3: i32) -> Mat<f32> {
-    let mut neighbors: Vec<Vec<usize>> = vec![vec![]; n];
-    for v in 0..n {
-        for i in 0..d {
-            let w = rot[2 * (v * d + i)] as usize;
-            neighbors[v].push(w);
-        }
-    }
-
+fn compute_m_inplace(
+    neighbors: &[usize],
+    n: usize,
+    d: usize,
+    c1: i32,
+    c2: i32,
+    c3: i32,
+) -> Mat<f32> {
     let mut m: Mat<f32> = Mat::zeros(n, n);
     let mut b2_row = vec![0i32; n];
     for v in 0..n {
         for x in b2_row.iter_mut() {
             *x = 0;
         }
-        for &u in &neighbors[v] {
-            for &w in &neighbors[u] {
+        for p in 0..d {
+            let u = neighbors[v * d + p];
+            for q in 0..d {
+                let w = neighbors[u * d + q];
                 b2_row[w] += 1;
             }
         }
@@ -215,56 +247,60 @@ fn compute_m_inplace(rot: &[i32], n: usize, d: usize, c1: i32, c2: i32, c3: i32)
     m
 }
 
-/// Blocked TRSM + direct packing: compute Z_unit columns via L^{-T} and pack to i32.
+/// Compute L^{-1} via triangular inverse, then pack Z_unit to i32.
 ///
-/// Instead of allocating a full n×n matrix for L^{-T}, processes columns in
-/// blocks of `block_size`. For each block, allocates n × block_size f32,
-/// solves L^T · B = I_block via BLAS TRSM, scales to Z_unit, and packs to i32.
+/// Uses faer's `invert_lower_triangular` which is O(n³/6) (exploits triangular
+/// structure on both input and output), vs O(n³/2) for blocked TRSM.
 ///
-/// Peak scratch: n × block_size × 4 bytes (~20 MB for n=20736, block_size=256).
-fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
+/// Z_unit[i,j] = L^{-T}[i,j] * L[j,j] = L^{-1}[j,i] * L[j,j] for i <= j.
+/// Takes ownership of m (Cholesky factor L) to free it after extracting diagonal.
+fn compute_and_pack_z(m: Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
+    use rayon::prelude::*;
+
     let s = scale as f32;
     let total = n * (n + 1) / 2;
+
+    // Compute L^{-1} (lower triangular) via blocked recursive inverse.
+    let par = par_for_n(n);
+    let mut l_inv: Mat<f32> = Mat::zeros(n, n);
+    triangular_inverse::invert_lower_triangular(l_inv.as_mut(), m.as_ref(), par);
+
+    // Save diagonal of L, then free the Cholesky factor.
+    let diag: Vec<f32> = (0..n).map(|j| m[(j, j)]).collect();
+    drop(m);
+
+    // Pack: Z_unit[i,j] = L^{-1}[j,i] * L[j,j] for i < j; Z_unit[j,j] = scale.
+    // Columns write to disjoint packed regions, so parallelize via raw pointer.
     let mut packed = vec![0i32; total];
-    let mut z_max_offdiag: f32 = 0.0;
+    let packed_ptr = packed.as_mut_ptr() as usize; // usize is Send+Sync
 
-    let block_size = 256.min(n);
-    let lt = m.as_ref().transpose(); // zero-cost view of L^T (upper triangular)
-
-    for j_start in (0..n).step_by(block_size) {
-        let j_end = (j_start + block_size).min(n);
-        let bs = j_end - j_start;
-
-        if j_start > 0 && j_start % (block_size * 10) == 0 {
-            eprintln!("  extracting columns {}/{}...", j_start, n);
-        }
-
-        // Fill block with columns j_start..j_end of the identity
-        let mut block: Mat<f32> = Mat::zeros(n, bs);
-        for k in 0..bs {
-            block[(j_start + k, k)] = 1.0;
-        }
-
-        // Solve L^T · block = I_block → block now holds L^{-T}[:,j_start..j_end]
-        triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::rayon(0));
-
-        // Scale and pack: Z_unit[:,j] = L^{-T}[:,j] * L[j,j], then round to i32
-        for k in 0..bs {
-            let j = j_start + k;
-            let l_jj = m[(j, j)];
+    let z_max_offdiag: f32 = (0..n)
+        .into_par_iter()
+        .map(|j| {
             let col_start = j * (j + 1) / 2;
+            let l_jj = diag[j];
+            let mut local_max: f32 = 0.0;
 
             for i in 0..j {
-                let z_val = block[(i, k)] * l_jj;
+                let z_val = l_inv[(j, i)] * l_jj;
                 let abs_z = z_val.abs();
-                if abs_z > z_max_offdiag {
-                    z_max_offdiag = abs_z;
+                if abs_z > local_max {
+                    local_max = abs_z;
                 }
-                packed[col_start + i] = (z_val * s).round() as i32;
+                // SAFETY: Each column j writes to packed[col_start+i] for i < j.
+                // Column ranges are non-overlapping.
+                unsafe {
+                    *(packed_ptr as *mut i32).add(col_start + i) = (z_val * s).round() as i32;
+                }
             }
-            packed[col_start + j] = scale; // diagonal = 1
-        }
-    }
+            // Diagonal entry
+            unsafe {
+                *(packed_ptr as *mut i32).add(col_start + j) = scale;
+            }
+
+            local_max
+        })
+        .reduce(|| 0.0f32, |a, b| a.max(b));
 
     (packed, z_max_offdiag)
 }
@@ -273,113 +309,119 @@ fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
 /// For each column j, computes P[:,j] exactly via rotation map (i64 arithmetic),
 /// then adjusts Z_int[i,j] by integer rounding to minimize |P[i,j]| for i < j.
 ///
-/// Tracks B² cross-talk: when Z_int[i,j] is adjusted by delta, p_col[v] is
-/// updated for all v that share a 2-hop path with i (via sparse B² structure).
+/// Columns are independent (each accesses a disjoint slice of packed), so we
+/// split packed into non-overlapping column slices and process in parallel.
 fn refine_certificate(
     packed: &mut [i32],
-    rot: &[i32],
+    neighbors: &[usize],
     n: usize,
     d: usize,
     c1: i32,
     c2: i32,
     c3: i32,
 ) {
+    use rayon::prelude::*;
+
     let m_diag = c1 as i64 - c2 as i64 * d as i64 + c3 as i64;
 
-    let mut neighbors: Vec<Vec<usize>> = vec![vec![]; n];
-    for v in 0..n {
-        for p in 0..d {
-            let k = v * d + p;
-            let w = rot[2 * k] as usize;
-            neighbors[v].push(w);
+    // Split packed into non-overlapping column slices.
+    // Column j occupies packed[j*(j+1)/2 .. j*(j+1)/2 + j + 1].
+    let mut cols: Vec<&mut [i32]> = Vec::with_capacity(n);
+    {
+        let mut rest = &mut packed[..];
+        for j in 0..n {
+            let (col, remaining) = rest.split_at_mut(j + 1);
+            cols.push(col);
+            rest = remaining;
         }
     }
 
-    let mut z_col = vec![0i64; n];
-    let mut bz = vec![0i64; n];
-    let mut p_col = vec![0i64; n];
-    // Scratch for computing B² column: b2_col[v] = B²[v,i] for current correction target i
-    let mut b2_col = vec![0i32; n];
-
-    for j in 0..n {
-        if j % 2000 == 0 && j > 0 {
-            eprintln!("  refining column {}/{}...", j, n);
-        }
-
-        let col_start = j * (j + 1) / 2;
-        for k in 0..n {
-            z_col[k] = 0;
-        }
-        for k in 0..=j {
-            z_col[k] = packed[col_start + k] as i64;
-        }
-
-        // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
-        for v in 0..n {
-            let mut acc: i64 = 0;
-            for &w in &neighbors[v] {
-                acc += z_col[w];
+    cols.into_par_iter().enumerate().for_each_init(
+        || {
+            (
+                vec![0i64; n],                      // z_col
+                vec![0i64; n],                      // bz
+                vec![0i64; n],                      // p_col
+                vec![0i32; n],                      // b2_col
+                Vec::<usize>::with_capacity(d * d), // touched
+            )
+        },
+        |(z_col, bz, p_col, b2_col, touched), (j, col)| {
+            // Zero z_col (entries from previous column on this thread may be dirty)
+            for k in 0..n {
+                z_col[k] = 0;
             }
-            bz[v] = acc;
-        }
-        let col_sum: i64 = z_col.iter().sum();
-        for v in 0..n {
-            let mut b2z_v: i64 = 0;
-            for &w in &neighbors[v] {
-                b2z_v += bz[w];
+            for k in 0..=j {
+                z_col[k] = col[k] as i64;
             }
-            p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
-        }
 
-        // Greedy correction with B² cross-talk tracking.
-        // When we adjust Z_int[i,j] by delta, we update p_col[v] for the
-        // sparse B² neighbors of i. The c₃ (J term) cross-talk is deferred
-        // via running_delta_sum since c₃ is small.
-        let mut running_delta_sum: i64 = 0;
-
-        for i in 0..j {
-            // Account for deferred c₃ cross-talk from previous corrections
-            let effective_p = p_col[i] + c3 as i64 * running_delta_sum;
-            if effective_p == 0 {
-                continue;
+            // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
+            for v in 0..n {
+                let mut acc: i64 = 0;
+                let base = v * d;
+                for p in 0..d {
+                    acc += z_col[neighbors[base + p]];
+                }
+                bz[v] = acc;
             }
-            let delta = -((effective_p as f64 / m_diag as f64).round() as i32);
-            if delta == 0 {
-                continue;
+            let col_sum: i64 = z_col[..=j].iter().sum();
+            for v in 0..n {
+                let mut b2z_v: i64 = 0;
+                let base = v * d;
+                for p in 0..d {
+                    b2z_v += bz[neighbors[base + p]];
+                }
+                p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
             }
-            let d64 = delta as i64;
-            packed[col_start + i] += delta;
-            running_delta_sum += d64;
 
-            // Compute B²[v,i] for all v via 2-hop neighbors of i
-            let mut touched = Vec::with_capacity(d * d);
-            for &w in &neighbors[i] {
-                for &v in &neighbors[w] {
-                    if b2_col[v] == 0 {
-                        touched.push(v);
+            // Greedy correction with B² cross-talk tracking.
+            let mut running_delta_sum: i64 = 0;
+
+            for i in 0..j {
+                let effective_p = p_col[i] + c3 as i64 * running_delta_sum;
+                if effective_p == 0 {
+                    continue;
+                }
+                let delta = -((effective_p as f64 / m_diag as f64).round() as i32);
+                if delta == 0 {
+                    continue;
+                }
+                let d64 = delta as i64;
+                col[i] += delta;
+                running_delta_sum += d64;
+
+                // Compute B²[v,i] for all v via 2-hop neighbors of i
+                touched.clear();
+                let base_i = i * d;
+                for p in 0..d {
+                    let w = neighbors[base_i + p];
+                    let base_w = w * d;
+                    for q in 0..d {
+                        let v = neighbors[base_w + q];
+                        if b2_col[v] == 0 {
+                            touched.push(v);
+                        }
+                        b2_col[v] += 1;
                     }
-                    b2_col[v] += 1;
+                }
+
+                p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
+
+                for &v in touched.iter() {
+                    if v != i {
+                        p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
+                    }
+                    b2_col[v] = 0;
                 }
             }
-
-            // Update p_col[i] for the diagonal: M[i,i] = c₁ - c₂·d + c₃
-            // But we defer c₃, so apply (c₁ - c₂·d) * delta
-            p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
-
-            // Update p_col[v] for B² neighbors (v ≠ i): -c₂ * B²[v,i] * delta
-            for v in touched {
-                if v != i {
-                    p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
-                }
-                b2_col[v] = 0; // Clear for next correction
-            }
-        }
-    }
+        },
+    );
 }
 
 /// Verify the certificate using the same logic as the Lean checker.
+/// Columns are independent, so we process them in parallel.
 fn verify_certificate(
-    rot: &[i32],
+    neighbors: &[usize],
     z_packed: &[i32],
     n: usize,
     d: usize,
@@ -387,54 +429,65 @@ fn verify_certificate(
     c2: i32,
     c3: i32,
 ) -> (bool, i64, i64, f64) {
-    let mut eps_max: i64 = 0;
-    let mut min_diag: i64 = i64::MAX;
+    use rayon::prelude::*;
 
-    for j in 0..n {
-        let col_start = j * (j + 1) / 2;
-        let mut z_col = vec![0i64; n];
-        for k in 0..=j {
-            z_col[k] = z_packed[col_start + k] as i64;
-        }
-
-        let mut bz = vec![0i64; n];
-        for v in 0..n {
-            let mut acc: i64 = 0;
-            for p in 0..d {
-                let k = v * d + p;
-                let w = rot[2 * k] as usize;
-                acc += z_col[w];
-            }
-            bz[v] = acc;
-        }
-
-        let mut b2z = vec![0i64; n];
-        for v in 0..n {
-            let mut acc: i64 = 0;
-            for p in 0..d {
-                let k = v * d + p;
-                let w = rot[2 * k] as usize;
-                acc += bz[w];
-            }
-            b2z[v] = acc;
-        }
-
-        let col_sum: i64 = z_col.iter().sum();
-
-        for i in 0..n {
-            let p_ij = c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
-            if i == j {
-                if p_ij < min_diag {
-                    min_diag = p_ij;
+    // map_init allocates scratch buffers once per thread (not per column).
+    let (min_diag, eps_max) = (0..n)
+        .into_par_iter()
+        .map_init(
+            || (vec![0i64; n], vec![0i64; n], vec![0i64; n]),
+            |(z_col, bz, b2z), j| {
+                let col_start = j * (j + 1) / 2;
+                for k in 0..n {
+                    z_col[k] = 0;
                 }
-            } else if i < j {
-                let abs_p = p_ij.abs();
-                if abs_p > eps_max {
-                    eps_max = abs_p;
+                for k in 0..=j {
+                    z_col[k] = z_packed[col_start + k] as i64;
                 }
-            }
-        }
-    }
+
+                for v in 0..n {
+                    let mut acc: i64 = 0;
+                    let base = v * d;
+                    for p in 0..d {
+                        acc += z_col[neighbors[base + p]];
+                    }
+                    bz[v] = acc;
+                }
+
+                for v in 0..n {
+                    let mut acc: i64 = 0;
+                    let base = v * d;
+                    for p in 0..d {
+                        acc += bz[neighbors[base + p]];
+                    }
+                    b2z[v] = acc;
+                }
+
+                let col_sum: i64 = z_col[..=j].iter().sum();
+
+                let mut col_min_diag: i64 = i64::MAX;
+                let mut col_eps_max: i64 = 0;
+
+                // Only compute p_ij for i <= j (skip lower-triangular)
+                for i in 0..j {
+                    let p_ij =
+                        c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
+                    let abs_p = p_ij.abs();
+                    if abs_p > col_eps_max {
+                        col_eps_max = abs_p;
+                    }
+                }
+                // Diagonal
+                let p_jj = c1 as i64 * z_col[j] - c2 as i64 * b2z[j] + c3 as i64 * col_sum;
+                col_min_diag = col_min_diag.min(p_jj);
+
+                (col_min_diag, col_eps_max)
+            },
+        )
+        .reduce(
+            || (i64::MAX, 0i64),
+            |(md1, em1), (md2, em2)| (md1.min(md2), em1.max(em2)),
+        );
 
     let threshold = eps_max
         .checked_mul((n * (n + 1) / 2) as i64)
@@ -447,6 +500,12 @@ fn verify_certificate(
     };
 
     (passes, min_diag, eps_max, margin)
+}
+
+/// Write a slice of i32 values as little-endian bytes in a single bulk write.
+fn write_i32_bulk(path: &std::path::Path, data: &[i32]) {
+    let bytes: &[u8] = bytemuck::cast_slice(data);
+    fs::write(path, bytes).unwrap_or_else(|e| panic!("Cannot write {}: {}", path.display(), e));
 }
 
 fn main() {
@@ -507,10 +566,13 @@ fn main() {
         fmt_duration(t0.elapsed())
     );
 
+    // Build flat neighbor array (shared across all phases)
+    let neighbors = build_neighbors(&rot, n, d);
+
     // Compute M = c₁I - c₂B² + c₃J (single n×n f32 allocation)
     eprintln!("Computing M ({} f32)...", fmt_bytes(n as u64 * n as u64 * 4));
     let t0 = Instant::now();
-    let mut m = compute_m_inplace(&rot, n, d, c1, c2, c3);
+    let mut m = compute_m_inplace(&neighbors, n, d, c1, c2, c3);
     eprintln!("  M[0,0] = {} [{}]", m[(0, 0)], fmt_duration(t0.elapsed()));
 
     // Cholesky factorization in-place (f32)
@@ -518,7 +580,7 @@ fn main() {
     let t0 = Instant::now();
     {
         use faer::dyn_stack::{MemBuffer, MemStack};
-        let par = Par::Seq;
+        let par = par_for_n(n);
         let params = Default::default();
         let scratch_req = llt::factor::cholesky_in_place_scratch::<f32>(n, par, params);
         let mut buf = MemBuffer::new(scratch_req);
@@ -541,13 +603,12 @@ fn main() {
     // Blocked TRSM + pack: compute Z_unit columns in blocks and pack to i32.
     // Only allocates n × block_size f32 scratch (~20 MB), not a full n×n matrix.
     eprintln!(
-        "Blocked TRSM + pack ({} packed i32)...",
+        "Triangular inverse + pack ({} packed i32)...",
         fmt_bytes(n as u64 * (n as u64 + 1) / 2 * 4)
     );
     let t0 = Instant::now();
-    let (mut z_packed, z_max) = compute_and_pack_z(&m, n, scale);
+    let (mut z_packed, z_max) = compute_and_pack_z(m, n, scale);
     let trsm_time = t0.elapsed();
-    drop(m); // Free L
     eprintln!("  Z max off-diagonal: {z_max:.6}");
     eprintln!(
         "  Max |Z_int| ≈ {:.0}, i32 limit: {}",
@@ -567,16 +628,16 @@ fn main() {
     // Post-process: greedy Gershgorin correction (two passes for c₃ cross-talk convergence)
     let t0 = Instant::now();
     eprintln!("Refining certificate (pass 1)...");
-    refine_certificate(&mut z_packed, &rot, n, d, c1, c2, c3);
+    refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
     eprintln!("Refining certificate (pass 2)...");
-    refine_certificate(&mut z_packed, &rot, n, d, c1, c2, c3);
+    refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
     eprintln!("  Refinement done [{}]", fmt_duration(t0.elapsed()));
 
     // Verify
     eprintln!("Verifying certificate...");
     let t0 = Instant::now();
     let (passes, min_diag, eps_max, margin) =
-        verify_certificate(&rot, &z_packed, n, d, c1, c2, c3);
+        verify_certificate(&neighbors, &z_packed, n, d, c1, c2, c3);
     eprintln!("  min P[j,j]: {min_diag}");
     eprintln!("  max |P[i,j]| upper-tri: {eps_max}");
     eprintln!(
@@ -594,17 +655,12 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Write binary data files
+    // Write binary data files (bulk I/O)
     fs::create_dir_all(&output_dir).expect("Cannot create output dir");
 
     let rot_path = output_dir.join("rot_map.bin");
     eprintln!("Writing rotation map to {}...", rot_path.display());
-    {
-        let mut out = fs::File::create(&rot_path).expect("Cannot create rot_map.bin");
-        for &v in &rot {
-            out.write_all(&v.to_le_bytes()).unwrap();
-        }
-    }
+    write_i32_bulk(&rot_path, &rot);
     eprintln!(
         "  {} ({} entries)",
         fmt_bytes(rot.len() as u64 * 4),
@@ -613,12 +669,7 @@ fn main() {
 
     let cert_path = output_dir.join("cert_z.bin");
     eprintln!("Writing certificate to {}...", cert_path.display());
-    {
-        let mut out = fs::File::create(&cert_path).expect("Cannot create cert_z.bin");
-        for &v in &z_packed {
-            out.write_all(&v.to_le_bytes()).unwrap();
-        }
-    }
+    write_i32_bulk(&cert_path, &z_packed);
     eprintln!(
         "  {} ({} entries)",
         fmt_bytes(z_packed.len() as u64 * 4),
