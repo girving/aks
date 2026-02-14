@@ -26,6 +26,6 @@ theorem certificate_passes :
 theorem gap : spectralGap graph ≤ 5 / (1 * 4) := by
   exact_mod_cast certificate_bridge 16 4 (by decide) (by decide) graph
     rotData certData 216 9 1 certificate_passes
-    5 1 (by decide) (by decide) (fun _ => rfl)
+    5 1 (by decide) (by decide) (by decide) (by decide) (fun _ => rfl)
 
 end Random16
