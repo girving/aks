@@ -1,6 +1,6 @@
-# AKS Sorting Network — Lean 4 Formalization (work in progress)
+# AKS Sorting Network — Lean Formalization (work in progress)
 
-An attempt to formally verify the Ajtai--Komlos--Szemeredi (1983) `O(n log n)` sorting network construction in Lean 4. The proof is incomplete: many theorems have `sorry` placeholders. The codebase is a structural skeleton demonstrating the proof architecture, not a finished formalization.
+An attempt to formally verify the Ajtai--Komlos--Szemeredi (1983) `O(n log n)` sorting network construction in Lean. The proof is incomplete: many theorems have `sorry` placeholders. The codebase is a structural skeleton demonstrating the proof architecture, not a finished formalization.
 
 ## Resources
 

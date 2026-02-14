@@ -1,7 +1,7 @@
 /-
   # Explicit Expanders via the Zig-Zag Product
 
-  Lean 4 formalization of the Reingold–Vadhan–Wigderson (2002) zig-zag
+  Lean formalization of the Reingold–Vadhan–Wigderson (2002) zig-zag
   product and its application to constructing explicit expander families.
 
   General regular graph theory (`RegularGraph`, spectral gap, squaring,
