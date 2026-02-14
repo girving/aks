@@ -824,6 +824,32 @@ noncomputable def distanceToInterval (n t : ℕ) (node : TreeNode) (I : Interval
   -- scaled by how far I is from the node's registers.
   node.level
 
+/-! **Position-to-Section Mapping (for V2 tree-distance definitions)** -/
+
+/-- Section index at level `t` for position `i` in a sequence of length `n`.
+    At level `t`, position `i ∈ [0, n)` belongs to section `⌊i · 2^t / n⌋ ∈ [0, 2^t)`.
+
+    This partitions `[0, n)` into `2^t` roughly-equal sections. Section `j`
+    covers positions `[j·n/2^t, (j+1)·n/2^t)`.
+
+    The section index depends on `t`: as `t` increases, the partition refines. -/
+def sectionIndex (n t i : ℕ) : ℕ :=
+  if n = 0 then 0 else i * 2 ^ t / n
+
+/-- `sectionIndex` is in `[0, 2^t)` when `i < n`. -/
+lemma sectionIndex_lt {n t i : ℕ} (hi : i < n) :
+    sectionIndex n t i < 2 ^ t := by
+  unfold sectionIndex
+  rw [if_neg (by omega : n ≠ 0)]
+  exact Nat.div_lt_of_lt_mul (by nlinarith [Nat.pos_of_ne_zero (show 2 ^ t ≠ 0 from by positivity)])
+
+/-- `TreeNode` at level `t` corresponding to position `i ∈ [0, n)`.
+    Maps each position to its section in the binary tree at depth `t`. -/
+def sectionNode (n t : ℕ) (i : Fin n) : TreeNode where
+  level := t
+  index := sectionIndex n t i.val
+  h := sectionIndex_lt i.isLt
+
 /-! **Cherry Structure (for Lemma 2)** -/
 
 /-- A "cherry" consists of a parent interval and its two child intervals.
@@ -977,6 +1003,85 @@ def HasBoundedDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
     ((elementsAtDistance n 0 (net.exec v) J r).card : ℝ) ≤
       (elementsAtDistance n 0 v J r).card +
         ε * (elementsAtDistance n 0 v J (if r ≥ 2 then r - 2 else 0)).card
+
+/-! **Tree-Distance-Based Definitions (V2)**
+
+    The original `elementsAtDistance` uses position displacement (|pos - sorted_pos|
+    scaled by interval size). It doesn't use the `t` parameter, making time-dependent
+    reasoning vacuous (see `docs/treesorting-audit.md`).
+
+    These V2 definitions use tree distance at level `t`: the distance between position
+    sections in the binary tree. This makes the measure genuinely time-dependent
+    (sections refine as `t` increases) and enables the AKS register reassignment
+    argument (Lemma 1).
+
+    The original definitions and proofs are preserved alongside — they are correct
+    for the algebraic structure and may be useful for the position-based parts of
+    the argument. -/
+
+/-- Tree displacement of position `i` relative to the sort threshold.
+    At level `t`, measures the tree distance from `i`'s section to the
+    threshold section (position `n - countOnes v`).
+
+    Returns 0 when the sequence is uniform (all true or all false),
+    since there are no displaced elements in that case.
+
+    **Key property:** comparator networks preserve `countOnes`, so
+    the threshold is the same before and after applying a network.
+    This means `positionTreeDist n t v i = positionTreeDist n t (net.exec v) i`
+    whenever `v i = (net.exec v) i` — the threshold reference point doesn't shift. -/
+def positionTreeDist (n t : ℕ) (v : Fin n → Bool) (i : Fin n) : ℕ :=
+  let k := n - countOnes v
+  if hk : 0 < k ∧ k < n then
+    treeDistance (sectionNode n t i) (sectionNode n t ⟨k, hk.2⟩)
+  else
+    -- k = 0 or k = n: all elements are the same value, no displacement possible
+    0
+
+/-- Elements in interval `J` displaced at tree-distance ≥ `r`.
+    Unlike `elementsAtDistance` (position-based, `t` unused), this measures
+    displacement via tree distance at granularity level `t`. As `t` increases,
+    the section partition refines, potentially changing elements' tree
+    displacements.
+
+    Filters elements `i ∈ J` such that:
+    1. `v(i) ≠ sortedVersion(v)(i)` (element is displaced)
+    2. `positionTreeDist(i) ≥ r` (tree-distance from threshold is ≥ r) -/
+def elementsAtTreeDist (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n) :=
+  if J.size = 0 then ∅
+  else
+    J.toFinset.filter (fun i =>
+      v i ≠ sortedVersion v i ∧ r ≤ positionTreeDist n t v i)
+
+/-- `elementsAtTreeDist` is a subset of `J.toFinset`. -/
+lemma elementsAtTreeDist_subset {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    elementsAtTreeDist n t v J r ⊆ J.toFinset := by
+  unfold elementsAtTreeDist
+  split_ifs
+  · exact Finset.empty_subset _
+  · exact Finset.filter_subset _ _
+
+/-- `elementsAtTreeDist` is monotone decreasing in `r`. -/
+lemma elementsAtTreeDist_anti {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    elementsAtTreeDist n t v J (r + 1) ⊆ elementsAtTreeDist n t v J r := by
+  unfold elementsAtTreeDist
+  split_ifs with h
+  · exact Finset.empty_subset _
+  · intro i hi
+    simp only [Finset.mem_filter] at hi ⊢
+    exact ⟨hi.1, hi.2.1, le_trans (Nat.le_succ r) hi.2.2⟩
+
+/-- Tree-distance-based bounded-damage property (V2).
+    Like `HasBoundedDamage` but using tree-distance-based element counting.
+    Takes `t` as a parameter — the damage bound is relative to tree level `t`.
+
+    Applying the network increases element count at tree-distance ≥ `r`
+    by at most `ε` times count at tree-distance ≥ `(r-2)`. -/
+def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
+  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
+    ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v J r).card +
+        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -1450,6 +1555,20 @@ noncomputable def treeWrongness (n t : ℕ) (v : Fin n → Bool) (J : Interval n
     -- Count elements in J displaced at distance ≥ r
     (elementsAtDistance n t v J r).card / J.size
 
+/-- Tree-distance-based wrongness (V2).
+    Like `treeWrongness` but uses `elementsAtTreeDist` (tree-distance-based counting).
+
+    This version is genuinely time-dependent: the tree distance between positions
+    depends on `t` (via `sectionNode`/`sectionIndex`), so `treeWrongnessV2 n t v J r`
+    can differ from `treeWrongnessV2 n t' v J r` when `t ≠ t'`.
+
+    Preserves the algebraic structure (ratio of count to interval size) needed
+    for the proved lemmas (`cherry_wrongness`, `zig_step`). -/
+noncomputable def treeWrongnessV2 (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ :=
+  if J.size = 0 then 0
+  else
+    (elementsAtTreeDist n t v J r).card / J.size
+
 /-- Global wrongness parameter Δᵣ = sup_J Δᵣ(J).
     Defined as the supremum of `treeWrongness` over all valid intervals. -/
 noncomputable def globalWrongness (n t : ℕ) (v : Fin n → Bool) (r : ℕ) : ℝ :=
@@ -1508,6 +1627,36 @@ lemma treeWrongness_zero_eq_displacement {n t : ℕ} (v : Fin n → Bool) (J : I
       ext i
       simp only [Finset.mem_filter, Nat.zero_mul, Nat.zero_le, and_true]
     rw [h_eq]
+
+/-! **Properties of V2 Wrongness** -/
+
+/-- V2 tree wrongness is bounded by 1. -/
+lemma treeWrongnessV2_le_one {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongnessV2 n t v J r ≤ 1 := by
+  unfold treeWrongnessV2
+  split_ifs with h
+  · norm_num
+  · have h_pos : (0 : ℝ) < J.size := by exact_mod_cast Nat.pos_of_ne_zero h
+    rw [div_le_one h_pos]
+    exact_mod_cast (J.size_eq_card ▸ Finset.card_le_card (elementsAtTreeDist_subset v J r))
+
+/-- V2 tree wrongness is non-negative. -/
+lemma treeWrongnessV2_nonneg {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    0 ≤ treeWrongnessV2 n t v J r := by
+  unfold treeWrongnessV2
+  split_ifs
+  · rfl
+  · positivity
+
+/-- V2 tree wrongness is monotone decreasing in `r`. -/
+lemma treeWrongnessV2_monotone {n t : ℕ} (v : Fin n → Bool) (J : Interval n) (r : ℕ) :
+    treeWrongnessV2 n t v J (r + 1) ≤ treeWrongnessV2 n t v J r := by
+  unfold treeWrongnessV2
+  split_ifs with h
+  · exact le_refl _
+  · have h_pos : (0 : ℝ) < J.size := by exact_mod_cast Nat.pos_of_ne_zero h
+    apply div_le_div_of_nonneg_right _ (le_of_lt h_pos)
+    exact_mod_cast Finset.card_le_card (elementsAtTreeDist_anti v J r)
 
 /-! **Connection to IsEpsilonSorted** -/
 
@@ -1678,12 +1827,12 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
     { comparators := halver.comparators ++ rest.comparators }
   termination_by depth
 
-/-- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
-    is a stub (just iterates the halver, doesn't do recursive sub-range application).
-    The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
-    doesn't depend on any particular definition. When `epsilonNearsort` is properly
-    implemented (recursive application to top/bottom halves), a correctness lemma can
-    be re-added. -/
+-- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
+-- is a stub (just iterates the halver, doesn't do recursive sub-range application).
+-- The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
+-- doesn't depend on any particular definition. When `epsilonNearsort` is properly
+-- implemented (recursive application to top/bottom halves), a correctness lemma can
+-- be re-added.
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
 private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
@@ -2431,6 +2580,23 @@ lemma cherry_wrongness_after_nearsort
     apply div_le_div_of_nonneg_right _ hJs.le
     exact hnet v J r
 
+/-- V2: Cherry wrongness after nearsort, using tree-distance-based definitions.
+    Same algebraic proof as `cherry_wrongness_after_nearsort` but with
+    `HasBoundedTreeDamage` and `treeWrongnessV2`. -/
+lemma cherry_wrongness_after_nearsort_v2
+    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : HasBoundedTreeDamage net ε t)
+    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
+    (_h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
+    treeWrongnessV2 n t (net.exec v) J r ≤
+      treeWrongnessV2 n t v J r + ε * treeWrongnessV2 n t v J (if r ≥ 2 then r - 2 else 0) := by
+  by_cases hJ : J.size = 0
+  · simp [treeWrongnessV2, hJ]
+  · unfold treeWrongnessV2; simp only [if_neg hJ]
+    have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
+    rw [← mul_div_assoc, ← add_div]
+    apply div_le_div_of_nonneg_right _ hJs.le
+    exact hnet v J r
+
 /-! **The Four Key Lemmas (AKS Section 8)** -/
 
 /-- **Lemma 1: Register Reassignment** (AKS page 8)
@@ -2516,6 +2682,44 @@ lemma zig_step_bounded_increase
       mul_le_of_le_one_right hε_nn (treeWrongness_le_one (t := t) v J _)
     have h_nn : 0 ≤ treeWrongness n t v J r + ε :=
       add_nonneg (treeWrongness_nonneg (t := t) v J r) hε_nn
+    linarith [mul_le_mul_of_nonneg_right hA h_nn]
+
+/-- V2: Zig step bounded increase, using tree-distance-based definitions.
+    Same algebraic proof as `zig_step_bounded_increase` but with
+    `HasBoundedTreeDamage` and `treeWrongnessV2`. -/
+lemma zig_step_bounded_increase_v2
+    {n t : ℕ} (v v' : Fin n → Bool) (net : ComparatorNetwork n)
+    (ε : ℝ) (hε_nn : 0 ≤ ε) (hnet : HasBoundedTreeDamage net ε t) (r : ℕ) (J : Interval n)
+    (h_zig : v' = net.exec v) :
+    treeWrongnessV2 n t v' J r ≤
+      8 * A * (treeWrongnessV2 n t v J r +
+               if r ≥ 3 then ε * treeWrongnessV2 n t v J (r - 2)
+               else ε) := by
+  subst h_zig
+  -- Step 1: HasBoundedTreeDamage gives tw_after ≤ tw + ε * tw(if r≥2 then r-2 else 0)
+  have hbd : treeWrongnessV2 n t (net.exec v) J r ≤
+      treeWrongnessV2 n t v J r + ε * treeWrongnessV2 n t v J (if r ≥ 2 then r - 2 else 0) := by
+    by_cases hJ : J.size = 0
+    · simp [treeWrongnessV2, hJ]
+    · unfold treeWrongnessV2; simp only [if_neg hJ]
+      have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
+      rw [← mul_div_assoc, ← add_div]
+      apply div_le_div_of_nonneg_right _ hJs.le
+      exact hnet v J r
+  -- Step 2: Scale up by 8*A ≥ 1
+  have hA : (1 : ℝ) ≤ 8 * A := by norm_num [A]
+  by_cases hr : r ≥ 3
+  · simp only [show r ≥ 2 from by omega, ↓reduceIte, hr] at hbd ⊢
+    have h_nn : 0 ≤ treeWrongnessV2 n t v J r + ε * treeWrongnessV2 n t v J (r - 2) :=
+      add_nonneg (treeWrongnessV2_nonneg (t := t) v J r)
+        (mul_nonneg hε_nn (treeWrongnessV2_nonneg (t := t) v J (r - 2)))
+    linarith [mul_le_mul_of_nonneg_right hA h_nn]
+  · push_neg at hr
+    simp only [show ¬(r ≥ 3) from by omega, ↓reduceIte] at ⊢
+    have h_tw_le : ε * treeWrongnessV2 n t v J (if r ≥ 2 then r - 2 else 0) ≤ ε :=
+      mul_le_of_le_one_right hε_nn (treeWrongnessV2_le_one (t := t) v J _)
+    have h_nn : 0 ≤ treeWrongnessV2 n t v J r + ε :=
+      add_nonneg (treeWrongnessV2_nonneg (t := t) v J r) hε_nn
     linarith [mul_le_mul_of_nonneg_right hA h_nn]
 
 /-- **Lemma 3: ZigZag Combined Step** (AKS page 8)
