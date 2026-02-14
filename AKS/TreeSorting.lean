@@ -928,7 +928,12 @@ lemma sortedVersion_monotone {n : ℕ} (v : Fin n → Bool) : Monotone (sortedVe
 
 /-- Helper: Partition elements in an interval by where they belong.
     Elements belong either to lower sections (should be in left/bottom),
-    upper sections (should be in right/top), or locally (stay in place). -/
+    upper sections (should be in right/top), or locally (stay in place).
+
+    **NOTE:** The `t` parameter is currently unused in the body. For the AKS
+    tree-sorting proof (Lemma 1, register reassignment), `t` should index
+    which tree level determines the interval partition — making the distance
+    measure time-dependent. This is a known gap in the formalization. -/
 def elementsAtDistance (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n) :=
   -- Elements in J that are displaced and whose "displacement distance" is ≥ r.
   -- Distance is measured as the position difference from the sort threshold,
@@ -2342,7 +2347,7 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 /-! **Helper Lemmas for Lemma 2** -/
 
 /-
-  ROADMAP FOR LEMMAS 2-4 PROOFS:
+  ROADMAP FOR LEMMAS 1-4 PROOFS:
 
   The key interface is `HasBoundedDamage`: applying the network increases element
   count at distance ≥ r by at most ε · (count at distance ≥ r-2). This is the
@@ -2354,14 +2359,22 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
   4. ⚠️ halvers_give_bounded_nearsort (bridge: IsEpsilonHalver → HasBoundedDamage)
-  5. ⚠️ cherry_wrongness_after_nearsort (uses HasBoundedDamage)
-  6. ⚠️ zig_step_bounded_increase (uses HasBoundedDamage)
-  7. ⚠️ zigzag_decreases_wrongness (uses HasBoundedDamage)
-  8. ⚠️ aks_tree_sorting (top-level: takes IsEpsilonHalver, uses bridge internally)
+  5. ✅ cherry_wrongness_after_nearsort (PROVED — direct from HasBoundedDamage)
+  6. ✅ zig_step_bounded_increase (PROVED — scales by 8A ≥ 1)
+  7. ⚠️ zigzag_decreases_wrongness (needs tree alternation structure)
+  8. ⚠️ register_reassignment_increases_wrongness (NEEDS REFORMULATION — see note)
+  9. ⚠️ aks_tree_sorting (top-level assembly)
 
   The bridge lemma #4 encapsulates the recursive ε-nearsort construction:
   - An ε₁-halver with ε₁ ≤ ε/(2·(log₂ n + 1)) yields a composite network
     with HasBoundedDamage ε, using O(log n) copies of the halver.
+
+  Known formalization gaps:
+  - `elementsAtDistance` doesn't use its `t` parameter — the time-dependent
+    interval structure needed for Lemma 1 (register reassignment) is not yet
+    formalized. This also makes the `t` vs `t+1` distinction in Lemma 1 vacuous.
+  - `zigzag_decreases_wrongness` can't follow from chaining two zig steps — the
+    r → r+1 improvement requires tree alternation (zig on even, zag on odd levels).
 
   Infrastructure:
   - Element counting: countOnes, countOnesInRange
@@ -2405,7 +2418,7 @@ lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
 lemma cherry_wrongness_after_nearsort
     {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : HasBoundedDamage net ε)
     (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
-    (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
+    (_h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
     treeWrongness n t (net.exec v) J r ≤
       treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
   -- HasBoundedDamage gives bound on element counts; divide by J.size.
@@ -2422,38 +2435,26 @@ lemma cherry_wrongness_after_nearsort
 
 /-- **Lemma 1: Register Reassignment** (AKS page 8)
 
-    When time advances from t to t+1 and registers are reassigned to new
-    intervals, the wrongness can increase. This lemma bounds the increase.
+    When registers are reassigned to new intervals, wrongness can increase.
+    This lemma bounds the increase.
 
     Δ'ᵣ < 6A·Δᵣ₋₄  (for wrongness)
-    δ' < 6A·(δ + ε)  (for displacement)
 
-    Intuition: Register intervals move at most 2 levels down the tree,
-    so distance-r wrongness becomes at most distance-(r-4) wrongness after
-    reassignment (since 2 level moves = at most 4 distance change). -/
+    **NEEDS REFORMULATION:** The current `elementsAtDistance` definition doesn't
+    use the `t` parameter, so `treeWrongness n (t+1) v' J' r` is definitionally
+    equal to `treeWrongness n 0 v' J' r`. The "time evolution" aspect of register
+    reassignment requires either:
+    (a) Making `elementsAtDistance` truly time-dependent (intervals change at each time step), or
+    (b) Adding tree-structure hypotheses connecting J to J' (e.g., J is an interval
+        at tree level t and J' is its image at level t+1, shifted by ≤ 2 levels).
+    The r-4 shift depends on this tree level structure — without it, the bound
+    is unjustified. See AKS (1983) Section 8 for the precise statement. -/
 lemma register_reassignment_increases_wrongness
-    {n t : ℕ} (v v' : Fin n → Bool) (J J' : Interval n) (r : ℕ) (ε : ℝ)
+    {n t : ℕ} (v v' : Fin n → Bool) (J J' : Interval n) (r : ℕ)
     (h_reassign : ∀ i : Fin n, v' i ≠ v i → i ∈ J'.toFinset)  -- v' differs from v only within J'
     (h_contain : J.toFinset ⊆ J'.toFinset)  -- J is contained in J'
     (hr : r ≥ 4) :
     treeWrongness n (t+1) v' J' r ≤ 6 * A * treeWrongness n t v J (r - 4) := by
-  sorry
-
-/-- **Helper: Fringe Amplification Factor**
-
-    When elements at interval J spread across fringes (the overlapping regions
-    between a cherry's parent and children), the wrongness can be amplified
-    by a factor proportional to `A`. From AKS Section 5: fringe sizes are
-    determined by the Y_t(i) formulas involving powers of A.
-
-    Concretely: for a cherry with parent P and children L, R, the number of
-    elements at distance ≥ r in P is bounded by the sum of elements at
-    distance ≥ r in L, R, and the fringe regions, with amplification ≤ 8A. -/
-lemma fringe_amplification_bound {n : ℕ} (cherry : Cherry n)
-    (v : Fin n → Bool) (r : ℕ) :
-    (elementsAtDistance n 0 v cherry.parent r).card ≤
-      8 * A * ((elementsAtDistance n 0 v cherry.leftChild r).card +
-               (elementsAtDistance n 0 v cherry.rightChild r).card + 1) := by
   sorry
 
 /-- **Lemma 2: Single Zig or Zag Step** (AKS page 8)
