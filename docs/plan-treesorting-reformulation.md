@@ -1,6 +1,6 @@
 # Plan: Reformulate TreeSorting.lean Incorrect Lemma Statements
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 ## Context
 

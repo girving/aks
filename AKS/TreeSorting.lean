@@ -962,6 +962,17 @@ def elementsCorrectlyPlaced (n t : ℕ) (v : Fin n → Bool) (J : Interval n) : 
 def elementsAtDistanceExactly (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n) :=
   (elementsAtDistance n t v J r) \ (elementsAtDistance n t v J (r + 1))
 
+/-- The bounded-damage property: applying the network increases element
+    count at distance ≥ r by at most ε times count at distance ≥ (r-2).
+    This is the key property that recursive ε-nearsort (AKS Section 4)
+    provides. Unlike `IsEpsilonHalver` (aggregate balance), this bounds
+    positional displacement — the property needed by Lemmas 2-4. -/
+def HasBoundedDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
+  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
+    ((elementsAtDistance n 0 (net.exec v) J r).card : ℝ) ≤
+      (elementsAtDistance n 0 v J r).card +
+        ε * (elementsAtDistance n 0 v J (if r ≥ 2 then r - 2 else 0)).card
+
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     elementsToLower n t v J ∪ elementsToUpper n t v J ∪ elementsCorrectlyPlaced n t v J = J.toFinset ∧
@@ -1022,42 +1033,19 @@ lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     (by simp [elementsToLower])
     (by simp [elementsToUpper]))
 
-/-- The halver property (balanced ones) implies the nearsort property
-    (elements pushed toward correct sides).
+/-- From an ε₁-halver, construct a composite network with bounded damage.
+    This encapsulates the recursive ε-nearsort construction (AKS Section 4):
+    apply ε₁-halver to the whole range, then top/bottom halves, then quarters,
+    etc., until pieces have size < ε·m. The composite satisfies the positional
+    bounded-damage property (`HasBoundedDamage`), not just aggregate balance.
 
-    This is THE KEY connection for Lemma 2!
-
-    **Construction (AKS Section 4):**
-    Given: ε₁-halver with ε₁ < ε/log⁴ m (where m is cherry size)
-    Build ε-nearsort by:
-    1. Apply ε₁-halver to entire cherry
-    2. Recursively apply ε₁-halver to top/bottom halves
-    3. Continue to quarters, eighths, ...
-    4. Stop when piece size < εm
-
-    **Forcing property:**
-    After ε-nearsort, for elements x in the cherry:
-    - If x should be in lower section L (a "0" that's too high):
-      → At least (1-ε) fraction end up in left child or lower
-    - If x should be in upper section U (a "1" that's too low):
-      → At least (1-ε) fraction end up in right child or higher
-    - At most ε fraction are "exceptional" (stuck in wrong place)
-
-    **Proof strategy:**
-    1. Each ε₁-halver application moves elements by balancing
-    2. Recursive structure ensures O(log m) halver applications
-    3. Error accumulates: ε₁ · log m ≈ ε (by choice of ε₁)
-    4. Thus at most ε fraction remain misplaced
-
-    This lemma requires substantial work - it's essentially proving
-    the correctness of the ε-nearsort construction from AKS Section 4. -/
-lemma halver_implies_nearsort_property
-    {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hε : 0 < ε)
-    (hnet : IsEpsilonHalver net ε)
-    (cherry : Cherry n) (v : Fin n → Bool) (r : ℕ) :
-    ((elementsAtDistance n 0 (net.exec v) cherry.parent r).card : ℝ) ≤
-      (elementsAtDistance n 0 v cherry.parent r).card +
-        ε * (elementsAtDistance n 0 v cherry.parent (if r ≥ 2 then r - 2 else 0)).card := by
+    The size bound says the composite uses O(log n) copies of the halver. -/
+lemma halvers_give_bounded_nearsort
+    {n : ℕ} (ε ε₁ : ℝ) (hε : 0 < ε) (hε₁ : 0 < ε₁)
+    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
+    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁) :
+    ∃ (net : ComparatorNetwork n), HasBoundedDamage net ε ∧
+      net.comparators.length ≤ halver.comparators.length * (Nat.log 2 n + 1) := by
   sorry
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
@@ -1681,19 +1669,15 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
     { comparators := halver.comparators ++ rest.comparators }
   termination_by depth
 
-/-- The recursive nearsort satisfies the ε-nearsort property.
-
-    After applying epsilonNearsort, at most ε fraction of elements
-    are displaced beyond their target sections.
-
-    This is the correctness theorem for the ε-nearsort construction. -/
+/-- The recursive nearsort satisfies the bounded-damage property.
+    After applying `epsilonNearsort`, positional displacement at each
+    distance level is controlled. -/
 lemma epsilonNearsort_correct {m : ℕ} (ε ε₁ : ℝ) (hε : 0 < ε)
     (halver : ComparatorNetwork m)
     (hε₁ : ε₁ < ε / (Nat.log 2 m) ^ 4)  -- AKS condition: ε₁ << ε
     (hhalver : IsEpsilonHalver halver ε₁)
-    (depth : ℕ) (hdepth : depth ≥ Nat.log 2 m)
-    (v : Fin m → Bool) :
-    IsEpsilonSorted ((epsilonNearsort m ε ε₁ halver depth).exec v) ε := by
+    (depth : ℕ) (hdepth : depth ≥ Nat.log 2 m) :
+    HasBoundedDamage (epsilonNearsort m ε ε₁ halver depth) ε := by
   sorry
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
@@ -2358,33 +2342,35 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 /-! **Helper Lemmas for Lemma 2** -/
 
 /-
-  ROADMAP FOR LEMMA 2 PROOFS:
+  ROADMAP FOR LEMMAS 2-4 PROOFS:
 
-  The key challenge is connecting the halver property (balanced ones distribution)
-  to the wrongness decrease (Δᵣ + ε·Δᵣ₋₂).
+  The key interface is `HasBoundedDamage`: applying the network increases element
+  count at distance ≥ r by at most ε · (count at distance ≥ r-2). This is the
+  positional displacement bound that recursive ε-nearsort provides (AKS Section 4),
+  as opposed to `IsEpsilonHalver` which is an aggregate balance property.
 
   Proof chain:
   1. ✅ halver_preserves_monotone (PROVED)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
-  4. ⚠️ halver_implies_nearsort_property (THE KEY - requires AKS Section 4 ε-nearsort construction)
-  5. ⚠️ cherry_wrongness_after_nearsort (core inequality, builds on #4)
-  6. ⚠️ zig_step_bounded_increase (main proof, assembles #5 with fringe amplification)
+  4. ⚠️ halvers_give_bounded_nearsort (bridge: IsEpsilonHalver → HasBoundedDamage)
+  5. ⚠️ cherry_wrongness_after_nearsort (uses HasBoundedDamage)
+  6. ⚠️ zig_step_bounded_increase (uses HasBoundedDamage)
+  7. ⚠️ zigzag_decreases_wrongness (uses HasBoundedDamage)
+  8. ⚠️ aks_tree_sorting (top-level: takes IsEpsilonHalver, uses bridge internally)
 
-  The bottleneck is #4 (halver_implies_nearsort_property), which requires:
-  - Understanding recursive ε-nearsort construction (AKS Section 4)
-  - Showing ε₁-halver → ε-nearsort with ε₁ << ε
-  - Connecting balanced property to forcing elements toward correct sides
+  The bridge lemma #4 encapsulates the recursive ε-nearsort construction:
+  - An ε₁-halver with ε₁ ≤ ε/(2·(log₂ n + 1)) yields a composite network
+    with HasBoundedDamage ε, using O(log n) copies of the halver.
 
   Infrastructure:
   - Element counting: countOnes, countOnesInRange
   - Element tracking: elementsAtDistance, elementsToLower/Upper, correctlyPlaced
-  - Halver connections: halver_balances_ones, halver_bounds_top_excess
-  - Witness preservation: halver_preserves_witness_structure
+  - Bounded damage: HasBoundedDamage (positional displacement bound)
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
-    This follows from comparators preserving monotonicity (already proved in Basic.lean). -/
+    This follows from comparators preserving monotonicity (already proved in ComparatorNetwork.lean). -/
 lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
     (ε : ℝ) (hnet : IsEpsilonHalver net ε)
     (w : Fin n → Bool) (hw : Monotone w) :
@@ -2414,16 +2400,16 @@ lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
     Elements spread across fringes of size A, giving factor 8A.
     Final bound: Δ'ᵣ ≤ 8A·(Δᵣ + ε·Δᵣ₋₂)
 
-    This lemma depends on halver_implies_nearsort_property and requires
-    careful counting of displaced elements. -/
+    This lemma uses `HasBoundedDamage` (from the ε-nearsort construction)
+    and requires careful counting of displaced elements. -/
 lemma cherry_wrongness_after_nearsort
-    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : IsEpsilonHalver net ε)
+    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : HasBoundedDamage net ε)
     (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
     (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
     treeWrongness n t (net.exec v) J r ≤
       treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
   -- Proof structure:
-  -- 1. Use halver_implies_nearsort_property to get forcing
+  -- 1. Use HasBoundedDamage to bound post-nearsort element counts
   -- 2. Partition elements at distance ≥ r
   -- 3. Count how many stay at distance ≥ r after nearsort
   -- 4. Bound by Δᵣ (stayed) + ε·Δᵣ₋₂ (exceptions)
@@ -2445,6 +2431,7 @@ lemma cherry_wrongness_after_nearsort
 lemma register_reassignment_increases_wrongness
     {n t : ℕ} (v v' : Fin n → Bool) (J J' : Interval n) (r : ℕ) (ε : ℝ)
     (h_reassign : ∀ i : Fin n, v' i ≠ v i → i ∈ J'.toFinset)  -- v' differs from v only within J'
+    (h_contain : J.toFinset ⊆ J'.toFinset)  -- J is contained in J'
     (hr : r ≥ 4) :
     treeWrongness n (t+1) v' J' r ≤ 6 * A * treeWrongness n t v J (r - 4) := by
   sorry
@@ -2466,22 +2453,6 @@ lemma fringe_amplification_bound {n : ℕ} (cherry : Cherry n)
                (elementsAtDistance n 0 v cherry.rightChild r).card + 1) := by
   sorry
 
-/-- **Helper: Exception Elements Were at Distance r-2**
-
-    If an element becomes displaced at distance ≥ r after ε-nearsort
-    (applied to a cherry), but was at distance < r before, then it must
-    have been at distance ≥ r-2. This is because ε-nearsort moves elements
-    at most 2 tree levels within the cherry.
-
-    More precisely: elements newly appearing in `elementsAtDistance ... r`
-    after the halver must have been in `elementsAtDistance ... (r-2)` before. -/
-lemma exception_distance_bound
-    {n : ℕ} (v : Fin n → Bool) (net : ComparatorNetwork n)
-    (J : Interval n) (r : ℕ) (hr : r ≥ 2) :
-    elementsAtDistance n 0 (net.exec v) J r \ elementsAtDistance n 0 v J r ⊆
-      elementsAtDistance n 0 v J (r - 2) := by
-  sorry
-
 /-- **Lemma 2: Single Zig or Zag Step** (AKS page 8)
 
     Applying ε-nearsort to a cherry (parent + two children intervals)
@@ -2500,14 +2471,14 @@ lemma exception_distance_bound
     PROOF STRUCTURE (detailed in docs/lemma2_analysis.md):
     1. Identify cherry containing J
     2. Partition elements by target distance
-    3. Use halver property → nearsort forces (1-ε) fraction toward target
+    3. Use bounded-damage property → forces (1-ε) fraction toward target
     4. Elements that moved have reduced distance
     5. Exception elements (ε fraction) bounded by Δᵣ₋₂
     6. Fringe amplification gives factor 8A
     7. Combine for final bound -/
 lemma zig_step_bounded_increase
     {n t : ℕ} (v v' : Fin n → Bool) (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (r : ℕ) (J : Interval n)
+    (ε : ℝ) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
     (h_zig : v' = net.exec v)  -- v' obtained by applying net to v
     :
     treeWrongness n t v' J r ≤
@@ -2539,7 +2510,7 @@ lemma zig_step_bounded_increase
     This is the geometric decrease mechanism! -/
 lemma zigzag_decreases_wrongness
     {n t : ℕ} (v v'' : Fin n → Bool) (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (r : ℕ) (J : Interval n)
+    (ε : ℝ) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
     (h_zigzag : v'' = net.exec (net.exec v))  -- v'' is v after full Zig-Zag cycle
     :
     treeWrongness n t v'' J r ≤
@@ -2604,12 +2575,13 @@ lemma displacement_from_wrongness
     5. After many cycles: Δᵣ → 0 exponentially
     6. Lemma 4: δ → 0 as well
     7. When δ < 1/n: must be sorted (discrete) -/
-theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1/2)
-    (net : ComparatorNetwork n) (hnet : IsEpsilonHalver net ε)
+theorem aks_tree_sorting {n : ℕ} (ε ε₁ : ℝ)
+    (hε : 0 < ε) (hε1 : ε < 1/2) (hε₁ : 0 < ε₁)
+    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
+    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁)
     (v : Fin n → Bool) :
-    -- After O(log n) applications of the tree-based sorting network,
-    -- the output is sorted (monotone).
-    ∃ (k : ℕ),
-      (k ≤ 100 * Nat.log 2 n) ∧  -- O(log n) cycles
-      Monotone (Nat.iterate (fun w => net.exec w) k v) := by
+    -- After applying the composite sorting network, the output is sorted.
+    ∃ (net : ComparatorNetwork n),
+      net.comparators.length ≤ 100 * n * Nat.log 2 n ∧
+      Monotone (net.exec v) := by
   sorry
