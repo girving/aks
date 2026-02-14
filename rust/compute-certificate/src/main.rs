@@ -268,7 +268,7 @@ fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
         }
 
         // Solve L^T · block = I_block → block now holds L^{-T}[:,j_start..j_end]
-        triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::rayon(0));
+        triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::Seq);
 
         // Scale and pack: Z_unit[:,j] = L^{-T}[:,j] * L[j,j], then round to i32
         for k in 0..bs {
@@ -295,8 +295,8 @@ fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
 /// For each column j, computes P[:,j] exactly via rotation map (i64 arithmetic),
 /// then adjusts Z_int[i,j] by integer rounding to minimize |P[i,j]| for i < j.
 ///
-/// Tracks B² cross-talk: when Z_int[i,j] is adjusted by delta, p_col[v] is
-/// updated for all v that share a 2-hop path with i (via sparse B² structure).
+/// Columns are independent (each accesses a disjoint slice of packed), so we
+/// split packed into non-overlapping column slices and process in parallel.
 fn refine_certificate(
     packed: &mut [i32],
     neighbors: &[usize],
@@ -306,99 +306,106 @@ fn refine_certificate(
     c2: i32,
     c3: i32,
 ) {
+    use rayon::prelude::*;
+
     let m_diag = c1 as i64 - c2 as i64 * d as i64 + c3 as i64;
 
-    let mut z_col = vec![0i64; n];
-    let mut bz = vec![0i64; n];
-    let mut p_col = vec![0i64; n];
-    // Scratch for computing B² column: b2_col[v] = B²[v,i] for current correction target i
-    let mut b2_col = vec![0i32; n];
-    // Pre-allocate touched list for B² neighbors
-    let mut touched = Vec::with_capacity(d * d);
-
-    for j in 0..n {
-        if j % 2000 == 0 && j > 0 {
-            eprintln!("  refining column {}/{}...", j, n);
-        }
-
-        let col_start = j * (j + 1) / 2;
-        for k in 0..n {
-            z_col[k] = 0;
-        }
-        for k in 0..=j {
-            z_col[k] = packed[col_start + k] as i64;
-        }
-
-        // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
-        for v in 0..n {
-            let mut acc: i64 = 0;
-            let base = v * d;
-            for p in 0..d {
-                acc += z_col[neighbors[base + p]];
-            }
-            bz[v] = acc;
-        }
-        let col_sum: i64 = z_col.iter().sum();
-        for v in 0..n {
-            let mut b2z_v: i64 = 0;
-            let base = v * d;
-            for p in 0..d {
-                b2z_v += bz[neighbors[base + p]];
-            }
-            p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
-        }
-
-        // Greedy correction with B² cross-talk tracking.
-        // When we adjust Z_int[i,j] by delta, we update p_col[v] for the
-        // sparse B² neighbors of i. The c₃ (J term) cross-talk is deferred
-        // via running_delta_sum since c₃ is small.
-        let mut running_delta_sum: i64 = 0;
-
-        for i in 0..j {
-            // Account for deferred c₃ cross-talk from previous corrections
-            let effective_p = p_col[i] + c3 as i64 * running_delta_sum;
-            if effective_p == 0 {
-                continue;
-            }
-            let delta = -((effective_p as f64 / m_diag as f64).round() as i32);
-            if delta == 0 {
-                continue;
-            }
-            let d64 = delta as i64;
-            packed[col_start + i] += delta;
-            running_delta_sum += d64;
-
-            // Compute B²[v,i] for all v via 2-hop neighbors of i
-            touched.clear();
-            let base_i = i * d;
-            for p in 0..d {
-                let w = neighbors[base_i + p];
-                let base_w = w * d;
-                for q in 0..d {
-                    let v = neighbors[base_w + q];
-                    if b2_col[v] == 0 {
-                        touched.push(v);
-                    }
-                    b2_col[v] += 1;
-                }
-            }
-
-            // Update p_col[i] for the diagonal: M[i,i] = c₁ - c₂·d + c₃
-            // But we defer c₃, so apply (c₁ - c₂·d) * delta
-            p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
-
-            // Update p_col[v] for B² neighbors (v ≠ i): -c₂ * B²[v,i] * delta
-            for &v in &touched {
-                if v != i {
-                    p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
-                }
-                b2_col[v] = 0; // Clear for next correction
-            }
+    // Split packed into non-overlapping column slices.
+    // Column j occupies packed[j*(j+1)/2 .. j*(j+1)/2 + j + 1].
+    let mut cols: Vec<&mut [i32]> = Vec::with_capacity(n);
+    {
+        let mut rest = &mut packed[..];
+        for j in 0..n {
+            let (col, remaining) = rest.split_at_mut(j + 1);
+            cols.push(col);
+            rest = remaining;
         }
     }
+
+    cols.into_par_iter().enumerate().for_each_init(
+        || {
+            (
+                vec![0i64; n],                      // z_col
+                vec![0i64; n],                      // bz
+                vec![0i64; n],                      // p_col
+                vec![0i32; n],                      // b2_col
+                Vec::<usize>::with_capacity(d * d), // touched
+            )
+        },
+        |(z_col, bz, p_col, b2_col, touched), (j, col)| {
+            // Zero z_col (entries from previous column on this thread may be dirty)
+            for k in 0..n {
+                z_col[k] = 0;
+            }
+            for k in 0..=j {
+                z_col[k] = col[k] as i64;
+            }
+
+            // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
+            for v in 0..n {
+                let mut acc: i64 = 0;
+                let base = v * d;
+                for p in 0..d {
+                    acc += z_col[neighbors[base + p]];
+                }
+                bz[v] = acc;
+            }
+            let col_sum: i64 = z_col[..=j].iter().sum();
+            for v in 0..n {
+                let mut b2z_v: i64 = 0;
+                let base = v * d;
+                for p in 0..d {
+                    b2z_v += bz[neighbors[base + p]];
+                }
+                p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
+            }
+
+            // Greedy correction with B² cross-talk tracking.
+            let mut running_delta_sum: i64 = 0;
+
+            for i in 0..j {
+                let effective_p = p_col[i] + c3 as i64 * running_delta_sum;
+                if effective_p == 0 {
+                    continue;
+                }
+                let delta = -((effective_p as f64 / m_diag as f64).round() as i32);
+                if delta == 0 {
+                    continue;
+                }
+                let d64 = delta as i64;
+                col[i] += delta;
+                running_delta_sum += d64;
+
+                // Compute B²[v,i] for all v via 2-hop neighbors of i
+                touched.clear();
+                let base_i = i * d;
+                for p in 0..d {
+                    let w = neighbors[base_i + p];
+                    let base_w = w * d;
+                    for q in 0..d {
+                        let v = neighbors[base_w + q];
+                        if b2_col[v] == 0 {
+                            touched.push(v);
+                        }
+                        b2_col[v] += 1;
+                    }
+                }
+
+                p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
+
+                for &v in touched.iter() {
+                    if v != i {
+                        p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
+                    }
+                    b2_col[v] = 0;
+                }
+            }
+        },
+    );
 }
 
 /// Verify the certificate using the same logic as the Lean checker.
+/// Columns are independent, so we process them in parallel.
 fn verify_certificate(
     neighbors: &[usize],
     z_packed: &[i32],
@@ -408,57 +415,65 @@ fn verify_certificate(
     c2: i32,
     c3: i32,
 ) -> (bool, i64, i64, f64) {
-    let mut eps_max: i64 = 0;
-    let mut min_diag: i64 = i64::MAX;
+    use rayon::prelude::*;
 
-    // Pre-allocate scratch buffers outside the column loop
-    let mut z_col = vec![0i64; n];
-    let mut bz = vec![0i64; n];
-    let mut b2z = vec![0i64; n];
-
-    for j in 0..n {
-        let col_start = j * (j + 1) / 2;
-        for k in 0..n {
-            z_col[k] = 0;
-        }
-        for k in 0..=j {
-            z_col[k] = z_packed[col_start + k] as i64;
-        }
-
-        for v in 0..n {
-            let mut acc: i64 = 0;
-            let base = v * d;
-            for p in 0..d {
-                acc += z_col[neighbors[base + p]];
-            }
-            bz[v] = acc;
-        }
-
-        for v in 0..n {
-            let mut acc: i64 = 0;
-            let base = v * d;
-            for p in 0..d {
-                acc += bz[neighbors[base + p]];
-            }
-            b2z[v] = acc;
-        }
-
-        let col_sum: i64 = z_col.iter().sum();
-
-        for i in 0..n {
-            let p_ij = c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
-            if i == j {
-                if p_ij < min_diag {
-                    min_diag = p_ij;
+    // map_init allocates scratch buffers once per thread (not per column).
+    let (min_diag, eps_max) = (0..n)
+        .into_par_iter()
+        .map_init(
+            || (vec![0i64; n], vec![0i64; n], vec![0i64; n]),
+            |(z_col, bz, b2z), j| {
+                let col_start = j * (j + 1) / 2;
+                for k in 0..n {
+                    z_col[k] = 0;
                 }
-            } else if i < j {
-                let abs_p = p_ij.abs();
-                if abs_p > eps_max {
-                    eps_max = abs_p;
+                for k in 0..=j {
+                    z_col[k] = z_packed[col_start + k] as i64;
                 }
-            }
-        }
-    }
+
+                for v in 0..n {
+                    let mut acc: i64 = 0;
+                    let base = v * d;
+                    for p in 0..d {
+                        acc += z_col[neighbors[base + p]];
+                    }
+                    bz[v] = acc;
+                }
+
+                for v in 0..n {
+                    let mut acc: i64 = 0;
+                    let base = v * d;
+                    for p in 0..d {
+                        acc += bz[neighbors[base + p]];
+                    }
+                    b2z[v] = acc;
+                }
+
+                let col_sum: i64 = z_col[..=j].iter().sum();
+
+                let mut col_min_diag: i64 = i64::MAX;
+                let mut col_eps_max: i64 = 0;
+
+                // Only compute p_ij for i <= j (skip lower-triangular)
+                for i in 0..j {
+                    let p_ij =
+                        c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
+                    let abs_p = p_ij.abs();
+                    if abs_p > col_eps_max {
+                        col_eps_max = abs_p;
+                    }
+                }
+                // Diagonal
+                let p_jj = c1 as i64 * z_col[j] - c2 as i64 * b2z[j] + c3 as i64 * col_sum;
+                col_min_diag = col_min_diag.min(p_jj);
+
+                (col_min_diag, col_eps_max)
+            },
+        )
+        .reduce(
+            || (i64::MAX, 0i64),
+            |(md1, em1), (md2, em2)| (md1.min(md2), em1.max(em2)),
+        );
 
     let threshold = eps_max
         .checked_mul((n * (n + 1) / 2) as i64)
