@@ -326,7 +326,7 @@ const PROOF_DATA = {
       desc: "Base expander has spectral gap ≤ 5/9 ≈ 0.556 (just above Alon-Boppana bound)." },
 
     // ── ZigZag.lean ──
-    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 31, status: "proved", kind: "theorem",
+    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 30, status: "proved", kind: "theorem",
       sig: "zigzag_spectral_bound : spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂",
       desc: "Zig-zag spectral composition: assembles all sublemmas into the final bound. Degenerate case (n₁·d₁=0) handled via rvwBound ≥ 0; main case chains through rvw_operator_norm_bound." },
     { id: "zigzagFamily", file: "AKS/ZigZag.lean", line: 124, status: "definition", kind: "def",
@@ -335,7 +335,7 @@ const PROOF_DATA = {
     { id: "zigzagFamily_gap", file: "AKS/ZigZag.lean", line: 138, status: "proved", kind: "theorem",
       sig: "zigzagFamily_gap : spectralGap (zigzagFamily H₀ k).2 ≤ c",
       desc: "Every graph in the zig-zag family has spectral gap ≤ c. Proved by induction using squaring + zig-zag bounds." },
-    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 166, status: "sorry", kind: "theorem",
+    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 168, status: "sorry", kind: "theorem",
       sig: "explicit_expanders_exist_zigzag :\n  ∀ n > 0, ∃ G : RegularGraph n (D*D), spectralGap G ≤ c",
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
@@ -343,6 +343,23 @@ const PROOF_DATA = {
     { id: "zigzag_implies_aks_network", file: "AKS/AKSNetwork.lean", line: 134, status: "sorry", kind: "theorem",
       sig: "zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
       desc: "Parameterized AKS theorem: expander family with gap β < 1/2 → O(n log n) sorting networks. Even case fully proved; odd case sorry'd." },
+
+    // ── AKS/Main.lean — top-level assembly via iterated squaring ──
+    { id: "squareIter", file: "AKS/Main.lean", line: 35, status: "definition", kind: "def",
+      sig: "RegularGraph.squareIter (G : RegularGraph n d) :\n  (k : ℕ) → RegularGraph n (d ^ (2 ^ k))",
+      desc: "Iterated graph squaring: square k times, yielding d^(2^k)-regular graph on n vertices." },
+    { id: "spectralGap_squareIter", file: "AKS/Main.lean", line: 41, status: "proved", kind: "theorem",
+      sig: "spectralGap_squareIter :\n  spectralGap (G.squareIter k) = (spectralGap G) ^ (2 ^ k)",
+      desc: "Spectral gap of k-th iterated square is the 2^k-th power of the original gap." },
+    { id: "exists_pow_two_pow_lt", file: "AKS/Main.lean", line: 54, status: "proved", kind: "theorem",
+      sig: "exists_pow_two_pow_lt : 0 ≤ c → c < 1 → 0 < t → ∃ k, c ^ (2^k) < t",
+      desc: "Doubly-exponential convergence: c^(2^k) eventually drops below any positive target." },
+    { id: "expander_family_small_gap", file: "AKS/Main.lean", line: 66, status: "proved", kind: "theorem",
+      sig: "expander_family_small_gap :\n  ... → 0 < c → c < 1 → 0 < β →\n  ∃ d, ∀ n > 0, ∃ G : RegularGraph n d, spectralGap G ≤ β",
+      desc: "Zig-zag + iterated squaring gives constant-degree expander family with arbitrarily small spectral gap." },
+    { id: "aks_sorting_networks_exist", file: "AKS/Main.lean", line: 106, status: "proved", kind: "theorem",
+      sig: "aks_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "AKS (1983): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + tree sorting." },
 
     // ── TreeSorting.lean ──
     { id: "TreeNode", file: "AKS/TreeSorting.lean", line: 105, status: "definition", kind: "structure",
@@ -550,7 +567,17 @@ const PROOF_DATA = {
     ["comparator_displacement_bound", "zig_step_bounded_increase"],
 
     // TreeSorting — edges TO main proof chain
-    ["aks_tree_sorting", "zigzag_implies_aks_network"]
+    ["aks_tree_sorting", "zigzag_implies_aks_network"],
+
+    // Main.lean — iterated squaring and final assembly
+    ["spectralGap_square", "spectralGap_squareIter"],
+    ["squareIter", "spectralGap_squareIter"],
+    ["explicit_expanders_exist_zigzag", "expander_family_small_gap"],
+    ["squareIter", "expander_family_small_gap"],
+    ["spectralGap_squareIter", "expander_family_small_gap"],
+    ["exists_pow_two_pow_lt", "expander_family_small_gap"],
+    ["expander_family_small_gap", "aks_sorting_networks_exist"],
+    ["zigzag_implies_aks_network", "aks_sorting_networks_exist"]
   ],
 
   // File groupings with display names

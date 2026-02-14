@@ -1678,7 +1678,7 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
     { comparators := halver.comparators ++ rest.comparators }
   termination_by depth
 
-/-- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
+/- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
     is a stub (just iterates the halver, doesn't do recursive sub-range application).
     The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
     doesn't depend on any particular definition. When `epsilonNearsort` is properly

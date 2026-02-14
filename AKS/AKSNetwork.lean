@@ -156,10 +156,13 @@ theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β 
     set net := epsHalverMerge (2 * m) β K halver₀
     refine ⟨net, ?_, ?_⟩
     · -- Correctness via 0-1 principle + tree sorting
-      apply zero_one_principle; intro v
-      obtain ⟨k, hk_le, hk_sorted⟩ := aks_tree_sorting β hβ_pos hβ_half halver₀ hhalver₀_eps v
-      rw [epsHalverMerge_exec_eq_iterate]
-      exact mono_of_iterate_mono halver₀ v k K hk_le hk_sorted
+      -- Note: `aks_tree_sorting` signature was refactored (ε/ε₁ split with
+      -- `hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1))`). The current proof
+      -- strategy (iterating the SAME β-halver) doesn't match the new interface,
+      -- which requires ε₁ → 0 as n → ∞. The correct approach uses the
+      -- `aks_tree_sorting` output directly (it returns a sorting network,
+      -- not an iteration count). Sorry'd until `aks_tree_sorting` is proved.
+      sorry
     · -- Size bound
       have hsize_eq : net.size = K * halver₀.size := epsHalverMerge_size halver₀ β K
       have hKsize : K * halver₀.size ≤ 100 * Nat.log 2 (2 * m) * (m * d) :=
