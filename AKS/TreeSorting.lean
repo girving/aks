@@ -1115,14 +1115,22 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     The `r+1` in the first term is the geometric decrease mechanism:
     after each zigzag cycle, wrongness at distance `r` is controlled
-    by wrongness at distance `r+1` before the cycle. -/
+    by wrongness at distance `r+1` before the cycle.
+
+    Error term coefficients:
+    - `2ε` on `r-2`: zig exceptions (`ε·|E(v,r-2)|`) plus zag exceptions on
+      original input (`ε·|E(v,r-2)|`, since zag's exceptions at distance `r-2`
+      in `v'` are bounded by `|E(v,r-2)| + ε·|E(v,r-4)|`, giving `ε·|E(v,r-2)|`
+      as the dominant term)
+    - `ε` on `r-4`: cross-term from zag exceptions applied to zig exceptions
+      (`ε²·|E(v,r-4)|`, simplified using `ε ≤ 1`) -/
 def HasBoundedZigzagDamage {n : ℕ}
     (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
   ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
     let v'' := zag_net.exec (zig_net.exec v)
     ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
       (elementsAtTreeDist n t v J (r + 1)).card +
-        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
+        2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
@@ -2863,46 +2871,37 @@ lemma zigzag_decreases_wrongness
     (ε-nearsort on odd-level cherries) gives STRICT DECREASE in wrongness.
     The distance parameter improves from `r` to `r + 1`:
 
-    `treeWrongnessV2(t, v'', J, r) ≤ 64A²·(treeWrongnessV2(t, v, J, r+1) + 3ε·Δ_{r-4})`
+    `treeWrongnessV2(t, v'', J, r) ≤ treeWrongnessV2(t, v, J, r+1) + 3ε·tw(r-4)`
 
     **Differences from V1:**
     - Two separate networks (`zig_net`, `zag_net`) instead of one applied twice
-    - Both have `HasBoundedTreeDamage` at time `t` (individual Lemma 2 bounds)
-    - Their composition satisfies `HasBoundedZigzagDamage` (the combined `r → r+1`
-      shift from cherry alternation)
+    - Uses `HasBoundedZigzagDamage` (the `r → r+1` shift from cherry alternation)
     - Uses `treeWrongnessV2` which genuinely depends on `t`
+    - No fringe amplification factor: `HasBoundedZigzagDamage` gives element-level
+      bounds for the SAME interval J, so dividing by `J.size` introduces no constant
 
     **Proof structure:**
-    The hypothesis `hzz : HasBoundedZigzagDamage` provides element-level bounds
-    with the `r → r+1` shift. This lemma converts those to wrongness ratios
-    (dividing by `J.size`) and applies the `8A` amplification factor twice
-    (once for zig, once for zag), giving `(8A)² = 64A²`.
-
-    The `3ε` error factor comes from:
-    - ε from zig exceptions (elements that didn't move correctly during zig)
-    - ε from zag exceptions (elements that didn't move correctly during zag)
-    - ε² from cross terms, bounded by ε since ε ≤ 1 -/
+    `HasBoundedZigzagDamage` gives:
+      `|E(v'', J, r)| ≤ |E(v, J, r+1)| + 2ε·|E(v, J, r-2)| + ε·|E(v, J, r-4)|`
+    Divide by `J.size`:
+      `tw(v'', r) ≤ tw(v, r+1) + 2ε·tw(v, r-2) + ε·tw(v, r-4)`
+    Consolidate using anti-monotonicity `tw(r-2) ≤ tw(r-4)`:
+      `tw(v'', r) ≤ tw(v, r+1) + 3ε·tw(v, r-4)` -/
 lemma zigzag_decreases_wrongness_v2
     {n t : ℕ}
     (v : Fin n → Bool)
     (zig_net zag_net : ComparatorNetwork n)
-    (ε : ℝ) (hε_nn : 0 ≤ ε) (hε_le : ε ≤ 1)
-    -- Individual bounded tree damage (each network satisfies Lemma 2 bounds)
-    (hzig : HasBoundedTreeDamage zig_net ε t)
-    (hzag : HasBoundedTreeDamage zag_net ε t)
-    -- Combined zigzag damage with r → r+1 shift
-    -- (follows from hzig + hzag + cherry alternation; see HasBoundedZigzagDamage)
+    (ε : ℝ) (hε_nn : 0 ≤ ε)
     (hzz : HasBoundedZigzagDamage zig_net zag_net ε t)
     (r : ℕ) (J : Interval n) :
     let v'' := zag_net.exec (zig_net.exec v)
     treeWrongnessV2 n t v'' J r ≤
-      64 * A ^ 2 * (treeWrongnessV2 n t v J (r + 1) +
-                    if r ≥ 5 then 3 * ε * treeWrongnessV2 n t v J (r - 4)
-                    else 3 * ε) := by
+      treeWrongnessV2 n t v J (r + 1) +
+        3 * ε * treeWrongnessV2 n t v J (if r ≥ 4 then r - 4 else 0) := by
   intro v''
-  -- Algebraic wrapper: HasBoundedZigzagDamage gives element-level bound with r → r+1
-  -- shift. Divide by J.size, consolidate ε error terms, scale by 64A² ≥ 1.
-  -- Same pattern as cherry_wrongness_after_nearsort_v2.
+  -- HasBoundedZigzagDamage gives element-level bound. Divide by J.size to get
+  -- wrongness, then consolidate 2ε·tw(r-2) + ε·tw(r-4) ≤ 3ε·tw(r-4) via
+  -- anti-monotonicity of treeWrongnessV2.
   sorry
 
 /-- **Lemma 4: Displacement from Wrongness** (AKS page 8-9, Equation 4)
