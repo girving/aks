@@ -12,7 +12,6 @@ use faer::prelude::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -50,6 +49,19 @@ fn fmt_bytes(b: u64) -> String {
     }
 }
 
+/// Build a flat neighbor array from the rotation map.
+/// Returns Vec<usize> of size n*d where neighbors[v*d + p] = neighbor of v at port p.
+fn build_neighbors(rot: &[i32], n: usize, d: usize) -> Vec<usize> {
+    let mut neighbors = vec![0usize; n * d];
+    for v in 0..n {
+        for p in 0..d {
+            let k = v * d + p;
+            neighbors[k] = rot[2 * k] as usize;
+        }
+    }
+    neighbors
+}
+
 /// Generate a random d-regular simple graph on n vertices.
 ///
 /// Uses the configuration model to get a d-regular multigraph, then
@@ -75,9 +87,13 @@ fn make_regular_graph(n: usize, d: usize, rng: &mut impl Rng) -> Vec<Vec<usize>>
     }
 
     // Edge switching: fix self-loops and multi-edges
+    // Pre-allocate seen sets to avoid repeated allocation
+    let mut seen: Vec<std::collections::HashSet<usize>> = (0..n)
+        .map(|_| std::collections::HashSet::with_capacity(d))
+        .collect();
     let max_iterations = num_edges * 100;
     for _ in 0..max_iterations {
-        let bad = find_bad_edge(&edges, n);
+        let bad = find_bad_edge(&edges, &mut seen);
         let bad_idx = match bad {
             Some(idx) => idx,
             None => break,
@@ -101,7 +117,7 @@ fn make_regular_graph(n: usize, d: usize, rng: &mut impl Rng) -> Vec<Vec<usize>>
     }
 
     assert!(
-        find_bad_edge(&edges, n).is_none(),
+        find_bad_edge(&edges, &mut seen).is_none(),
         "Edge switching failed to produce a simple graph"
     );
 
@@ -126,9 +142,14 @@ fn make_regular_graph(n: usize, d: usize, rng: &mut impl Rng) -> Vec<Vec<usize>>
 }
 
 /// Find the index of a bad edge (self-loop or multi-edge), or None if all are valid.
-fn find_bad_edge(edges: &[(usize, usize)], n: usize) -> Option<usize> {
-    use std::collections::HashSet;
-    let mut seen: Vec<HashSet<usize>> = vec![HashSet::new(); n];
+/// Takes pre-allocated seen sets; clears them before use.
+fn find_bad_edge(
+    edges: &[(usize, usize)],
+    seen: &mut [std::collections::HashSet<usize>],
+) -> Option<usize> {
+    for s in seen.iter_mut() {
+        s.clear();
+    }
 
     for (i, &(u, v)) in edges.iter().enumerate() {
         if u == v {
@@ -187,23 +208,24 @@ fn compute_j_coeff(c1: i32, c2: i32, d: usize, n: usize) -> i32 {
 }
 
 /// Compute M = c₁I - c₂B² + c₃J in-place into a faer Mat<f32>.
-fn compute_m_inplace(rot: &[i32], n: usize, d: usize, c1: i32, c2: i32, c3: i32) -> Mat<f32> {
-    let mut neighbors: Vec<Vec<usize>> = vec![vec![]; n];
-    for v in 0..n {
-        for i in 0..d {
-            let w = rot[2 * (v * d + i)] as usize;
-            neighbors[v].push(w);
-        }
-    }
-
+fn compute_m_inplace(
+    neighbors: &[usize],
+    n: usize,
+    d: usize,
+    c1: i32,
+    c2: i32,
+    c3: i32,
+) -> Mat<f32> {
     let mut m: Mat<f32> = Mat::zeros(n, n);
     let mut b2_row = vec![0i32; n];
     for v in 0..n {
         for x in b2_row.iter_mut() {
             *x = 0;
         }
-        for &u in &neighbors[v] {
-            for &w in &neighbors[u] {
+        for p in 0..d {
+            let u = neighbors[v * d + p];
+            for q in 0..d {
+                let w = neighbors[u * d + q];
                 b2_row[w] += 1;
             }
         }
@@ -277,7 +299,7 @@ fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
 /// updated for all v that share a 2-hop path with i (via sparse B² structure).
 fn refine_certificate(
     packed: &mut [i32],
-    rot: &[i32],
+    neighbors: &[usize],
     n: usize,
     d: usize,
     c1: i32,
@@ -286,20 +308,13 @@ fn refine_certificate(
 ) {
     let m_diag = c1 as i64 - c2 as i64 * d as i64 + c3 as i64;
 
-    let mut neighbors: Vec<Vec<usize>> = vec![vec![]; n];
-    for v in 0..n {
-        for p in 0..d {
-            let k = v * d + p;
-            let w = rot[2 * k] as usize;
-            neighbors[v].push(w);
-        }
-    }
-
     let mut z_col = vec![0i64; n];
     let mut bz = vec![0i64; n];
     let mut p_col = vec![0i64; n];
     // Scratch for computing B² column: b2_col[v] = B²[v,i] for current correction target i
     let mut b2_col = vec![0i32; n];
+    // Pre-allocate touched list for B² neighbors
+    let mut touched = Vec::with_capacity(d * d);
 
     for j in 0..n {
         if j % 2000 == 0 && j > 0 {
@@ -317,16 +332,18 @@ fn refine_certificate(
         // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
         for v in 0..n {
             let mut acc: i64 = 0;
-            for &w in &neighbors[v] {
-                acc += z_col[w];
+            let base = v * d;
+            for p in 0..d {
+                acc += z_col[neighbors[base + p]];
             }
             bz[v] = acc;
         }
         let col_sum: i64 = z_col.iter().sum();
         for v in 0..n {
             let mut b2z_v: i64 = 0;
-            for &w in &neighbors[v] {
-                b2z_v += bz[w];
+            let base = v * d;
+            for p in 0..d {
+                b2z_v += bz[neighbors[base + p]];
             }
             p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
         }
@@ -352,9 +369,13 @@ fn refine_certificate(
             running_delta_sum += d64;
 
             // Compute B²[v,i] for all v via 2-hop neighbors of i
-            let mut touched = Vec::with_capacity(d * d);
-            for &w in &neighbors[i] {
-                for &v in &neighbors[w] {
+            touched.clear();
+            let base_i = i * d;
+            for p in 0..d {
+                let w = neighbors[base_i + p];
+                let base_w = w * d;
+                for q in 0..d {
+                    let v = neighbors[base_w + q];
                     if b2_col[v] == 0 {
                         touched.push(v);
                     }
@@ -367,7 +388,7 @@ fn refine_certificate(
             p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
 
             // Update p_col[v] for B² neighbors (v ≠ i): -c₂ * B²[v,i] * delta
-            for v in touched {
+            for &v in &touched {
                 if v != i {
                     p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
                 }
@@ -379,7 +400,7 @@ fn refine_certificate(
 
 /// Verify the certificate using the same logic as the Lean checker.
 fn verify_certificate(
-    rot: &[i32],
+    neighbors: &[usize],
     z_packed: &[i32],
     n: usize,
     d: usize,
@@ -390,31 +411,34 @@ fn verify_certificate(
     let mut eps_max: i64 = 0;
     let mut min_diag: i64 = i64::MAX;
 
+    // Pre-allocate scratch buffers outside the column loop
+    let mut z_col = vec![0i64; n];
+    let mut bz = vec![0i64; n];
+    let mut b2z = vec![0i64; n];
+
     for j in 0..n {
         let col_start = j * (j + 1) / 2;
-        let mut z_col = vec![0i64; n];
+        for k in 0..n {
+            z_col[k] = 0;
+        }
         for k in 0..=j {
             z_col[k] = z_packed[col_start + k] as i64;
         }
 
-        let mut bz = vec![0i64; n];
         for v in 0..n {
             let mut acc: i64 = 0;
+            let base = v * d;
             for p in 0..d {
-                let k = v * d + p;
-                let w = rot[2 * k] as usize;
-                acc += z_col[w];
+                acc += z_col[neighbors[base + p]];
             }
             bz[v] = acc;
         }
 
-        let mut b2z = vec![0i64; n];
         for v in 0..n {
             let mut acc: i64 = 0;
+            let base = v * d;
             for p in 0..d {
-                let k = v * d + p;
-                let w = rot[2 * k] as usize;
-                acc += bz[w];
+                acc += bz[neighbors[base + p]];
             }
             b2z[v] = acc;
         }
@@ -447,6 +471,12 @@ fn verify_certificate(
     };
 
     (passes, min_diag, eps_max, margin)
+}
+
+/// Write a slice of i32 values as little-endian bytes in a single bulk write.
+fn write_i32_bulk(path: &std::path::Path, data: &[i32]) {
+    let bytes: &[u8] = bytemuck::cast_slice(data);
+    fs::write(path, bytes).unwrap_or_else(|e| panic!("Cannot write {}: {}", path.display(), e));
 }
 
 fn main() {
@@ -507,10 +537,13 @@ fn main() {
         fmt_duration(t0.elapsed())
     );
 
+    // Build flat neighbor array (shared across all phases)
+    let neighbors = build_neighbors(&rot, n, d);
+
     // Compute M = c₁I - c₂B² + c₃J (single n×n f32 allocation)
     eprintln!("Computing M ({} f32)...", fmt_bytes(n as u64 * n as u64 * 4));
     let t0 = Instant::now();
-    let mut m = compute_m_inplace(&rot, n, d, c1, c2, c3);
+    let mut m = compute_m_inplace(&neighbors, n, d, c1, c2, c3);
     eprintln!("  M[0,0] = {} [{}]", m[(0, 0)], fmt_duration(t0.elapsed()));
 
     // Cholesky factorization in-place (f32)
@@ -567,16 +600,16 @@ fn main() {
     // Post-process: greedy Gershgorin correction (two passes for c₃ cross-talk convergence)
     let t0 = Instant::now();
     eprintln!("Refining certificate (pass 1)...");
-    refine_certificate(&mut z_packed, &rot, n, d, c1, c2, c3);
+    refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
     eprintln!("Refining certificate (pass 2)...");
-    refine_certificate(&mut z_packed, &rot, n, d, c1, c2, c3);
+    refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
     eprintln!("  Refinement done [{}]", fmt_duration(t0.elapsed()));
 
     // Verify
     eprintln!("Verifying certificate...");
     let t0 = Instant::now();
     let (passes, min_diag, eps_max, margin) =
-        verify_certificate(&rot, &z_packed, n, d, c1, c2, c3);
+        verify_certificate(&neighbors, &z_packed, n, d, c1, c2, c3);
     eprintln!("  min P[j,j]: {min_diag}");
     eprintln!("  max |P[i,j]| upper-tri: {eps_max}");
     eprintln!(
@@ -594,17 +627,12 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Write binary data files
+    // Write binary data files (bulk I/O)
     fs::create_dir_all(&output_dir).expect("Cannot create output dir");
 
     let rot_path = output_dir.join("rot_map.bin");
     eprintln!("Writing rotation map to {}...", rot_path.display());
-    {
-        let mut out = fs::File::create(&rot_path).expect("Cannot create rot_map.bin");
-        for &v in &rot {
-            out.write_all(&v.to_le_bytes()).unwrap();
-        }
-    }
+    write_i32_bulk(&rot_path, &rot);
     eprintln!(
         "  {} ({} entries)",
         fmt_bytes(rot.len() as u64 * 4),
@@ -613,12 +641,7 @@ fn main() {
 
     let cert_path = output_dir.join("cert_z.bin");
     eprintln!("Writing certificate to {}...", cert_path.display());
-    {
-        let mut out = fs::File::create(&cert_path).expect("Cannot create cert_z.bin");
-        for &v in &z_packed {
-            out.write_all(&v.to_le_bytes()).unwrap();
-        }
-    }
+    write_i32_bulk(&cert_path, &z_packed);
     eprintln!(
         "  {} ({} entries)",
         fmt_bytes(z_packed.len() as u64 * 4),
