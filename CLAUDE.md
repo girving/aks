@@ -159,6 +159,11 @@ Pure operator theory, no graph imports:
 2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
 3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
 
+### `AKS/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
+Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `RegularGraph.lean`:
+1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
+2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
+
 ### `AKS/ZigZag.lean` — Expander Families (~115 lines)
 Assembles the spectral bound and builds the iterated construction:
 1. **Spectral composition theorem** — `zigzag_spectral_bound` (assembles sublemmas)
@@ -170,10 +175,12 @@ Assembles the spectral bound and builds the iterated construction:
 Fin.lean → RegularGraph.lean → Square.lean ──────────────→ ZigZag.lean
                               → CompleteGraph.lean              ↓
                               → Mixing.lean               AKS.lean
+                              → WalkBound.lean ──→ CertificateBridge.lean
                               → ZigZagOperators.lean ──→      ↑
                                   ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean ─→ Halver.lean
            Random.lean ────────────────────────────↗          ↑
            RVWBound.lean ─────────────────────────↗  RegularGraph.lean
+           Certificate.lean ──→ CertificateBridge.lean
 ```
 
 ## Style
@@ -335,14 +342,12 @@ No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGr
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`). **Status doc:** `scripts/RVW_QUADRATIC_PROOF_STATUS.md` — documents LP infeasibility of nlinarith, numerical analysis, and viable proof paths. Key finding: scalar multiplier nlinarith is PROVEN infeasible (LP, twice); need mathematical proof via variable elimination + case analysis or full SOS Positivstellensatz.
 
-**Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
-
-**Next task: Reformulate TreeSorting.lean** — Several lemma statements are mathematically incorrect (e.g., `exception_distance_bound` is provably false, `halver_implies_nearsort_property` conflates aggregate balance with positional damage). Full plan with code snippets: [`docs/plan-treesorting-reformulation.md`](docs/plan-treesorting-reformulation.md). Key idea: introduce `HasBoundedDamage` as the interface between halver world and tree-sorting world.
+**Substantial (months):** TreeSorting.lean sorrys (4). **Correctly stated:** `halvers_give_bounded_nearsort` (bridge: halver → bounded damage), `aks_tree_sorting` (top-level assembly). **Needs reformulation:** `register_reassignment_increases_wrongness` (Lemma 1 — `elementsAtDistance` unused `t` makes time evolution vacuous), `zigzag_decreases_wrongness` (Lemma 3 — needs tree alternation hypotheses). **Root cause:** `elementsAtDistance` doesn't use its `t` parameter, so the time-dependent interval tree structure needed for Lemma 1 and the induction in the main theorem is unformalized. Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md). **Done:** reformulation (HasBoundedDamage), `cherry_wrongness_after_nearsort` (proved), `zig_step_bounded_increase` (proved), `displacement_from_wrongness` (proved). **Deleted:** `exception_distance_bound`, `halver_implies_nearsort_property`, `fringe_amplification_bound`, `epsilonNearsort_correct` (stub definition).
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
 ### Base expander certificate pipeline (implemented)
 
-Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `CertificateBridge.lean` (sorry'd bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for the bridge theorem proof plan.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `WalkBound.lean` (abstract theory) → `CertificateBridge.lean` (bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for background.
 
-**Bridge proof plan** (`docs/bridge-proof-plan.md`): Factor into three lemmas: (1) certificate → walk bound on mean-zero vectors [sorry'd, needs checker augmentation], (2) walk bound → `spectralGap` bound via `opNorm_le_bound` [provable, LOW risk], (3) coefficient arithmetic via `√` monotonicity [provable, LOW risk]. Key insight: avoid eigenvalue decomposition entirely — use quadratic forms on `1⊥` where `J` vanishes.
+**Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
