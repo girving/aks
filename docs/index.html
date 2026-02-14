@@ -6,7 +6,7 @@
 <title>AKS Sorting Network — Proof Dependency Graph</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; touch-action: none; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
 #controls { position: fixed; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; }
 #controls button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 #controls button:hover { background: #30363d; }
@@ -29,7 +29,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #tooltip .tt-sig { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; color: #a5d6ff; background: #0d1117; padding: 6px 8px; border-radius: 4px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
 #tooltip .tt-desc { color: #c9d1d9; line-height: 1.4; }
 #tooltip .tt-diff { margin-top: 4px; font-size: 11px; color: #7d8590; font-style: italic; }
-svg { width: 100vw; height: 100vh; }
+#graph { width: 100vw; height: 100vh; touch-action: none; }
 .group-rect { rx: 12; ry: 12; }
 .group-label { font-size: 11px; font-weight: 600; fill: #484f58; pointer-events: none; }
 .link { fill: none; }
@@ -130,7 +130,7 @@ svg { width: 100vw; height: 100vh; }
   <span id="liveBadge">LIVE</span>
 </div>
 
-<svg></svg>
+<svg id="graph"></svg>
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
@@ -705,7 +705,7 @@ layers.forEach((nodesInLayer, d) => {
 });
 
 // ── D3 setup ──
-const svg = d3.select("svg");
+const svg = d3.select("#graph");
 const g = svg.append("g");
 
 // Arrow marker
@@ -728,7 +728,7 @@ const zoom = d3.zoom()
   .on("zoom", (e) => g.attr("transform", e.transform));
 svg.call(zoom);
 
-function resetZoom() {
+function resetZoom(instant) {
   const graphH = TOP_PAD + (maxDepth + 1) * LAYER_H + 40;
   const scaleX = W / (GRAPH_W + 80);
   const scaleY = (H - 20) / graphH;
@@ -737,8 +737,13 @@ function resetZoom() {
   // so nodes are visible and let the user pan to explore.
   if (W <= 600) s = Math.max(s, 0.7);
   const tx = (W - GRAPH_W * s) / 2;
-  const ty = W <= 600 ? -graphH * s * 0.15 : 10; // start a bit higher on mobile so top-level thms visible
-  svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(s));
+  const ty = W <= 600 ? -graphH * s * 0.15 : 10;
+  const t = d3.zoomIdentity.translate(tx, ty).scale(s);
+  if (instant) {
+    svg.call(zoom.transform, t);
+  } else {
+    svg.transition().duration(500).call(zoom.transform, t);
+  }
 }
 
 let labelsVisible = true;
@@ -777,6 +782,8 @@ simulation.on("end", () => {
     });
   });
   simulationDone = true;
+  // Re-fit after simulation settles (positions are now final)
+  resetZoom(false);
 });
 
 function isNodeVisible(id) {
@@ -946,8 +953,8 @@ nodeSel.on("mouseover.highlight", (e, d) => {
   }
 });
 
-// ── Initial zoom to fit ──
-setTimeout(() => resetZoom(), 100);
+// ── Initial zoom to fit (instant, no transition) ──
+setTimeout(() => resetZoom(true), 100);
 
 // ═══════════════════════════════════════════════════════
 // TIMELINE ANIMATION — loads history.json, scrubs through proof history
