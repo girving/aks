@@ -46,19 +46,21 @@ svg { width: 100vw; height: 100vh; }
 
 /* ── Mobile / narrow screens ── */
 @media (max-width: 600px) {
-  #title { top: 8px; right: 8px; }
-  #title h1 { font-size: 14px; }
-  #title p { font-size: 10px; }
-
+  /* Row 1: buttons */
   #controls { top: 8px; left: 8px; gap: 4px; }
   #controls button { padding: 8px 10px; font-size: 12px; min-height: 36px; }
 
-  /* Legend: collapse behind a toggle button */
-  #legend { display: none; bottom: auto; top: 48px; left: 8px; padding: 10px 12px; font-size: 11px; }
+  /* Row 2: title below buttons, subtitle hidden */
+  #title { top: 50px; left: 8px; right: auto; text-align: left; }
+  #title h1 { font-size: 14px; }
+  #title p { display: none; }
+
+  /* Legend: collapse behind a toggle button, below title */
+  #legend { display: none; bottom: auto; top: 76px; left: 8px; padding: 10px 12px; font-size: 11px; }
   #legend.open { display: block; }
   #legend-toggle { display: block; }
 
-  /* Stats: compact inline at bottom-right */
+  /* Stats: compact at bottom-right */
   #stats { bottom: 8px; right: 8px; padding: 8px 10px; font-size: 11px; }
   #stats .num { font-size: 16px; }
 
@@ -692,9 +694,12 @@ function resetZoom() {
   const graphH = TOP_PAD + (maxDepth + 1) * LAYER_H + 40;
   const scaleX = W / (GRAPH_W + 80);
   const scaleY = (H - 20) / graphH;
-  const s = Math.min(scaleX, scaleY, 1.1) * 0.9;
+  let s = Math.min(scaleX, scaleY, 1.1) * 0.9;
+  // On mobile the fit-all scale makes nodes sub-pixel; enforce a minimum
+  // so nodes are visible and let the user pan to explore.
+  if (W <= 600) s = Math.max(s, 0.7);
   const tx = (W - GRAPH_W * s) / 2;
-  const ty = 10;
+  const ty = W <= 600 ? -graphH * s * 0.15 : 10; // start a bit higher on mobile so top-level thms visible
   svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(s));
 }
 
