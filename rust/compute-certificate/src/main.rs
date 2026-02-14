@@ -49,6 +49,16 @@ fn fmt_bytes(b: u64) -> String {
     }
 }
 
+/// Choose parallelism level based on matrix size.
+/// Par::rayon(0) has ~90ms overhead at n=1728 but massive wins at n=20736+.
+fn par_for_n(n: usize) -> Par {
+    if n >= 4000 {
+        Par::rayon(0)
+    } else {
+        Par::Seq
+    }
+}
+
 /// Build a flat neighbor array from the rotation map.
 /// Returns Vec<usize> of size n*d where neighbors[v*d + p] = neighbor of v at port p.
 fn build_neighbors(rot: &[i32], n: usize, d: usize) -> Vec<usize> {
@@ -239,54 +249,65 @@ fn compute_m_inplace(
 
 /// Blocked TRSM + direct packing: compute Z_unit columns via L^{-T} and pack to i32.
 ///
-/// Instead of allocating a full n×n matrix for L^{-T}, processes columns in
-/// blocks of `block_size`. For each block, allocates n × block_size f32,
-/// solves L^T · B = I_block via BLAS TRSM, scales to Z_unit, and packs to i32.
+/// Processes columns in blocks of `block_size`. Blocks are independent (each reads
+/// shared L and writes to disjoint packed regions), so they run in parallel via rayon.
 ///
-/// Peak scratch: n × block_size × 4 bytes (~20 MB for n=20736, block_size=256).
+/// Peak scratch: n × block_size × num_threads × 4 bytes.
 fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
+    use rayon::prelude::*;
+
     let s = scale as f32;
     let total = n * (n + 1) / 2;
     let mut packed = vec![0i32; total];
-    let mut z_max_offdiag: f32 = 0.0;
-
     let block_size = 256.min(n);
     let lt = m.as_ref().transpose(); // zero-cost view of L^T (upper triangular)
 
-    for j_start in (0..n).step_by(block_size) {
-        let j_end = (j_start + block_size).min(n);
-        let bs = j_end - j_start;
+    // Safety: each block writes to disjoint regions of packed (columns don't overlap).
+    // We use a raw pointer to allow parallel mutable access.
+    let packed_ptr = packed.as_mut_ptr() as usize; // usize is Send+Sync
 
-        if j_start > 0 && j_start % (block_size * 10) == 0 {
-            eprintln!("  extracting columns {}/{}...", j_start, n);
-        }
+    let block_starts: Vec<usize> = (0..n).step_by(block_size).collect();
 
-        // Fill block with columns j_start..j_end of the identity
-        let mut block: Mat<f32> = Mat::zeros(n, bs);
-        for k in 0..bs {
-            block[(j_start + k, k)] = 1.0;
-        }
+    let z_max_offdiag: f32 = block_starts
+        .par_iter()
+        .map(|&j_start| {
+            let j_end = (j_start + block_size).min(n);
+            let bs = j_end - j_start;
+            let mut local_z_max: f32 = 0.0;
 
-        // Solve L^T · block = I_block → block now holds L^{-T}[:,j_start..j_end]
-        triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::Seq);
-
-        // Scale and pack: Z_unit[:,j] = L^{-T}[:,j] * L[j,j], then round to i32
-        for k in 0..bs {
-            let j = j_start + k;
-            let l_jj = m[(j, j)];
-            let col_start = j * (j + 1) / 2;
-
-            for i in 0..j {
-                let z_val = block[(i, k)] * l_jj;
-                let abs_z = z_val.abs();
-                if abs_z > z_max_offdiag {
-                    z_max_offdiag = abs_z;
-                }
-                packed[col_start + i] = (z_val * s).round() as i32;
+            let mut block: Mat<f32> = Mat::zeros(n, bs);
+            for k in 0..bs {
+                block[(j_start + k, k)] = 1.0;
             }
-            packed[col_start + j] = scale; // diagonal = 1
-        }
-    }
+
+            // Blocks run in parallel; use Seq within each to avoid over-subscription.
+            triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::Seq);
+
+            for k in 0..bs {
+                let j = j_start + k;
+                let l_jj = m[(j, j)];
+                let col_start = j * (j + 1) / 2;
+
+                for i in 0..j {
+                    let z_val = block[(i, k)] * l_jj;
+                    let abs_z = z_val.abs();
+                    if abs_z > local_z_max {
+                        local_z_max = abs_z;
+                    }
+                    // SAFETY: Each column j writes to packed[col_start+i] for i < j.
+                    // Column ranges are non-overlapping, and blocks cover disjoint columns.
+                    unsafe {
+                        *(packed_ptr as *mut i32).add(col_start + i) = (z_val * s).round() as i32;
+                    }
+                }
+                unsafe {
+                    *(packed_ptr as *mut i32).add(col_start + j) = scale;
+                }
+            }
+
+            local_z_max
+        })
+        .reduce(|| 0.0f32, |a, b| a.max(b));
 
     (packed, z_max_offdiag)
 }
@@ -566,7 +587,7 @@ fn main() {
     let t0 = Instant::now();
     {
         use faer::dyn_stack::{MemBuffer, MemStack};
-        let par = Par::Seq;
+        let par = par_for_n(n);
         let params = Default::default();
         let scratch_req = llt::factor::cholesky_in_place_scratch::<f32>(n, par, params);
         let mut buf = MemBuffer::new(scratch_req);
