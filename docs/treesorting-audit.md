@@ -1,7 +1,7 @@
 # TreeSorting.lean Audit — Statement Correctness and Proof Path
 
 **Date:** 2026-02-14
-**Sorry count:** 6 (5 V1 + 1 V2 helper; 3 V2 lemmas proved or correctly stated)
+**Sorry count:** 6 (2 V1 sorry'd kept for reference, 4 V2 sorry'd; 5 V2 lemmas proved or correctly stated)
 
 ## Summary
 
@@ -12,7 +12,9 @@ tree-distance at level `t`.
 
 **Phase 1 (DONE):** V2 definitions + algebraic lemma re-proofs.
 **Phase 2 (DONE):** V2 reformulations of Lemmas 1 and 3.
-**Phase 3 (TODO):** Connect V2 lemmas to `aks_tree_sorting`.
+**Phase 2.5 (DONE):** Statement correctness audit — fixed quantifier bug in `aks_tree_sorting`,
+  updated `halvers_give_bounded_nearsort` to V2 interface.
+**Phase 3 (TODO):** Fill V2 sorries, connect V2 lemmas to `aks_tree_sorting`.
 
 ## The fundamental issue: time-independent distance
 
@@ -36,12 +38,14 @@ is **never used in the body**. This means:
 | `HasBoundedZigzagDamage zig zag ε t` | Combined zigzag damage with r → r+1 shift |
 | `treeWrongnessV2 n t v J r` | Wrongness using `elementsAtTreeDist` |
 
-## Per-sorry assessment (V1)
+## Per-sorry assessment
 
-### 1. `halvers_give_bounded_nearsort` — CORRECT ✅ (sorry)
+### 1. `halvers_give_bounded_nearsort` — CORRECT ✅ (sorry, updated to V2)
 
-Existential claim: given an ε₁-halver, there exists a network with bounded damage.
-**Risk:** MEDIUM.
+Existential claim: given an ε₁-halver, there exists a network with bounded tree-damage
+(`HasBoundedTreeDamage`) at any tree level `t`.
+**Updated:** Now produces V2 `HasBoundedTreeDamage` (was V1 `HasBoundedDamage`).
+**Risk:** MEDIUM — recursive halving is standard, but V2 interface needs tree-level reasoning.
 
 ### 2. `register_reassignment_increases_wrongness` — WRONG ❌ (sorry, kept for reference)
 
@@ -56,24 +60,29 @@ No fringe amplification (same interval J on both sides). Bound:
 `tw(v'', r) ≤ tw(v, r+1) + 3ε·tw(v, r-4)` where `3ε = 2ε + ε` from consolidating
 `HasBoundedZigzagDamage`'s `2ε·tw(r-2) + ε·tw(r-4)` via anti-monotonicity.
 
-### 4. `aks_tree_sorting` — CORRECT ✅ (sorry)
+### 4. `aks_tree_sorting` — FIXED ✅ (sorry)
 
-Needs V2 lemma chain to be complete.
+**Fixed:** Was `∀ v, ∃ net` (vacuously true — can always build a network for one input).
+Now returns iteration count: `∃ k, k ≤ 100 * Nat.log 2 n ∧ Monotone (iterate ... k v)`.
+This matches the `AKSNetwork.lean` call site which needs the same network for all inputs
+(via the 0-1 principle: the halver is fixed, only the iteration count matters).
 
 ## V2 sorry status
 
 | Lemma | Status | Notes |
 |---|---|---|
-| `positionTreeDist_succ_le` | sorry | Helper: tree dist increases ≤ 2 when refining t → t+1 |
+| `positionTreeDist_succ_le` | sorry | Helper: tree dist increases ≤ 2 when refining t → t+1. Correct, tight. |
+| `halvers_give_bounded_nearsort` | sorry | Bridge: ε₁-halver → `HasBoundedTreeDamage` at any tree level `t` |
 | `zigzag_decreases_wrongness_v2` | sorry | Divide `HasBoundedZigzagDamage` by `J.size`, consolidate error terms |
+| `aks_tree_sorting` | sorry | Main assembly: induction on cycles, composing Lemmas 1-4 |
 
 ## V2 dependency chain
 
 ```
-aks_tree_sorting
-├── halvers_give_bounded_nearsort ← correct, sorry (V1)
+aks_tree_sorting (iteration-count formulation)
+├── halvers_give_bounded_nearsort ← sorry (V2: HasBoundedTreeDamage)
 ├── register_reassignment_increases_wrongness_v2 ← PROVED ✅
-│   └── positionTreeDist_succ_le ← sorry (helper)
+│   └── positionTreeDist_succ_le ← sorry (helper, correct)
 ├── zigzag_decreases_wrongness_v2 ← correctly stated, sorry (algebraic)
 │   └── HasBoundedZigzagDamage ← definition (captures r → r+1 shift)
 ├── zig_step_bounded_increase_v2 ← PROVED ✅
@@ -82,7 +91,7 @@ aks_tree_sorting
 └── tree_wrongness_implies_sorted ← PROVED ✅ (V1)
 ```
 
-**Sound if all V2 sorries filled?** YES — all V2 statements are correct.
+**Sound if all V2 sorries filled?** YES — all V2 statements have been audited for correctness.
 
 ## What's proved (V1 + V2)
 
@@ -100,7 +109,7 @@ aks_tree_sorting
 
 ## Path forward
 
-### Phase 3 (TODO): Connect V2 lemmas to `aks_tree_sorting`
+### Phase 3 (TODO): Fill V2 sorries and connect to `aks_tree_sorting`
 
 The main theorem needs to compose:
 1. `register_reassignment_increases_wrongness_v2`: time evolution t → t+1, distance shift -2
