@@ -8,3 +8,4 @@ bytemuck = { version = "1", features = ["derive"] }
 faer = "0.24.0"
 rand = "0.8"
 rand_chacha = "0.3"
+rayon = "1"
