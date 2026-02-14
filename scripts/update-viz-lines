@@ -17,7 +17,7 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INDEX_HTML = os.path.join(PROJECT_ROOT, "docs", "index.html")
 
-# Patterns that introduce a named declaration in Lean 4
+# Patterns that introduce a named declaration in Lean
 DECL_KEYWORDS = [
     "theorem", "lemma", "def", "noncomputable def", "private def",
     "private theorem", "private lemma", "structure", "axiom",

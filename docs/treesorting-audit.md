@@ -51,8 +51,10 @@ Uses single `v`, `J' ⊆ J`, distance shift 2, parameterized constant C.
 ### 3. `zigzag_decreases_wrongness` — INCOMPLETE ⚠️ (sorry, kept for reference)
 
 **V2 replacement:** `zigzag_decreases_wrongness_v2` — sorry, **correctly stated** ✅
-Takes two networks (zig_net, zag_net), uses `HasBoundedZigzagDamage` for the r → r+1
-shift from cherry alternation. Algebraic proof (routine, same pattern as other wrappers).
+Takes `HasBoundedZigzagDamage` (r → r+1 shift from cherry alternation).
+No fringe amplification (same interval J on both sides). Bound:
+`tw(v'', r) ≤ tw(v, r+1) + 3ε·tw(v, r-4)` where `3ε = 2ε + ε` from consolidating
+`HasBoundedZigzagDamage`'s `2ε·tw(r-2) + ε·tw(r-4)` via anti-monotonicity.
 
 ### 4. `aks_tree_sorting` — CORRECT ✅ (sorry)
 
@@ -63,7 +65,7 @@ Needs V2 lemma chain to be complete.
 | Lemma | Status | Notes |
 |---|---|---|
 | `positionTreeDist_succ_le` | sorry | Helper: tree dist increases ≤ 2 when refining t → t+1 |
-| `zigzag_decreases_wrongness_v2` | sorry | Algebraic wrapper (routine, same pattern as V2 Lemma 2) |
+| `zigzag_decreases_wrongness_v2` | sorry | Divide `HasBoundedZigzagDamage` by `J.size`, consolidate error terms |
 
 ## V2 dependency chain
 

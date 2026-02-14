@@ -89,7 +89,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 <div id="title">
   <h1>AKS Sorting Network</h1>
-  <p>Lean 4 Proof Dependency Graph</p>
+  <p>Lean Proof Dependency Graph</p>
 </div>
 
 <div id="legend">
@@ -328,7 +328,7 @@ const PROOF_DATA = {
       desc: "Base expander has spectral gap ≤ 5/9 ≈ 0.556 (just above Alon-Boppana bound)." },
 
     // ── ZigZag.lean ──
-    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 31, status: "proved", kind: "theorem",
+    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 30, status: "proved", kind: "theorem",
       sig: "zigzag_spectral_bound : spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂",
       desc: "Zig-zag spectral composition: assembles all sublemmas into the final bound. Degenerate case (n₁·d₁=0) handled via rvwBound ≥ 0; main case chains through rvw_operator_norm_bound." },
     { id: "zigzagFamily", file: "AKS/ZigZag.lean", line: 124, status: "definition", kind: "def",
@@ -337,7 +337,7 @@ const PROOF_DATA = {
     { id: "zigzagFamily_gap", file: "AKS/ZigZag.lean", line: 138, status: "proved", kind: "theorem",
       sig: "zigzagFamily_gap : spectralGap (zigzagFamily H₀ k).2 ≤ c",
       desc: "Every graph in the zig-zag family has spectral gap ≤ c. Proved by induction using squaring + zig-zag bounds." },
-    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 166, status: "sorry", kind: "theorem",
+    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 168, status: "sorry", kind: "theorem",
       sig: "explicit_expanders_exist_zigzag :\n  ∀ n > 0, ∃ G : RegularGraph n (D*D), spectralGap G ≤ c",
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
@@ -346,41 +346,58 @@ const PROOF_DATA = {
       sig: "zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
       desc: "Parameterized AKS theorem: expander family with gap β < 1/2 → O(n log n) sorting networks. Even case fully proved; odd case sorry'd." },
 
+    // ── AKS/Main.lean — top-level assembly via iterated squaring ──
+    { id: "squareIter", file: "AKS/Main.lean", line: 35, status: "definition", kind: "def",
+      sig: "RegularGraph.squareIter (G : RegularGraph n d) :\n  (k : ℕ) → RegularGraph n (d ^ (2 ^ k))",
+      desc: "Iterated graph squaring: square k times, yielding d^(2^k)-regular graph on n vertices." },
+    { id: "spectralGap_squareIter", file: "AKS/Main.lean", line: 41, status: "proved", kind: "theorem",
+      sig: "spectralGap_squareIter :\n  spectralGap (G.squareIter k) = (spectralGap G) ^ (2 ^ k)",
+      desc: "Spectral gap of k-th iterated square is the 2^k-th power of the original gap." },
+    { id: "exists_pow_two_pow_lt", file: "AKS/Main.lean", line: 54, status: "proved", kind: "theorem",
+      sig: "exists_pow_two_pow_lt : 0 ≤ c → c < 1 → 0 < t → ∃ k, c ^ (2^k) < t",
+      desc: "Doubly-exponential convergence: c^(2^k) eventually drops below any positive target." },
+    { id: "expander_family_small_gap", file: "AKS/Main.lean", line: 66, status: "proved", kind: "theorem",
+      sig: "expander_family_small_gap :\n  ... → 0 < c → c < 1 → 0 < β →\n  ∃ d, ∀ n > 0, ∃ G : RegularGraph n d, spectralGap G ≤ β",
+      desc: "Zig-zag + iterated squaring gives constant-degree expander family with arbitrarily small spectral gap." },
+    { id: "aks_sorting_networks_exist", file: "AKS/Main.lean", line: 106, status: "proved", kind: "theorem",
+      sig: "aks_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "AKS (1983): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + tree sorting." },
+
     // ── TreeSorting.lean ──
     { id: "TreeNode", file: "AKS/TreeSorting.lean", line: 105, status: "definition", kind: "structure",
       sig: "structure TreeNode where\n  level : ℕ\n  index : ℕ",
       desc: "Position (level, index) in binary tree for register assignment." },
-    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 1594, status: "definition", kind: "def",
+    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 1602, status: "definition", kind: "def",
       sig: "treeWrongness (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
       desc: "Tree-based wrongness measure Δᵣ(J): proportion of elements at tree-distance ≥ r from their target." },
-    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 2578, status: "proved", kind: "lemma",
+    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 2586, status: "proved", kind: "lemma",
       sig: "halver_preserves_monotone : IsEpsilonHalver net ε → Monotone w → Monotone (net.exec w)",
       desc: "Applying an ε-halver to a monotone sequence preserves monotonicity." },
-    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1463, status: "proved", kind: "lemma",
+    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1471, status: "proved", kind: "lemma",
       sig: "monotone_bool_zeros_then_ones : Monotone w →\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w i = false) ∧ (∀ i, k ≤ i → w i = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: threshold detected via Nat.find.", difficulty: "days" },
-    { id: "halver_balances_ones", file: "AKS/TreeSorting.lean", line: 2101, status: "proved", kind: "lemma",
+    { id: "halver_balances_ones", file: "AKS/TreeSorting.lean", line: 2109, status: "proved", kind: "lemma",
       sig: "halver_balances_ones : IsEpsilonHalver net ε →\n  onesInTop ≤ totalOnes / 2 + ε * (n / 2)",
       desc: "Direct restatement of IsEpsilonHalver: ones in top half bounded after halving." },
     { id: "countOnes_le", file: "AKS/TreeSorting.lean", line: 936, status: "proved", kind: "lemma",
       sig: "countOnes_le : countOnes v ≤ n",
       desc: "Count of ones bounded by total elements (filter cardinality)." },
-    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1420, status: "proved", kind: "lemma",
+    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1428, status: "proved", kind: "lemma",
       sig: "countOnes_split : countOnes v =\n  countOnesInRange v 0 (n/2) + countOnesInRange v (n/2) n",
       desc: "Partition count by ranges using Finset.card_union_of_disjoint.", difficulty: "days" },
-    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 2235, status: "proved", kind: "lemma",
+    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 2243, status: "proved", kind: "lemma",
       sig: "comparator_displacement_bound :\n  #{i | c.apply v i ≠ v i} ≤ 2",
       desc: "Comparators change at most 2 positions (subset reasoning).", difficulty: "days" },
-    { id: "halver_bounds_top_excess", file: "AKS/TreeSorting.lean", line: 2145, status: "proved", kind: "lemma",
+    { id: "halver_bounds_top_excess", file: "AKS/TreeSorting.lean", line: 2153, status: "proved", kind: "lemma",
       sig: "halver_bounds_top_excess :\n  countOnesInRange (net.exec v) 0 (n/2) ≤ countOnes (net.exec v) / 2 + ε * (n / 2)",
       desc: "Output top half ones bounded (filter equivalence).", difficulty: "days" },
     { id: "HasBoundedDamage", file: "AKS/TreeSorting.lean", line: 1005, status: "definition", kind: "def",
       sig: "HasBoundedDamage (net : ComparatorNetwork n) (ε : ℝ) : Prop",
       desc: "Bounded-damage property: network increases elements at distance ≥ r by at most ε · (elements at distance ≥ r-2). Key interface between halver world and tree-sorting world.", difficulty: "done" },
-    { id: "halvers_give_bounded_nearsort", file: "AKS/TreeSorting.lean", line: 1195, status: "sorry", kind: "lemma",
+    { id: "halvers_give_bounded_nearsort", file: "AKS/TreeSorting.lean", line: 1203, status: "sorry", kind: "lemma",
       sig: "halvers_give_bounded_nearsort : IsEpsilonHalver halver ε₁ → ε₁ ≤ ε/(2·(log₂ n+1)) →\n  ∃ net, HasBoundedDamage net ε ∧ net.size ≤ halver.size · (log₂ n+1)",
       desc: "Bridge: ε₁-halver → composite network with bounded damage. Encapsulates recursive ε-nearsort construction (AKS Section 4).", difficulty: "weeks" },
-    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 2756, status: "proved", kind: "lemma",
+    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 2764, status: "proved", kind: "lemma",
       sig: "zig_step_bounded_increase :\n  treeWrongness v' J r ≤ 8·A·(treeWrongness v J r + ε·treeWrongness v J (r-2))",
       desc: "Lemma 2: Single zig/zag step increases wrongness by bounded factor 8A. Proved via HasBoundedDamage + scaling." },
 
@@ -400,27 +417,27 @@ const PROOF_DATA = {
     { id: "HasBoundedTreeDamage", file: "AKS/TreeSorting.lean", line: 1099, status: "definition", kind: "def",
       sig: "HasBoundedTreeDamage (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop",
       desc: "V2 bounded-damage using tree distance. Network increases tree-dist count by ≤ ε·count(r-2)." },
-    { id: "treeWrongnessV2", file: "AKS/TreeSorting.lean", line: 1609, status: "definition", kind: "def",
+    { id: "treeWrongnessV2", file: "AKS/TreeSorting.lean", line: 1617, status: "definition", kind: "def",
       sig: "treeWrongnessV2 (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
       desc: "V2 tree wrongness using elementsAtTreeDist. Genuinely time-dependent (depends on t via sectionNode)." },
-    { id: "cherry_wrongness_after_nearsort_v2", file: "AKS/TreeSorting.lean", line: 2628, status: "proved", kind: "lemma",
+    { id: "cherry_wrongness_after_nearsort_v2", file: "AKS/TreeSorting.lean", line: 2636, status: "proved", kind: "lemma",
       sig: "cherry_wrongness_after_nearsort_v2 :\n  treeWrongnessV2 (net.exec v) J r ≤ treeWrongnessV2 v J r + ε·treeWrongnessV2 v J (r-2)",
       desc: "V2: Cherry wrongness after nearsort. Same algebraic proof using HasBoundedTreeDamage." },
-    { id: "zig_step_bounded_increase_v2", file: "AKS/TreeSorting.lean", line: 2797, status: "proved", kind: "lemma",
+    { id: "zig_step_bounded_increase_v2", file: "AKS/TreeSorting.lean", line: 2805, status: "proved", kind: "lemma",
       sig: "zig_step_bounded_increase_v2 :\n  treeWrongnessV2 v' J r ≤ 8·A·(treeWrongnessV2 v J r + ε·treeWrongnessV2 v J (r-2))",
       desc: "V2: Zig step bounded increase. Same algebraic proof using HasBoundedTreeDamage and treeWrongnessV2." },
     { id: "positionTreeDist_succ_le", file: "AKS/TreeSorting.lean", line: 1056, status: "sorry", kind: "lemma",
       sig: "positionTreeDist_succ_le :\n  positionTreeDist n (t+1) v i ≤ positionTreeDist n t v i + 2",
       desc: "Tree distance increases by at most 2 when refining from level t to t+1. Needs sectionIndex_succ helper." },
-    { id: "HasBoundedZigzagDamage", file: "AKS/TreeSorting.lean", line: 1119, status: "definition", kind: "definition",
+    { id: "HasBoundedZigzagDamage", file: "AKS/TreeSorting.lean", line: 1127, status: "definition", kind: "definition",
       sig: "HasBoundedZigzagDamage zig_net zag_net ε t : Prop",
       desc: "Combined zigzag bounded-damage with r → r+1 distance shift. Key structural property of even/odd cherry alternation." },
-    { id: "register_reassignment_increases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2686, status: "proved", kind: "lemma",
+    { id: "register_reassignment_increases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2694, status: "proved", kind: "lemma",
       sig: "register_reassignment_increases_wrongness_v2 :\n  treeWrongnessV2 (t+1) v J' r ≤ C · treeWrongnessV2 t v J (r-2)",
       desc: "V2 Lemma 1: Register reassignment. Single v, J'⊆J, distance shift 2, parameterized constant C." },
-    { id: "zigzag_decreases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2885, status: "sorry", kind: "lemma",
-      sig: "zigzag_decreases_wrongness_v2 :\n  treeWrongnessV2 t v'' J r ≤ 64·A²·(treeWrongnessV2 t v J (r+1) + 3ε·...)",
-      desc: "V2 Lemma 3: ZigZag combined step with r→r+1 improvement. Takes zig_net, zag_net with HasBoundedZigzagDamage." }
+    { id: "zigzag_decreases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2890, status: "sorry", kind: "lemma",
+      sig: "zigzag_decreases_wrongness_v2 :\n  treeWrongnessV2 t v'' J r ≤ treeWrongnessV2 t v J (r+1) + 3ε·tw(r-4)",
+      desc: "V2 Lemma 3: ZigZag combined step with r→r+1 improvement. No fringe amplification — HasBoundedZigzagDamage gives same-interval bound." }
   ],
 
   // Edges: [source, target] means "target depends on source" (arrow points from source to target)
@@ -606,11 +623,20 @@ const PROOF_DATA = {
     ["elementsAtTreeDist", "register_reassignment_increases_wrongness_v2"],
     ["elementsAtTreeDist", "HasBoundedZigzagDamage"],
     ["HasBoundedZigzagDamage", "zigzag_decreases_wrongness_v2"],
-    ["HasBoundedTreeDamage", "zigzag_decreases_wrongness_v2"],
     ["treeWrongnessV2", "zigzag_decreases_wrongness_v2"],
 
     // TreeSorting — edges TO main proof chain
-    ["aks_tree_sorting", "zigzag_implies_aks_network"]
+    ["aks_tree_sorting", "zigzag_implies_aks_network"],
+
+    // Main.lean — iterated squaring and final assembly
+    ["spectralGap_square", "spectralGap_squareIter"],
+    ["squareIter", "spectralGap_squareIter"],
+    ["explicit_expanders_exist_zigzag", "expander_family_small_gap"],
+    ["squareIter", "expander_family_small_gap"],
+    ["spectralGap_squareIter", "expander_family_small_gap"],
+    ["exists_pow_two_pow_lt", "expander_family_small_gap"],
+    ["expander_family_small_gap", "aks_sorting_networks_exist"],
+    ["zigzag_implies_aks_network", "aks_sorting_networks_exist"]
   ],
 
   // File groupings with display names
