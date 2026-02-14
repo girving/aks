@@ -341,9 +341,9 @@ const PROOF_DATA = {
     { id: "halvers_give_bounded_nearsort", file: "AKS/TreeSorting.lean", line: 1043, status: "sorry", kind: "lemma",
       sig: "halvers_give_bounded_nearsort : IsEpsilonHalver halver ε₁ → ε₁ ≤ ε/(2·(log₂ n+1)) →\n  ∃ net, HasBoundedDamage net ε ∧ net.size ≤ halver.size · (log₂ n+1)",
       desc: "Bridge: ε₁-halver → composite network with bounded damage. Encapsulates recursive ε-nearsort construction (AKS Section 4).", difficulty: "weeks" },
-    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 2479, status: "sorry", kind: "lemma",
+    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 2482, status: "proved", kind: "lemma",
       sig: "zig_step_bounded_increase :\n  treeWrongness v' J r ≤ 8·A·(treeWrongness v J r + ε·treeWrongness v J (r-2))",
-      desc: "Lemma 2: Single zig/zag step increases wrongness by bounded factor 8A.", difficulty: "weeks" }
+      desc: "Lemma 2: Single zig/zag step increases wrongness by bounded factor 8A. Proved via HasBoundedDamage + scaling." }
   ],
 
   // Edges: [source, target] means "target depends on source" (arrow points from source to target)

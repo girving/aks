@@ -2408,12 +2408,15 @@ lemma cherry_wrongness_after_nearsort
     (h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
     treeWrongness n t (net.exec v) J r ≤
       treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
-  -- Proof structure:
-  -- 1. Use HasBoundedDamage to bound post-nearsort element counts
-  -- 2. Partition elements at distance ≥ r
-  -- 3. Count how many stay at distance ≥ r after nearsort
-  -- 4. Bound by Δᵣ (stayed) + ε·Δᵣ₋₂ (exceptions)
-  sorry
+  -- HasBoundedDamage gives bound on element counts; divide by J.size.
+  -- Note: `t` is unused in `elementsAtDistance`, so HasBoundedDamage (t=0) matches.
+  by_cases hJ : J.size = 0
+  · simp [treeWrongness, hJ]
+  · unfold treeWrongness; simp only [if_neg hJ]
+    have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
+    rw [← mul_div_assoc, ← add_div]
+    apply div_le_div_of_nonneg_right _ hJs.le
+    exact hnet v J r
 
 /-! **The Four Key Lemmas (AKS Section 8)** -/
 
@@ -2478,21 +2481,41 @@ lemma fringe_amplification_bound {n : ℕ} (cherry : Cherry n)
     7. Combine for final bound -/
 lemma zig_step_bounded_increase
     {n t : ℕ} (v v' : Fin n → Bool) (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
+    (ε : ℝ) (hε_nn : 0 ≤ ε) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
     (h_zig : v' = net.exec v)  -- v' obtained by applying net to v
     :
     treeWrongness n t v' J r ≤
       8 * A * (treeWrongness n t v J r +
                if r ≥ 3 then ε * treeWrongness n t v J (r - 2)
                else ε) := by
-  -- Proof outline:
-  -- 1. Find the cherry containing J
-  -- 2. Use nearsort property from halver to split elements at distance ≥ r:
-  --    - (1-ε) fraction that moved closer (bounded by Δᵣ)
-  --    - ε fraction that didn't (exceptions, bounded by Δᵣ₋₂)
-  -- 3. Apply fringe amplification factor 8A
-  -- 4. Combine for final bound
-  sorry
+  subst h_zig
+  -- Step 1: HasBoundedDamage gives tw_after ≤ tw + ε * tw(if r≥2 then r-2 else 0)
+  have hbd : treeWrongness n t (net.exec v) J r ≤
+      treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
+    by_cases hJ : J.size = 0
+    · simp [treeWrongness, hJ]
+    · unfold treeWrongness; simp only [if_neg hJ]
+      have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
+      rw [← mul_div_assoc, ← add_div]
+      apply div_le_div_of_nonneg_right _ hJs.le
+      exact hnet v J r
+  -- Step 2: Scale up by 8*A ≥ 1
+  have hA : (1 : ℝ) ≤ 8 * A := by norm_num [A]
+  by_cases hr : r ≥ 3
+  · -- r ≥ 3: both if-branches evaluate to ε * tw(r-2)
+    simp only [show r ≥ 2 from by omega, ↓reduceIte, hr] at hbd ⊢
+    have h_nn : 0 ≤ treeWrongness n t v J r + ε * treeWrongness n t v J (r - 2) :=
+      add_nonneg (treeWrongness_nonneg (t := t) v J r)
+        (mul_nonneg hε_nn (treeWrongness_nonneg (t := t) v J (r - 2)))
+    linarith [mul_le_mul_of_nonneg_right hA h_nn]
+  · -- r < 3: use tw(0) ≤ 1 to bound ε * tw(0) ≤ ε
+    push_neg at hr
+    simp only [show ¬(r ≥ 3) from by omega, ↓reduceIte] at ⊢
+    have h_tw_le : ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) ≤ ε :=
+      mul_le_of_le_one_right hε_nn (treeWrongness_le_one (t := t) v J _)
+    have h_nn : 0 ≤ treeWrongness n t v J r + ε :=
+      add_nonneg (treeWrongness_nonneg (t := t) v J r) hε_nn
+    linarith [mul_le_mul_of_nonneg_right hA h_nn]
 
 /-- **Lemma 3: ZigZag Combined Step** (AKS page 8)
 
@@ -2510,13 +2533,16 @@ lemma zig_step_bounded_increase
     This is the geometric decrease mechanism! -/
 lemma zigzag_decreases_wrongness
     {n t : ℕ} (v v'' : Fin n → Bool) (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
+    (ε : ℝ) (hε_nn : 0 ≤ ε) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
     (h_zigzag : v'' = net.exec (net.exec v))  -- v'' is v after full Zig-Zag cycle
     :
     treeWrongness n t v'' J r ≤
       64 * A^2 * (treeWrongness n t v J (r + 1) +
                   if r ≥ 5 then 3 * ε * treeWrongness n t v J (r - 4)
                   else 3 * ε) := by
+  -- NOTE: Can't follow from just chaining two zig steps — the r+1 improvement
+  -- requires the tree alternation insight (zig on even levels, zag on odd levels).
+  -- Needs additional structure about how zig/zag operate on different tree levels.
   sorry
 
 /-- **Lemma 4: Displacement from Wrongness** (AKS page 8-9, Equation 4)
