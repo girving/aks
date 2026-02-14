@@ -11,6 +11,8 @@ import AKS.RVWBound
 import AKS.ZigZag
 import AKS.Certificate
 import AKS.WalkBound
+import AKS.DiagDominant
+import AKS.SpectralMatrix
 import AKS.CertificateBridge
 import AKS.NpyReader
 
