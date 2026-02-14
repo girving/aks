@@ -27,7 +27,10 @@
       "Bash(wc *)",
       "Bash(lake env lean *)",
       "Bash(cargo *)",
-      "Bash(rg *)"
+      "Bash(rg *)",
+      "Bash(ps *)",
+      "Bash(scripts/update-viz-lines *)",
+      "Bash(scripts/sorries *)"
     ]
   }
 }

@@ -303,7 +303,7 @@ const PROOF_DATA = {
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
     // ── AKS.lean ──
-    { id: "zigzag_implies_aks_network", file: "AKS.lean", line: 24, status: "sorry", kind: "theorem",
+    { id: "zigzag_implies_aks_network", file: "AKS.lean", line: 25, status: "sorry", kind: "theorem",
       sig: "zigzag_implies_aks_network :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ 99/100) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
       desc: "Top-level theorem: explicit expander families imply O(n log n) sorting networks." },
 
