@@ -31,7 +31,7 @@ These depend on substantial unfinished work, including the tree-based sorting co
 
 - **RVW operator bound** (`RVWBound.lean`) — 2 `sorry`'s in the core quadratic inequality
 - **Base expander certificate** (`CertificateBridge.lean`) — sorry'd bridge from checker to spectral gap
-- **Tree-based AKS correctness** (`TreeSorting.lean`) — 4 `sorry`'s remaining; 2 correctly stated (`halvers_give_bounded_nearsort`, `aks_tree_sorting`), 2 need reformulation (see [`docs/treesorting-audit.md`](docs/treesorting-audit.md))
+- **Tree-based AKS correctness** (`TreeSorting.lean`) — 4 `sorry`'s remaining, all correctly stated after Phase 2.5 audit (see [`docs/treesorting-audit.md`](docs/treesorting-audit.md))
 - **AKS construction and size bound** (`AKSNetwork.lean`) — sorry'd
 
 ## Setup
