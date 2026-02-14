@@ -1,6 +1,6 @@
-# AKS Sorting Network — Lean 4 Formalization (work in progress)
+# AKS Sorting Network — Lean Formalization (work in progress)
 
-An attempt to formally verify the Ajtai--Komlos--Szemeredi (1983) `O(n log n)` sorting network construction in Lean 4. The proof is incomplete: many theorems have `sorry` placeholders. The codebase is a structural skeleton demonstrating the proof architecture, not a finished formalization.
+An attempt to formally verify the Ajtai--Komlos--Szemeredi (1983) `O(n log n)` sorting network construction in Lean. The proof is incomplete: many theorems have `sorry` placeholders. The codebase is a structural skeleton demonstrating the proof architecture, not a finished formalization.
 
 ## Resources
 
@@ -31,7 +31,7 @@ These depend on substantial unfinished work, including the tree-based sorting co
 
 - **RVW operator bound** (`RVWBound.lean`) — 2 `sorry`'s in the core quadratic inequality
 - **Base expander certificate** (`CertificateBridge.lean`) — sorry'd bridge from checker to spectral gap
-- **Tree-based AKS correctness** (`TreeSorting.lean`) — 5+ `sorry`'s; several lemma statements need reformulation
+- **Tree-based AKS correctness** (`TreeSorting.lean`) — 4 `sorry`'s remaining; 2 correctly stated (`halvers_give_bounded_nearsort`, `aks_tree_sorting`), 2 need reformulation (see [`docs/treesorting-audit.md`](docs/treesorting-audit.md))
 - **AKS construction and size bound** (`AKSNetwork.lean`) — sorry'd
 
 ## Setup

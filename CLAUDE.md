@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Lean 4 formalization of the Ajtai–Komlós–Szemerédi (1983) O(n log n) sorting network construction. The project formalizes the proof architecture using the zig-zag product (Reingold–Vadhan–Wigderson 2002) as the route to explicit expander families, avoiding the heavy algebraic machinery (Margulis/LPS) that would require years of formalization effort.
+Lean formalization of the Ajtai–Komlós–Szemerédi (1983) O(n log n) sorting network construction. The project formalizes the proof architecture using the zig-zag product (Reingold–Vadhan–Wigderson 2002) as the route to explicit expander families, avoiding the heavy algebraic machinery (Margulis/LPS) that would require years of formalization effort.
 
 Most theorems have `sorry` placeholders — this is intentional. The codebase is a structural skeleton demonstrating the complete proof architecture.
 
@@ -204,6 +204,8 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
 
 ## Proof Workflow
 
+**Skeleton correctness takes priority over filling in sorries.** A sorry with a correct statement is valuable (it documents what remains to prove); a sorry with a wrong statement is actively harmful (it creates false confidence and wasted work downstream). When auditing reveals incorrect lemma statements, fix them before working on other tractable sorries — even in other files. An honest skeleton with more sorries beats a dishonest one with fewer. See `docs/treesorting-audit.md` for the case study.
+
 **Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., the original single-halver composition approach was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential (now in `TreeSorting.lean`). Read primary sources at the design stage.
 
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
@@ -342,9 +344,7 @@ No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGr
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`). **Status doc:** `scripts/RVW_QUADRATIC_PROOF_STATUS.md` — documents LP infeasibility of nlinarith, numerical analysis, and viable proof paths. Key finding: scalar multiplier nlinarith is PROVEN infeasible (LP, twice); need mathematical proof via variable elimination + case analysis or full SOS Positivstellensatz.
 
-**Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
-
-**Next task: Reformulate TreeSorting.lean** — Several lemma statements are mathematically incorrect (e.g., `exception_distance_bound` is provably false, `halver_implies_nearsort_property` conflates aggregate balance with positional damage). Full plan with code snippets: [`docs/plan-treesorting-reformulation.md`](docs/plan-treesorting-reformulation.md). Key idea: introduce `HasBoundedDamage` as the interface between halver world and tree-sorting world.
+**Substantial (months):** TreeSorting.lean sorrys (4). **Correctly stated:** `halvers_give_bounded_nearsort` (bridge: halver → bounded damage), `aks_tree_sorting` (top-level assembly). **Needs reformulation:** `register_reassignment_increases_wrongness` (Lemma 1 — `elementsAtDistance` unused `t` makes time evolution vacuous), `zigzag_decreases_wrongness` (Lemma 3 — needs tree alternation hypotheses). **Root cause:** `elementsAtDistance` doesn't use its `t` parameter, so the time-dependent interval tree structure needed for Lemma 1 and the induction in the main theorem is unformalized. Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md). **Done:** reformulation (HasBoundedDamage), `cherry_wrongness_after_nearsort` (proved), `zig_step_bounded_increase` (proved), `displacement_from_wrongness` (proved). **Deleted:** `exception_distance_bound`, `halver_implies_nearsort_property`, `fringe_amplification_bound`, `epsilonNearsort_correct` (stub definition).
 
 **Engineering (weeks, fiddly):** replacing `baseExpander` axiom with a concrete verified graph, reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 

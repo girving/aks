@@ -1,7 +1,7 @@
 /-
   # Explicit Expanders via the Zig-Zag Product
 
-  Lean 4 formalization of the Reingold–Vadhan–Wigderson (2002) zig-zag
+  Lean formalization of the Reingold–Vadhan–Wigderson (2002) zig-zag
   product and its application to constructing explicit expander families.
 
   General regular graph theory (`RegularGraph`, spectral gap, squaring,
@@ -13,7 +13,6 @@
 import AKS.ZigZagSpectral
 import AKS.RVWBound
 import AKS.Square
-import AKS.Random
 
 open Matrix BigOperators Finset
 
@@ -31,8 +30,8 @@ open Matrix BigOperators Finset
 theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (G₁ : RegularGraph n₁ d₁) (G₂ : RegularGraph d₁ d₂)
     (lam₁ lam₂ : ℝ)
-    (hG₁ : spectralGap G₁ ≤ lam₁)
-    (hG₂ : spectralGap G₂ ≤ lam₂)
+    (hG₁ : spectralGap G₁ ≤ lam₁) (hlam₁_le : lam₁ ≤ 1)
+    (hG₂ : spectralGap G₂ ≤ lam₂) (hlam₂_le : lam₂ ≤ 1)
     (hd₂ : 0 < d₂) :
     spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂ := by
   -- Derive non-negativity of bounds
@@ -93,6 +92,7 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (meanCLM_eq_clusterMean_comp hd₁)
     (clusterMean_comp_meanCLM hd₁)
     lam₁ lam₂ hlam₁ hlam₂
+    hlam₁_le hlam₂_le
     h_tilde
     ((hat_block_norm G₁ hd₁).trans hG₁)
 
@@ -136,7 +136,8 @@ noncomputable def zigzagFamily {D : ℕ} (H₀ : RegularGraph ((D * D) * (D * D)
     `rvwBound (c²) β ≤ c` (i.e., c is a fixed point of x ↦ rvwBound(x², β)).
     The fixed point exists when β² < 1/3, which holds for D ≥ 12. -/
 theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
-    {β c : ℝ} (hD : 0 < D) (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
+    {β c : ℝ} (hD : 0 < D) (hβ : spectralGap H₀ ≤ β) (hβ_le : β ≤ 1)
+    (hbase : β ^ 2 ≤ c) (hc_le : c ≤ 1)
     (hiter : rvwBound (c ^ 2) β ≤ c) (k : ℕ) :
     spectralGap (zigzagFamily H₀ k).2 ≤ c := by
   induction k with
@@ -149,7 +150,8 @@ theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
     have h₁ : spectralGap (zigzagFamily H₀ k).2.square ≤ c ^ 2 := by
       rw [spectralGap_square]
       exact pow_le_pow_left₀ (spectralGap_nonneg _) ih 2
-    exact (zigzag_spectral_bound _ _ _ _ h₁ hβ hD).trans hiter
+    have hc2_le : c ^ 2 ≤ 1 := by nlinarith [sq_nonneg c]
+    exact (zigzag_spectral_bound _ _ _ _ h₁ hc2_le hβ hβ_le hD).trans hiter
 
 
 /-! **The Main Result** -/
@@ -165,7 +167,8 @@ theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
     an induced subgraph (Cauchy interlacing preserves spectral gap). -/
 theorem explicit_expanders_exist_zigzag {D : ℕ}
     {H₀ : RegularGraph ((D * D) * (D * D)) D}
-    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hbase : β ^ 2 ≤ c)
+    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hβ_le : β ≤ 1)
+    (hbase : β ^ 2 ≤ c) (hc_le : c ≤ 1)
     (hiter : rvwBound (c ^ 2) β ≤ c) :
     ∀ (n : ℕ), n > 0 →
     ∃ (G : RegularGraph n (D * D)), spectralGap G ≤ c := by

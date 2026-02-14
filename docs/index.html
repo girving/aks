@@ -20,6 +20,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 #legend .dot { border-radius: 50%; flex-shrink: 0; }
 #legend .size-dot { background: #484f58; }
+#legend-toggle { display: none; }
 #stats { position: fixed; bottom: 16px; right: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; text-align: right; }
 #stats .num { font-size: 20px; font-weight: 700; }
 #tooltip { position: fixed; pointer-events: none; background: #1c2128; border: 1px solid #444c56; border-radius: 8px; padding: 12px 16px; font-size: 13px; max-width: 480px; z-index: 100; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
@@ -28,7 +29,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #tooltip .tt-sig { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; color: #a5d6ff; background: #0d1117; padding: 6px 8px; border-radius: 4px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
 #tooltip .tt-desc { color: #c9d1d9; line-height: 1.4; }
 #tooltip .tt-diff { margin-top: 4px; font-size: 11px; color: #7d8590; font-style: italic; }
-svg { width: 100vw; height: 100vh; }
+#graph { width: 100vw; height: 100vh; touch-action: none; }
 .group-rect { rx: 12; ry: 12; }
 .group-label { font-size: 11px; font-weight: 600; fill: #484f58; pointer-events: none; }
 .link { fill: none; }
@@ -42,6 +43,40 @@ svg { width: 100vw; height: 100vh; }
 #timeline input[type=range] { width: 300px; accent-color: #58a6ff; }
 #timeDate { color: #7d8590; width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 #liveBadge { background: #3fb950; color: #0d1117; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; visibility: hidden; }
+
+/* ── Mobile / narrow screens ── */
+@media (max-width: 600px) {
+  /* Row 1: buttons */
+  #controls { top: 8px; left: 8px; gap: 4px; }
+  #controls button { padding: 8px 10px; font-size: 12px; min-height: 36px; }
+
+  /* Row 2: title below buttons, subtitle hidden */
+  #title { top: 50px; left: 8px; right: auto; text-align: left; }
+  #title h1 { font-size: 14px; }
+  #title p { display: none; }
+
+  /* Legend: collapse behind a toggle button, below title */
+  #legend { display: none; bottom: auto; top: 76px; left: 8px; padding: 10px 12px; font-size: 11px; }
+  #legend.open { display: block; }
+  #legend-toggle { display: block; }
+
+  /* Stats: compact at bottom-right */
+  #stats { bottom: 8px; right: 8px; padding: 8px 10px; font-size: 11px; }
+  #stats .num { font-size: 16px; }
+
+  /* Tooltip: fit within viewport */
+  #tooltip { max-width: calc(100vw - 32px); left: 16px !important; right: 16px; font-size: 12px; padding: 10px 12px; pointer-events: auto; }
+  #tooltip .tt-name { font-size: 14px; }
+  #tooltip .tt-sig { font-size: 10px; max-height: 80px; }
+
+  /* Timeline: full width */
+  #timeline { left: 8px; right: 8px; transform: none; bottom: 8px; padding: 6px 10px; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  #timeline input[type=range] { width: 100%; order: 10; }
+  #timeDate { width: auto; max-width: 50vw; font-size: 10px; }
+
+  /* When timeline is visible, push stats above it */
+  body.has-timeline #stats { bottom: 72px; }
+}
 </style>
 </head>
 <body>
@@ -49,11 +84,12 @@ svg { width: 100vw; height: 100vh; }
 <div id="controls">
   <button onclick="resetZoom()">Reset View</button>
   <button onclick="toggleLabels()">Toggle Labels</button>
+  <button id="legend-toggle" onclick="toggleLegend()">Legend</button>
 </div>
 
 <div id="title">
   <h1>AKS Sorting Network</h1>
-  <p>Lean 4 Proof Dependency Graph</p>
+  <p>Lean Proof Dependency Graph</p>
 </div>
 
 <div id="legend">
@@ -94,7 +130,7 @@ svg { width: 100vw; height: 100vh; }
   <span id="liveBadge">LIVE</span>
 </div>
 
-<svg></svg>
+<svg id="graph"></svg>
 
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script>
@@ -172,16 +208,19 @@ const PROOF_DATA = {
     { id: "zero_one_principle", file: "AKS/ComparatorNetwork.lean", line: 194, status: "proved", kind: "theorem",
       sig: "zero_one_principle : (∀ v : Fin n → Bool, Monotone (net.exec v)) → IsSortingNetwork net",
       desc: "The 0-1 principle: if a comparator network sorts all Boolean inputs, it sorts everything." },
-    // ── AKSNetwork.lean — AKS Construction ──
-    { id: "AKS", file: "AKS/AKSNetwork.lean", line: 32, status: "sorry", kind: "def",
-      sig: "AKS (n : ℕ) : ComparatorNetwork n",
-      desc: "The AKS sorting network construction: split, recurse, merge with halvers." },
-    { id: "AKS.size_nlogn", file: "AKS/AKSNetwork.lean", line: 49, status: "sorry", kind: "theorem",
-      sig: "AKS.size_nlogn : (fun n ↦ (AKS n).size) =O(fun n ↦ n * log n)",
-      desc: "The AKS network has O(n log n) comparators." },
-    { id: "AKS.sorts", file: "AKS/AKSNetwork.lean", line: 65, status: "sorry", kind: "theorem",
-      sig: "AKS.sorts (n : ℕ) : IsSortingNetwork (AKS n)",
-      desc: "The AKS construction produces a valid sorting network." },
+    // ── AKS/AKSNetwork.lean — iterated halver helpers ──
+    { id: "epsHalverMerge_exec_eq_iterate", file: "AKS/AKSNetwork.lean", line: 26, status: "proved", kind: "theorem",
+      sig: "epsHalverMerge_exec_eq_iterate : (epsHalverMerge n ε k halver).exec v = Nat.iterate (fun w ↦ halver.exec w) k v",
+      desc: "Executing epsHalverMerge is iterating the halver's exec." },
+    { id: "epsHalverMerge_size", file: "AKS/AKSNetwork.lean", line: 39, status: "proved", kind: "theorem",
+      sig: "epsHalverMerge_size : (epsHalverMerge n ε k halver).size = k * halver.size",
+      desc: "Size of epsHalverMerge is k times the halver size." },
+    { id: "mono_of_iterate_mono", file: "AKS/AKSNetwork.lean", line: 47, status: "proved", kind: "theorem",
+      sig: "mono_of_iterate_mono : k₁ ≤ k₂ → Monotone (iterate f k₁ v) → Monotone (iterate f k₂ v)",
+      desc: "If iterating k₁ times produces a monotone result, so does iterating k₂ ≥ k₁ times." },
+    { id: "aks_size_bound", file: "AKS/AKSNetwork.lean", line: 82, status: "proved", kind: "theorem",
+      sig: "aks_size_bound : 100 * Nat.log 2 (2*m) * s ≤ 100*(d+1)*(2*m)*log(2*m)",
+      desc: "Size arithmetic for the AKS construction using Nat.log ≤ logb and log 2 > 1/2." },
 
     // ── Halver.lean ──
     { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 33, status: "definition", kind: "def",
@@ -327,7 +366,7 @@ const PROOF_DATA = {
       desc: "Base expander has spectral gap ≤ 5/9 ≈ 0.556 (just above Alon-Boppana bound)." },
 
     // ── ZigZag.lean ──
-    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 31, status: "proved", kind: "theorem",
+    { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 30, status: "proved", kind: "theorem",
       sig: "zigzag_spectral_bound : spectralGap (G₁.zigzag G₂) ≤ rvwBound lam₁ lam₂",
       desc: "Zig-zag spectral composition: assembles all sublemmas into the final bound. Degenerate case (n₁·d₁=0) handled via rvwBound ≥ 0; main case chains through rvw_operator_norm_bound." },
     { id: "zigzagFamily", file: "AKS/ZigZag.lean", line: 124, status: "definition", kind: "def",
@@ -336,52 +375,107 @@ const PROOF_DATA = {
     { id: "zigzagFamily_gap", file: "AKS/ZigZag.lean", line: 138, status: "proved", kind: "theorem",
       sig: "zigzagFamily_gap : spectralGap (zigzagFamily H₀ k).2 ≤ c",
       desc: "Every graph in the zig-zag family has spectral gap ≤ c. Proved by induction using squaring + zig-zag bounds." },
-    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 166, status: "sorry", kind: "theorem",
+    { id: "explicit_expanders_exist_zigzag", file: "AKS/ZigZag.lean", line: 168, status: "sorry", kind: "theorem",
       sig: "explicit_expanders_exist_zigzag :\n  ∀ n > 0, ∃ G : RegularGraph n (D*D), spectralGap G ≤ c",
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
-    // ── AKS.lean ──
-    { id: "zigzag_implies_aks_network", file: "AKS.lean", line: 27, status: "sorry", kind: "theorem",
-      sig: "zigzag_implies_aks_network :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ 99/100) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
-      desc: "Top-level theorem: explicit expander families imply O(n log n) sorting networks." },
+    // ── AKS/AKSNetwork.lean — top-level parameterized theorem ──
+    { id: "zigzag_implies_aks_network", file: "AKS/AKSNetwork.lean", line: 134, status: "sorry", kind: "theorem",
+      sig: "zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
+      desc: "Parameterized AKS theorem: expander family with gap β < 1/2 → O(n log n) sorting networks. Even case fully proved; odd case sorry'd." },
+
+    // ── AKS/Main.lean — top-level assembly via iterated squaring ──
+    { id: "squareIter", file: "AKS/Main.lean", line: 35, status: "definition", kind: "def",
+      sig: "RegularGraph.squareIter (G : RegularGraph n d) :\n  (k : ℕ) → RegularGraph n (d ^ (2 ^ k))",
+      desc: "Iterated graph squaring: square k times, yielding d^(2^k)-regular graph on n vertices." },
+    { id: "spectralGap_squareIter", file: "AKS/Main.lean", line: 41, status: "proved", kind: "theorem",
+      sig: "spectralGap_squareIter :\n  spectralGap (G.squareIter k) = (spectralGap G) ^ (2 ^ k)",
+      desc: "Spectral gap of k-th iterated square is the 2^k-th power of the original gap." },
+    { id: "exists_pow_two_pow_lt", file: "AKS/Main.lean", line: 54, status: "proved", kind: "theorem",
+      sig: "exists_pow_two_pow_lt : 0 ≤ c → c < 1 → 0 < t → ∃ k, c ^ (2^k) < t",
+      desc: "Doubly-exponential convergence: c^(2^k) eventually drops below any positive target." },
+    { id: "expander_family_small_gap", file: "AKS/Main.lean", line: 66, status: "proved", kind: "theorem",
+      sig: "expander_family_small_gap :\n  ... → 0 < c → c < 1 → 0 < β →\n  ∃ d, ∀ n > 0, ∃ G : RegularGraph n d, spectralGap G ≤ β",
+      desc: "Zig-zag + iterated squaring gives constant-degree expander family with arbitrarily small spectral gap." },
+    { id: "aks_sorting_networks_exist", file: "AKS/Main.lean", line: 106, status: "proved", kind: "theorem",
+      sig: "aks_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "AKS (1983): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + tree sorting." },
 
     // ── TreeSorting.lean ──
     { id: "TreeNode", file: "AKS/TreeSorting.lean", line: 105, status: "definition", kind: "structure",
       sig: "structure TreeNode where\n  level : ℕ\n  index : ℕ",
       desc: "Position (level, index) in binary tree for register assignment." },
-    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 1442, status: "definition", kind: "def",
+    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 1602, status: "definition", kind: "def",
       sig: "treeWrongness (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
       desc: "Tree-based wrongness measure Δᵣ(J): proportion of elements at tree-distance ≥ r from their target." },
-    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 2374, status: "proved", kind: "lemma",
+    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 2586, status: "proved", kind: "lemma",
       sig: "halver_preserves_monotone : IsEpsilonHalver net ε → Monotone w → Monotone (net.exec w)",
       desc: "Applying an ε-halver to a monotone sequence preserves monotonicity." },
-    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1311, status: "proved", kind: "lemma",
+    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1471, status: "proved", kind: "lemma",
       sig: "monotone_bool_zeros_then_ones : Monotone w →\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w i = false) ∧ (∀ i, k ≤ i → w i = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: threshold detected via Nat.find.", difficulty: "days" },
-    { id: "halver_balances_ones", file: "AKS/TreeSorting.lean", line: 1905, status: "proved", kind: "lemma",
+    { id: "halver_balances_ones", file: "AKS/TreeSorting.lean", line: 2109, status: "proved", kind: "lemma",
       sig: "halver_balances_ones : IsEpsilonHalver net ε →\n  onesInTop ≤ totalOnes / 2 + ε * (n / 2)",
       desc: "Direct restatement of IsEpsilonHalver: ones in top half bounded after halving." },
-    { id: "countOnes_le", file: "AKS/TreeSorting.lean", line: 906, status: "proved", kind: "lemma",
+    { id: "countOnes_le", file: "AKS/TreeSorting.lean", line: 936, status: "proved", kind: "lemma",
       sig: "countOnes_le : countOnes v ≤ n",
       desc: "Count of ones bounded by total elements (filter cardinality)." },
-    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1268, status: "proved", kind: "lemma",
+    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1428, status: "proved", kind: "lemma",
       sig: "countOnes_split : countOnes v =\n  countOnesInRange v 0 (n/2) + countOnesInRange v (n/2) n",
       desc: "Partition count by ranges using Finset.card_union_of_disjoint.", difficulty: "days" },
-    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 2039, status: "proved", kind: "lemma",
+    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 2243, status: "proved", kind: "lemma",
       sig: "comparator_displacement_bound :\n  #{i | c.apply v i ≠ v i} ≤ 2",
       desc: "Comparators change at most 2 positions (subset reasoning).", difficulty: "days" },
-    { id: "halver_bounds_top_excess", file: "AKS/TreeSorting.lean", line: 1949, status: "proved", kind: "lemma",
+    { id: "halver_bounds_top_excess", file: "AKS/TreeSorting.lean", line: 2153, status: "proved", kind: "lemma",
       sig: "halver_bounds_top_excess :\n  countOnesInRange (net.exec v) 0 (n/2) ≤ countOnes (net.exec v) / 2 + ε * (n / 2)",
       desc: "Output top half ones bounded (filter equivalence).", difficulty: "days" },
-    { id: "HasBoundedDamage", file: "AKS/TreeSorting.lean", line: 970, status: "definition", kind: "def",
+    { id: "HasBoundedDamage", file: "AKS/TreeSorting.lean", line: 1005, status: "definition", kind: "def",
       sig: "HasBoundedDamage (net : ComparatorNetwork n) (ε : ℝ) : Prop",
       desc: "Bounded-damage property: network increases elements at distance ≥ r by at most ε · (elements at distance ≥ r-2). Key interface between halver world and tree-sorting world.", difficulty: "done" },
-    { id: "halvers_give_bounded_nearsort", file: "AKS/TreeSorting.lean", line: 1043, status: "sorry", kind: "lemma",
+    { id: "halvers_give_bounded_nearsort", file: "AKS/TreeSorting.lean", line: 1203, status: "sorry", kind: "lemma",
       sig: "halvers_give_bounded_nearsort : IsEpsilonHalver halver ε₁ → ε₁ ≤ ε/(2·(log₂ n+1)) →\n  ∃ net, HasBoundedDamage net ε ∧ net.size ≤ halver.size · (log₂ n+1)",
       desc: "Bridge: ε₁-halver → composite network with bounded damage. Encapsulates recursive ε-nearsort construction (AKS Section 4).", difficulty: "weeks" },
-    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 2479, status: "sorry", kind: "lemma",
+    { id: "zig_step_bounded_increase", file: "AKS/TreeSorting.lean", line: 2764, status: "proved", kind: "lemma",
       sig: "zig_step_bounded_increase :\n  treeWrongness v' J r ≤ 8·A·(treeWrongness v J r + ε·treeWrongness v J (r-2))",
-      desc: "Lemma 2: Single zig/zag step increases wrongness by bounded factor 8A.", difficulty: "weeks" }
+      desc: "Lemma 2: Single zig/zag step increases wrongness by bounded factor 8A. Proved via HasBoundedDamage + scaling." },
+
+    // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
+    { id: "sectionIndex", file: "AKS/TreeSorting.lean", line: 840, status: "definition", kind: "def",
+      sig: "sectionIndex (n t i : ℕ) : ℕ",
+      desc: "Section index at level t for position i: ⌊i·2^t/n⌋. Maps positions to binary tree sections." },
+    { id: "sectionNode", file: "AKS/TreeSorting.lean", line: 852, status: "definition", kind: "def",
+      sig: "sectionNode (n t : ℕ) (i : Fin n) : TreeNode",
+      desc: "TreeNode at level t for position i. Maps each position to its section in the binary tree." },
+    { id: "positionTreeDist", file: "AKS/TreeSorting.lean", line: 1037, status: "definition", kind: "def",
+      sig: "positionTreeDist (n t : ℕ) (v : Fin n → Bool) (i : Fin n) : ℕ",
+      desc: "Tree displacement of position i: tree distance from i's section to threshold section at level t." },
+    { id: "elementsAtTreeDist", file: "AKS/TreeSorting.lean", line: 1069, status: "definition", kind: "def",
+      sig: "elementsAtTreeDist (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n)",
+      desc: "Elements in J displaced at tree-distance ≥ r. Time-dependent V2 of elementsAtDistance." },
+    { id: "HasBoundedTreeDamage", file: "AKS/TreeSorting.lean", line: 1099, status: "definition", kind: "def",
+      sig: "HasBoundedTreeDamage (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop",
+      desc: "V2 bounded-damage using tree distance. Network increases tree-dist count by ≤ ε·count(r-2)." },
+    { id: "treeWrongnessV2", file: "AKS/TreeSorting.lean", line: 1617, status: "definition", kind: "def",
+      sig: "treeWrongnessV2 (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
+      desc: "V2 tree wrongness using elementsAtTreeDist. Genuinely time-dependent (depends on t via sectionNode)." },
+    { id: "cherry_wrongness_after_nearsort_v2", file: "AKS/TreeSorting.lean", line: 2636, status: "proved", kind: "lemma",
+      sig: "cherry_wrongness_after_nearsort_v2 :\n  treeWrongnessV2 (net.exec v) J r ≤ treeWrongnessV2 v J r + ε·treeWrongnessV2 v J (r-2)",
+      desc: "V2: Cherry wrongness after nearsort. Same algebraic proof using HasBoundedTreeDamage." },
+    { id: "zig_step_bounded_increase_v2", file: "AKS/TreeSorting.lean", line: 2805, status: "proved", kind: "lemma",
+      sig: "zig_step_bounded_increase_v2 :\n  treeWrongnessV2 v' J r ≤ 8·A·(treeWrongnessV2 v J r + ε·treeWrongnessV2 v J (r-2))",
+      desc: "V2: Zig step bounded increase. Same algebraic proof using HasBoundedTreeDamage and treeWrongnessV2." },
+    { id: "positionTreeDist_succ_le", file: "AKS/TreeSorting.lean", line: 1056, status: "sorry", kind: "lemma",
+      sig: "positionTreeDist_succ_le :\n  positionTreeDist n (t+1) v i ≤ positionTreeDist n t v i + 2",
+      desc: "Tree distance increases by at most 2 when refining from level t to t+1. Needs sectionIndex_succ helper." },
+    { id: "HasBoundedZigzagDamage", file: "AKS/TreeSorting.lean", line: 1127, status: "definition", kind: "definition",
+      sig: "HasBoundedZigzagDamage zig_net zag_net ε t : Prop",
+      desc: "Combined zigzag bounded-damage with r → r+1 distance shift. Key structural property of even/odd cherry alternation." },
+    { id: "register_reassignment_increases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2694, status: "proved", kind: "lemma",
+      sig: "register_reassignment_increases_wrongness_v2 :\n  treeWrongnessV2 (t+1) v J' r ≤ C · treeWrongnessV2 t v J (r-2)",
+      desc: "V2 Lemma 1: Register reassignment. Single v, J'⊆J, distance shift 2, parameterized constant C." },
+    { id: "zigzag_decreases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2890, status: "sorry", kind: "lemma",
+      sig: "zigzag_decreases_wrongness_v2 :\n  treeWrongnessV2 t v'' J r ≤ treeWrongnessV2 t v J (r+1) + 3ε·tw(r-4)",
+      desc: "V2 Lemma 3: ZigZag combined step with r→r+1 improvement. No fringe amplification — HasBoundedZigzagDamage gives same-interval bound." }
   ],
 
   // Edges: [source, target] means "target depends on source" (arrow points from source to target)
@@ -518,21 +612,18 @@ const PROOF_DATA = {
     ["spectralGap", "baseExpander_gap"],
     ["baseExpander", "baseExpander_gap"],
 
-    // Top-level AKS construction
-    ["zero_one_principle", "AKS.sorts"],
-    ["aks_tree_sorting", "AKS.sorts"],
-    ["AKS", "AKS.sorts"],
-    ["IsSortingNetwork", "AKS.sorts"],
-    ["aks_tree_sorting", "AKS"],
-    ["expander_gives_halver", "AKS"],
-    ["epsHalverMerge", "AKS"],
-    ["AKS", "AKS.size_nlogn"],
+    // AKSNetwork.lean — helper lemmas
+    ["epsHalverMerge", "epsHalverMerge_exec_eq_iterate"],
+    ["epsHalverMerge", "epsHalverMerge_size"],
 
-    // Top-level theorem
-    ["explicit_expanders_exist_zigzag", "zigzag_implies_aks_network"],
-    ["AKS.sorts", "zigzag_implies_aks_network"],
-    ["AKS.size_nlogn", "zigzag_implies_aks_network"],
-    ["baseExpander_gap", "zigzag_implies_aks_network"],
+    // Top-level parameterized theorem (AKSNetwork.lean)
+    ["zero_one_principle", "zigzag_implies_aks_network"],
+    ["aks_tree_sorting", "zigzag_implies_aks_network"],
+    ["expander_gives_halver", "zigzag_implies_aks_network"],
+    ["epsHalverMerge_exec_eq_iterate", "zigzag_implies_aks_network"],
+    ["epsHalverMerge_size", "zigzag_implies_aks_network"],
+    ["mono_of_iterate_mono", "zigzag_implies_aks_network"],
+    ["aks_size_bound", "zigzag_implies_aks_network"],
 
     // TreeSorting — edges FROM main proof chain into TreeSorting
     ["IsEpsilonHalver", "halver_balances_ones"],
@@ -553,8 +644,37 @@ const PROOF_DATA = {
     ["treeWrongness", "zig_step_bounded_increase"],
     ["comparator_displacement_bound", "zig_step_bounded_increase"],
 
+    // V2 tree-distance-based definitions
+    ["TreeNode", "sectionNode"],
+    ["sectionIndex", "sectionNode"],
+    ["sectionNode", "positionTreeDist"],
+    ["positionTreeDist", "elementsAtTreeDist"],
+    ["elementsAtTreeDist", "HasBoundedTreeDamage"],
+    ["elementsAtTreeDist", "treeWrongnessV2"],
+    ["HasBoundedTreeDamage", "cherry_wrongness_after_nearsort_v2"],
+    ["treeWrongnessV2", "cherry_wrongness_after_nearsort_v2"],
+    ["HasBoundedTreeDamage", "zig_step_bounded_increase_v2"],
+    ["treeWrongnessV2", "zig_step_bounded_increase_v2"],
+    ["positionTreeDist", "positionTreeDist_succ_le"],
+    ["positionTreeDist_succ_le", "register_reassignment_increases_wrongness_v2"],
+    ["treeWrongnessV2", "register_reassignment_increases_wrongness_v2"],
+    ["elementsAtTreeDist", "register_reassignment_increases_wrongness_v2"],
+    ["elementsAtTreeDist", "HasBoundedZigzagDamage"],
+    ["HasBoundedZigzagDamage", "zigzag_decreases_wrongness_v2"],
+    ["treeWrongnessV2", "zigzag_decreases_wrongness_v2"],
+
     // TreeSorting — edges TO main proof chain
-    ["aks_tree_sorting", "AKS.sorts"],
+    ["aks_tree_sorting", "zigzag_implies_aks_network"],
+
+    // Main.lean — iterated squaring and final assembly
+    ["spectralGap_square", "spectralGap_squareIter"],
+    ["squareIter", "spectralGap_squareIter"],
+    ["explicit_expanders_exist_zigzag", "expander_family_small_gap"],
+    ["squareIter", "expander_family_small_gap"],
+    ["spectralGap_squareIter", "expander_family_small_gap"],
+    ["exists_pow_two_pow_lt", "expander_family_small_gap"],
+    ["expander_family_small_gap", "aks_sorting_networks_exist"],
+    ["zigzag_implies_aks_network", "aks_sorting_networks_exist"],
 
     // WalkBound
     ["spectralGap", "spectralGap_le_of_walk_bound"],
@@ -598,7 +718,7 @@ const PROOF_DATA = {
     { id: "AKS/CertificateBridge.lean", label: "CertificateBridge.lean", color: "#1a1e24" },
     { id: "AKS/Random.lean", label: "Random.lean", color: "#1a1e24" },
     { id: "AKS/TreeSorting.lean", label: "TreeSorting.lean", color: "#1a1e24" },
-    { id: "AKS.lean", label: "AKS.lean", color: "#1a1e24" }
+    { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]
 };
 // ═══════════════════════════════════════════════════════
@@ -620,8 +740,8 @@ function difficultyRadius(d) {
   return 4;
 }
 
-const W = window.innerWidth;
-const H = window.innerHeight;
+let W = window.innerWidth;
+let H = window.innerHeight;
 
 // Compute stats
 const proved = PROOF_DATA.nodes.filter(n => n.status === "proved").length;
@@ -694,7 +814,7 @@ layers.forEach((nodesInLayer, d) => {
 });
 
 // ── D3 setup ──
-const svg = d3.select("svg");
+const svg = d3.select("#graph");
 const g = svg.append("g");
 
 // Arrow marker
@@ -717,14 +837,22 @@ const zoom = d3.zoom()
   .on("zoom", (e) => g.attr("transform", e.transform));
 svg.call(zoom);
 
-function resetZoom() {
+function resetZoom(instant) {
   const graphH = TOP_PAD + (maxDepth + 1) * LAYER_H + 40;
   const scaleX = W / (GRAPH_W + 80);
   const scaleY = (H - 20) / graphH;
-  const s = Math.min(scaleX, scaleY, 1.1) * 0.9;
+  let s = Math.min(scaleX, scaleY, 1.1) * 0.9;
+  // On mobile the fit-all scale makes nodes sub-pixel; enforce a minimum
+  // so nodes are visible and let the user pan to explore.
+  if (W <= 600) s = Math.max(s, 0.7);
   const tx = (W - GRAPH_W * s) / 2;
-  const ty = 10;
-  svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(s));
+  const ty = W <= 600 ? -graphH * s * 0.15 : 10;
+  const t = d3.zoomIdentity.translate(tx, ty).scale(s);
+  if (instant) {
+    svg.call(zoom.transform, t);
+  } else {
+    svg.transition().duration(500).call(zoom.transform, t);
+  }
 }
 
 let labelsVisible = true;
@@ -763,6 +891,8 @@ simulation.on("end", () => {
     });
   });
   simulationDone = true;
+  // Re-fit after simulation settles (positions are now final)
+  resetZoom(false);
 });
 
 function isNodeVisible(id) {
@@ -932,8 +1062,8 @@ nodeSel.on("mouseover.highlight", (e, d) => {
   }
 });
 
-// ── Initial zoom to fit ──
-setTimeout(() => resetZoom(), 100);
+// ── Initial zoom to fit (instant, no transition) ──
+setTimeout(() => resetZoom(true), 100);
 
 // ═══════════════════════════════════════════════════════
 // TIMELINE ANIMATION — loads history.json, scrubs through proof history
@@ -1132,6 +1262,136 @@ function updateSpeed() {
   playSpeed = parseInt(document.getElementById('speedSelect').value);
   if (playing) startPlaying();
 }
+
+// ═══════════════════════════════════════════════════════
+// MOBILE / RESPONSIVE SUPPORT
+// ═══════════════════════════════════════════════════════
+
+// Resize handler — recompute dimensions and re-fit
+window.addEventListener('resize', () => {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  resetZoom();
+});
+
+// Legend toggle for mobile
+function toggleLegend() {
+  document.getElementById('legend').classList.toggle('open');
+}
+
+// Close legend when tapping elsewhere on mobile
+document.addEventListener('click', (e) => {
+  const legend = document.getElementById('legend');
+  const toggle = document.getElementById('legend-toggle');
+  if (!legend.contains(e.target) && e.target !== toggle) {
+    legend.classList.remove('open');
+  }
+});
+
+// Touch support for tooltips (tap node = show tooltip, tap elsewhere = dismiss)
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let activeTooltipNode = null;
+
+if (isTouchDevice) {
+  // Prevent default touch-drag on nodes so tooltip shows on tap
+  nodeSel.on('touchstart', function(e, d) {
+    // Single-finger tap: show tooltip
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (activeTooltipNode === d) {
+        // Second tap on same node: open link
+        window.open(`${PROOF_DATA.repo}/blob/main/${d.file}#L${d.line}`, '_blank');
+        dismissTooltip();
+        return;
+      }
+
+      activeTooltipNode = d;
+
+      // Show tooltip content
+      let html = `<div class="tt-name">${d.id}</div>`;
+      html += `<div class="tt-file">${d.file}:${d.line} &mdash; <span style="color:${statusColor[d.status]}">${d.status}</span></div>`;
+      html += `<div class="tt-sig">${escHtml(d.sig)}</div>`;
+      html += `<div class="tt-desc">${d.desc}</div>`;
+      if (d.difficulty) html += `<div class="tt-diff">Estimated difficulty: ${d.difficulty}</div>`;
+      html += `<div style="margin-top:8px;font-size:10px;color:#484f58;">Tap again to open on GitHub</div>`;
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+
+      // Position: on mobile, anchor to bottom of viewport; on desktop, near touch point
+      if (W <= 600) {
+        tooltip.style.left = '16px';
+        tooltip.style.top = '';
+        tooltip.style.bottom = '8px';
+      } else {
+        const touch = e.touches[0];
+        let x = touch.clientX + 16, y = touch.clientY + 16;
+        if (x + 480 > W) x = touch.clientX - 496;
+        if (y + 200 > H) y = touch.clientY - 200;
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+        tooltip.style.bottom = '';
+      }
+
+      // Highlight connected
+      const connected = new Set([d.id]);
+      links.forEach(l => {
+        if (l.source.id === d.id) connected.add(l.target.id);
+        if (l.target.id === d.id) connected.add(l.source.id);
+      });
+      nodeSel.attr('opacity', n => {
+        if (!isNodeVisible(n.id)) return 0;
+        return connected.has(n.id) ? 1 : 0.15;
+      });
+      labelSel.attr('opacity', n => {
+        if (!isNodeVisible(n.id)) return 0;
+        return (connected.has(n.id) && labelsVisible) ? 1 : 0.05;
+      });
+      linkSel.attr('opacity', l => {
+        if (!isNodeVisible(l.source.id) || !isNodeVisible(l.target.id)) return 0;
+        return (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04;
+      });
+    }
+  });
+
+  // Tap on background dismisses tooltip
+  svg.on('touchstart.dismiss', (e) => {
+    if (e.target.tagName === 'svg' || e.target.classList.contains('group-rect')) {
+      dismissTooltip();
+    }
+  });
+
+  // Also dismiss on tap outside the tooltip itself
+  document.addEventListener('touchstart', (e) => {
+    if (activeTooltipNode && !tooltip.contains(e.target) &&
+        !e.target.classList.contains('node-circle')) {
+      dismissTooltip();
+    }
+  });
+}
+
+function dismissTooltip() {
+  activeTooltipNode = null;
+  tooltip.style.display = 'none';
+  tooltip.style.bottom = '';
+  // Restore normal opacity
+  const slider = document.getElementById('timeSlider');
+  if (HISTORY_DATA && slider && parseInt(slider.value) < HISTORY_DATA.snapshots.length) {
+    applySnapshot(parseInt(slider.value), false);
+  } else {
+    nodeSel.attr('opacity', d => isNodeVisible(d.id) ? 1 : 0);
+    labelSel.attr('opacity', d => (isNodeVisible(d.id) && labelsVisible) ? 1 : 0);
+    linkSel.attr('opacity', 0.3);
+  }
+}
+
+// Mark body when timeline is active (for CSS adjustments)
+const timelineObserver = new MutationObserver(() => {
+  const tl = document.getElementById('timeline');
+  document.body.classList.toggle('has-timeline', tl.style.display === 'flex');
+});
+timelineObserver.observe(document.getElementById('timeline'), { attributes: true, attributeFilter: ['style'] });
 </script>
 </body>
 </html>
