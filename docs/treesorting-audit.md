@@ -123,7 +123,25 @@ aks_tree_sorting
 
 ## Path forward
 
-### Option A: Fix `elementsAtDistance` (major, correct)
+### Chosen: Targeted hybrid (Phase 1 complete)
+
+Introduce V2 definitions that use tree distance at level `t`, making the measure
+genuinely time-dependent. Keep all original definitions and proofs intact.
+
+**Phase 1 (DONE):** Define `sectionIndex`, `sectionNode`, `positionTreeDist`,
+`elementsAtTreeDist`, `HasBoundedTreeDamage`, `treeWrongnessV2`. Re-prove
+`cherry_wrongness_after_nearsort_v2` and `zig_step_bounded_increase_v2` with the
+new definitions (same algebraic proofs).
+
+**Phase 2 (TODO):** Read AKS Section 8 carefully. Reformulate Lemmas 1 and 3
+(`register_reassignment_increases_wrongness`, `zigzag_decreases_wrongness`) with
+proper tree-structure hypotheses using V2 definitions.
+
+**Phase 3 (TODO):** Connect V2-based Lemmas 1-4 to `aks_tree_sorting`.
+
+### Fallback options (if targeted hybrid fails)
+
+#### Option A: Fix `elementsAtDistance` (major, correct)
 
 Make `elementsAtDistance` take the interval tree as a parameter (or make `t` meaningful
 by computing sections from `intervalsAt n t`). This would:
@@ -132,8 +150,9 @@ by computing sections from `intervalsAt n t`). This would:
 - Require updating all proved lemmas that use `elementsAtDistance`
 
 **Effort:** Weeks. Many proved lemmas need re-verification.
+All work from the targeted hybrid feeds into this option.
 
-### Option B: Restructure around the gap (moderate)
+#### Option B: Restructure around the gap (moderate)
 
 Accept that `elementsAtDistance` is a time-independent approximation. Reformulate:
 - Lemma 1 as a local bound (without time evolution)
@@ -142,7 +161,7 @@ Accept that `elementsAtDistance` is a time-independent approximation. Reformulat
 
 **Effort:** Weeks. Requires creative reformulation.
 
-### Option C: Leave as documented skeleton (minimal)
+#### Option C: Leave as documented skeleton (minimal)
 
 Keep the current state with detailed comments about what's wrong and what's needed.
 The 3 proved lemmas and the bridge lemma are correct building blocks. The rest
