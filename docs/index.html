@@ -6,7 +6,7 @@
 <title>AKS Sorting Network — Proof Dependency Graph</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; touch-action: none; }
 #controls { position: fixed; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; }
 #controls button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 #controls button:hover { background: #30363d; }
@@ -20,6 +20,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 #legend .dot { border-radius: 50%; flex-shrink: 0; }
 #legend .size-dot { background: #484f58; }
+#legend-toggle { display: none; }
 #stats { position: fixed; bottom: 16px; right: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; text-align: right; }
 #stats .num { font-size: 20px; font-weight: 700; }
 #tooltip { position: fixed; pointer-events: none; background: #1c2128; border: 1px solid #444c56; border-radius: 8px; padding: 12px 16px; font-size: 13px; max-width: 480px; z-index: 100; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
@@ -42,6 +43,38 @@ svg { width: 100vw; height: 100vh; }
 #timeline input[type=range] { width: 300px; accent-color: #58a6ff; }
 #timeDate { color: #7d8590; width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 #liveBadge { background: #3fb950; color: #0d1117; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; visibility: hidden; }
+
+/* ── Mobile / narrow screens ── */
+@media (max-width: 600px) {
+  #title { top: 8px; right: 8px; }
+  #title h1 { font-size: 14px; }
+  #title p { font-size: 10px; }
+
+  #controls { top: 8px; left: 8px; gap: 4px; }
+  #controls button { padding: 8px 10px; font-size: 12px; min-height: 36px; }
+
+  /* Legend: collapse behind a toggle button */
+  #legend { display: none; bottom: auto; top: 48px; left: 8px; padding: 10px 12px; font-size: 11px; }
+  #legend.open { display: block; }
+  #legend-toggle { display: block; }
+
+  /* Stats: compact inline at bottom-right */
+  #stats { bottom: 8px; right: 8px; padding: 8px 10px; font-size: 11px; }
+  #stats .num { font-size: 16px; }
+
+  /* Tooltip: fit within viewport */
+  #tooltip { max-width: calc(100vw - 32px); left: 16px !important; right: 16px; font-size: 12px; padding: 10px 12px; pointer-events: auto; }
+  #tooltip .tt-name { font-size: 14px; }
+  #tooltip .tt-sig { font-size: 10px; max-height: 80px; }
+
+  /* Timeline: full width */
+  #timeline { left: 8px; right: 8px; transform: none; bottom: 8px; padding: 6px 10px; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  #timeline input[type=range] { width: 100%; order: 10; }
+  #timeDate { width: auto; max-width: 50vw; font-size: 10px; }
+
+  /* When timeline is visible, push stats above it */
+  body.has-timeline #stats { bottom: 72px; }
+}
 </style>
 </head>
 <body>
@@ -49,6 +82,7 @@ svg { width: 100vw; height: 100vh; }
 <div id="controls">
   <button onclick="resetZoom()">Reset View</button>
   <button onclick="toggleLabels()">Toggle Labels</button>
+  <button id="legend-toggle" onclick="toggleLegend()">Legend</button>
 </div>
 
 <div id="title">
@@ -557,8 +591,8 @@ function difficultyRadius(d) {
   return 4;
 }
 
-const W = window.innerWidth;
-const H = window.innerHeight;
+let W = window.innerWidth;
+let H = window.innerHeight;
 
 // Compute stats
 const proved = PROOF_DATA.nodes.filter(n => n.status === "proved").length;
@@ -1069,6 +1103,136 @@ function updateSpeed() {
   playSpeed = parseInt(document.getElementById('speedSelect').value);
   if (playing) startPlaying();
 }
+
+// ═══════════════════════════════════════════════════════
+// MOBILE / RESPONSIVE SUPPORT
+// ═══════════════════════════════════════════════════════
+
+// Resize handler — recompute dimensions and re-fit
+window.addEventListener('resize', () => {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  resetZoom();
+});
+
+// Legend toggle for mobile
+function toggleLegend() {
+  document.getElementById('legend').classList.toggle('open');
+}
+
+// Close legend when tapping elsewhere on mobile
+document.addEventListener('click', (e) => {
+  const legend = document.getElementById('legend');
+  const toggle = document.getElementById('legend-toggle');
+  if (!legend.contains(e.target) && e.target !== toggle) {
+    legend.classList.remove('open');
+  }
+});
+
+// Touch support for tooltips (tap node = show tooltip, tap elsewhere = dismiss)
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let activeTooltipNode = null;
+
+if (isTouchDevice) {
+  // Prevent default touch-drag on nodes so tooltip shows on tap
+  nodeSel.on('touchstart', function(e, d) {
+    // Single-finger tap: show tooltip
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (activeTooltipNode === d) {
+        // Second tap on same node: open link
+        window.open(`${PROOF_DATA.repo}/blob/main/${d.file}#L${d.line}`, '_blank');
+        dismissTooltip();
+        return;
+      }
+
+      activeTooltipNode = d;
+
+      // Show tooltip content
+      let html = `<div class="tt-name">${d.id}</div>`;
+      html += `<div class="tt-file">${d.file}:${d.line} &mdash; <span style="color:${statusColor[d.status]}">${d.status}</span></div>`;
+      html += `<div class="tt-sig">${escHtml(d.sig)}</div>`;
+      html += `<div class="tt-desc">${d.desc}</div>`;
+      if (d.difficulty) html += `<div class="tt-diff">Estimated difficulty: ${d.difficulty}</div>`;
+      html += `<div style="margin-top:8px;font-size:10px;color:#484f58;">Tap again to open on GitHub</div>`;
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+
+      // Position: on mobile, anchor to bottom of viewport; on desktop, near touch point
+      if (W <= 600) {
+        tooltip.style.left = '16px';
+        tooltip.style.top = '';
+        tooltip.style.bottom = '8px';
+      } else {
+        const touch = e.touches[0];
+        let x = touch.clientX + 16, y = touch.clientY + 16;
+        if (x + 480 > W) x = touch.clientX - 496;
+        if (y + 200 > H) y = touch.clientY - 200;
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+        tooltip.style.bottom = '';
+      }
+
+      // Highlight connected
+      const connected = new Set([d.id]);
+      links.forEach(l => {
+        if (l.source.id === d.id) connected.add(l.target.id);
+        if (l.target.id === d.id) connected.add(l.source.id);
+      });
+      nodeSel.attr('opacity', n => {
+        if (!isNodeVisible(n.id)) return 0;
+        return connected.has(n.id) ? 1 : 0.15;
+      });
+      labelSel.attr('opacity', n => {
+        if (!isNodeVisible(n.id)) return 0;
+        return (connected.has(n.id) && labelsVisible) ? 1 : 0.05;
+      });
+      linkSel.attr('opacity', l => {
+        if (!isNodeVisible(l.source.id) || !isNodeVisible(l.target.id)) return 0;
+        return (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04;
+      });
+    }
+  });
+
+  // Tap on background dismisses tooltip
+  svg.on('touchstart.dismiss', (e) => {
+    if (e.target.tagName === 'svg' || e.target.classList.contains('group-rect')) {
+      dismissTooltip();
+    }
+  });
+
+  // Also dismiss on tap outside the tooltip itself
+  document.addEventListener('touchstart', (e) => {
+    if (activeTooltipNode && !tooltip.contains(e.target) &&
+        !e.target.classList.contains('node-circle')) {
+      dismissTooltip();
+    }
+  });
+}
+
+function dismissTooltip() {
+  activeTooltipNode = null;
+  tooltip.style.display = 'none';
+  tooltip.style.bottom = '';
+  // Restore normal opacity
+  const slider = document.getElementById('timeSlider');
+  if (HISTORY_DATA && slider && parseInt(slider.value) < HISTORY_DATA.snapshots.length) {
+    applySnapshot(parseInt(slider.value), false);
+  } else {
+    nodeSel.attr('opacity', d => isNodeVisible(d.id) ? 1 : 0);
+    labelSel.attr('opacity', d => (isNodeVisible(d.id) && labelsVisible) ? 1 : 0);
+    linkSel.attr('opacity', 0.3);
+  }
+}
+
+// Mark body when timeline is active (for CSS adjustments)
+const timelineObserver = new MutationObserver(() => {
+  const tl = document.getElementById('timeline');
+  document.body.classList.toggle('has-timeline', tl.style.display === 'flex');
+});
+timelineObserver.observe(document.getElementById('timeline'), { attributes: true, attributeFilter: ['style'] });
 </script>
 </body>
 </html>
