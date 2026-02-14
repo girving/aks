@@ -159,6 +159,11 @@ Pure operator theory, no graph imports:
 2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
 3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
 
+### `AKS/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
+Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `RegularGraph.lean`:
+1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
+2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
+
 ### `AKS/ZigZag.lean` — Expander Families (~115 lines)
 Assembles the spectral bound and builds the iterated construction:
 1. **Spectral composition theorem** — `zigzag_spectral_bound` (assembles sublemmas)
@@ -170,10 +175,12 @@ Assembles the spectral bound and builds the iterated construction:
 Fin.lean → RegularGraph.lean → Square.lean ──────────────→ ZigZag.lean
                               → CompleteGraph.lean              ↓
                               → Mixing.lean               AKS.lean
+                              → WalkBound.lean ──→ CertificateBridge.lean
                               → ZigZagOperators.lean ──→      ↑
                                   ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean ─→ Halver.lean
            Random.lean ────────────────────────────↗          ↑
            RVWBound.lean ─────────────────────────↗  RegularGraph.lean
+           Certificate.lean ──→ CertificateBridge.lean
 ```
 
 ## Style
@@ -343,6 +350,6 @@ No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGr
 
 ### Base expander certificate pipeline (implemented)
 
-Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `CertificateBridge.lean` (sorry'd bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for the bridge theorem proof plan.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `WalkBound.lean` (abstract theory) → `CertificateBridge.lean` (bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for background.
 
-**Bridge proof plan** (`docs/bridge-proof-plan.md`): Factor into three lemmas: (1) certificate → walk bound on mean-zero vectors [sorry'd, needs checker augmentation], (2) walk bound → `spectralGap` bound via `opNorm_le_bound` [provable, LOW risk], (3) coefficient arithmetic via `√` monotonicity [provable, LOW risk]. Key insight: avoid eigenvalue decomposition entirely — use quadratic forms on `1⊥` where `J` vanishes.
+**Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
