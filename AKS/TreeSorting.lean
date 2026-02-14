@@ -255,6 +255,10 @@ lemma Interval.size_le {n : ℕ} (I : Interval n) : I.size ≤ n := by
   have : I.b.val < n := I.b.isLt
   omega
 
+-- Every interval has positive size (since a ≤ b, size = b - a + 1 ≥ 1)
+lemma Interval.size_pos {n : ℕ} (I : Interval n) : 0 < I.size := by
+  unfold Interval.size; omega
+
 -- Non-empty intervals have positive size
 lemma Interval.size_pos_of_nonempty {n : ℕ} (I : Interval n) (h : I.size > 0) :
     I.a.val ≤ I.b.val := I.h
@@ -1038,6 +1042,21 @@ def positionTreeDist (n t : ℕ) (v : Fin n → Bool) (i : Fin n) : ℕ :=
     -- k = 0 or k = n: all elements are the same value, no displacement possible
     0
 
+/-- Tree distance increases by at most 2 when the tree refines from level `t` to `t+1`.
+
+    At level `t`, position `i` is in section `sectionIndex(n,t,i)`. At level `t+1`,
+    it's in section `sectionIndex(n,t+1,i)`, which is a child (left or right) of
+    the level-`t` section. Since both i's section and the threshold section each
+    go one level deeper, the tree distance increases by at most 2.
+
+    Proof idea: `sectionIndex(n,t+1,i) ∈ {2·s, 2·s+1}` where `s = sectionIndex(n,t,i)`
+    (from `⌊2m/n⌋ ∈ {2·⌊m/n⌋, 2·⌊m/n⌋+1}`). The common ancestor level stays the
+    same or increases, so distance(t+1) = distance(t) + 2 or distance(t+1) ≤ 2.
+    Either way, distance(t+1) ≤ distance(t) + 2. -/
+lemma positionTreeDist_succ_le {n t : ℕ} (v : Fin n → Bool) (i : Fin n) :
+    positionTreeDist n (t + 1) v i ≤ positionTreeDist n t v i + 2 := by
+  sorry
+
 /-- Elements in interval `J` displaced at tree-distance ≥ `r`.
     Unlike `elementsAtDistance` (position-based, `t` unused), this measures
     displacement via tree distance at granularity level `t`. As `t` increases,
@@ -1082,6 +1101,29 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
     ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
       (elementsAtTreeDist n t v J r).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
+
+/-- V2: Combined zigzag bounded-damage with `r → r+1` distance shift.
+
+    The composition of zig-then-zag achieves an `r → r+1` distance shift:
+    elements at tree-distance ≥ `r` after zigzag are bounded by elements at
+    tree-distance ≥ `r+1` before, plus error terms from exceptions at each step.
+
+    This is the KEY structural property of even/odd cherry alternation
+    (AKS Section 6). It does NOT follow from composing two `HasBoundedTreeDamage`
+    properties alone — it requires that zig and zag operate on complementary
+    cherry partitions (even-level and odd-level apexes).
+
+    The `r+1` in the first term is the geometric decrease mechanism:
+    after each zigzag cycle, wrongness at distance `r` is controlled
+    by wrongness at distance `r+1` before the cycle. -/
+def HasBoundedZigzagDamage {n : ℕ}
+    (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
+  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
+    let v'' := zag_net.exec (zig_net.exec v)
+    ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
+        ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -2623,6 +2665,71 @@ lemma register_reassignment_increases_wrongness
     treeWrongness n (t+1) v' J' r ≤ 6 * A * treeWrongness n t v J (r - 4) := by
   sorry
 
+/-- **Lemma 1 (V2): Register Reassignment** (AKS Section 8)
+
+    When time advances from `t` to `t+1`, the interval tree refines and
+    registers are reassigned. Values don't change — register reassignment
+    is purely structural.
+
+    Key idea: tree distance increases by at most 2 when sections refine
+    (each section at level `t` splits into two at level `t+1`). Combined
+    with the interval containment `J' ⊆ J` and size ratio bound, we get:
+
+    `treeWrongnessV2(t+1, v, J', r) ≤ C · treeWrongnessV2(t, v, J, r-2)`
+
+    **Differences from V1:**
+    - Single `v` (not `v, v'`): values are unchanged by reassignment
+    - `J' ⊆ J` (not `J ⊆ J'`): new interval is smaller (tree refines)
+    - Distance shift 2 (not 4): zig/zag shift factored into Lemma 2
+    - Parameterized constant `C` (not hardcoded `6A`)
+    - Uses `treeWrongnessV2` which genuinely depends on `t` -/
+lemma register_reassignment_increases_wrongness_v2
+    {n t : ℕ} (v : Fin n → Bool) (J J' : Interval n) (r : ℕ) (C : ℝ)
+    (hC : 0 ≤ C)
+    (h_contain : J'.toFinset ⊆ J.toFinset)  -- new interval inside old (tree refines)
+    (h_size : (J.size : ℝ) ≤ C * J'.size)  -- size ratio bounded by C
+    (hr : r ≥ 2) :
+    treeWrongnessV2 n (t + 1) v J' r ≤ C * treeWrongnessV2 n t v J (r - 2) := by
+  -- Interval sizes are always positive
+  have hJ_pos := J.size_pos
+  have hJ'_pos := J'.size_pos
+  have hJ : (0 : ℝ) < ↑J.size := by exact_mod_cast hJ_pos
+  have hJ' : (0 : ℝ) < ↑J'.size := by exact_mod_cast hJ'_pos
+  have hJ_ne : J.size ≠ 0 := by omega
+  have hJ'_ne : J'.size ≠ 0 := by omega
+  -- Step 1: elements at tree-dist ≥ r at time t+1 in J' are contained in
+  -- elements at tree-dist ≥ r-2 at time t in J
+  have h_subset : elementsAtTreeDist n (t + 1) v J' r ⊆
+      elementsAtTreeDist n t v J (r - 2) := by
+    unfold elementsAtTreeDist
+    rw [if_neg hJ'_ne, if_neg hJ_ne]
+    intro i hi
+    simp only [Finset.mem_filter] at hi ⊢
+    refine ⟨h_contain hi.1, hi.2.1, ?_⟩
+    -- From: r ≤ positionTreeDist(t+1, v, i) and positionTreeDist_succ_le
+    have h_dist := positionTreeDist_succ_le v i (t := t)
+    omega
+  -- Step 2: card bound
+  have h_card : ((elementsAtTreeDist n (t + 1) v J' r).card : ℝ) ≤
+      (elementsAtTreeDist n t v J (r - 2)).card :=
+    Nat.cast_le.mpr (Finset.card_le_card h_subset)
+  -- Step 3: combine via division
+  unfold treeWrongnessV2
+  rw [if_neg hJ'_ne, if_neg hJ_ne]
+  -- Cross-multiply: card1/size1 ≤ C * (card2/size2) iff card1 * size2 ≤ C * card2 * size1
+  rw [div_le_iff₀ hJ']
+  -- Now goal: ↑card1 ≤ C * (↑card2 / ↑J.size) * ↑J'.size
+  -- Rearrange to get card1 * J.size ≤ C * card2 * J'.size
+  rw [show C * (↑(elementsAtTreeDist n t v J (r - 2)).card / ↑J.size) * ↑J'.size =
+      C * ↑(elementsAtTreeDist n t v J (r - 2)).card * ↑J'.size / ↑J.size from by ring]
+  rw [le_div_iff₀ hJ]
+  calc (↑(elementsAtTreeDist n (t + 1) v J' r).card * ↑J.size : ℝ)
+      ≤ ↑(elementsAtTreeDist n t v J (r - 2)).card * ↑J.size :=
+        mul_le_mul_of_nonneg_right h_card hJ.le
+    _ ≤ ↑(elementsAtTreeDist n t v J (r - 2)).card * (C * ↑J'.size) :=
+        mul_le_mul_of_nonneg_left h_size (by exact_mod_cast Nat.zero_le _)
+    _ = C * ↑(elementsAtTreeDist n t v J (r - 2)).card * ↑J'.size := by ring
+
 /-- **Lemma 2: Single Zig or Zag Step** (AKS page 8)
 
     Applying ε-nearsort to a cherry (parent + two children intervals)
@@ -2748,6 +2855,54 @@ lemma zigzag_decreases_wrongness
   -- NOTE: Can't follow from just chaining two zig steps — the r+1 improvement
   -- requires the tree alternation insight (zig on even levels, zag on odd levels).
   -- Needs additional structure about how zig/zag operate on different tree levels.
+  sorry
+
+/-- **Lemma 3 (V2): ZigZag Combined Step** (AKS Section 8)
+
+    Combining a Zig step (ε-nearsort on even-level cherries) and a Zag step
+    (ε-nearsort on odd-level cherries) gives STRICT DECREASE in wrongness.
+    The distance parameter improves from `r` to `r + 1`:
+
+    `treeWrongnessV2(t, v'', J, r) ≤ 64A²·(treeWrongnessV2(t, v, J, r+1) + 3ε·Δ_{r-4})`
+
+    **Differences from V1:**
+    - Two separate networks (`zig_net`, `zag_net`) instead of one applied twice
+    - Both have `HasBoundedTreeDamage` at time `t` (individual Lemma 2 bounds)
+    - Their composition satisfies `HasBoundedZigzagDamage` (the combined `r → r+1`
+      shift from cherry alternation)
+    - Uses `treeWrongnessV2` which genuinely depends on `t`
+
+    **Proof structure:**
+    The hypothesis `hzz : HasBoundedZigzagDamage` provides element-level bounds
+    with the `r → r+1` shift. This lemma converts those to wrongness ratios
+    (dividing by `J.size`) and applies the `8A` amplification factor twice
+    (once for zig, once for zag), giving `(8A)² = 64A²`.
+
+    The `3ε` error factor comes from:
+    - ε from zig exceptions (elements that didn't move correctly during zig)
+    - ε from zag exceptions (elements that didn't move correctly during zag)
+    - ε² from cross terms, bounded by ε since ε ≤ 1 -/
+lemma zigzag_decreases_wrongness_v2
+    {n t : ℕ}
+    (v : Fin n → Bool)
+    (zig_net zag_net : ComparatorNetwork n)
+    (ε : ℝ) (hε_nn : 0 ≤ ε) (hε_le : ε ≤ 1)
+    -- Individual bounded tree damage (each network satisfies Lemma 2 bounds)
+    (hzig : HasBoundedTreeDamage zig_net ε t)
+    (hzag : HasBoundedTreeDamage zag_net ε t)
+    -- Combined zigzag damage with r → r+1 shift
+    -- (follows from hzig + hzag + cherry alternation; see HasBoundedZigzagDamage)
+    (hzz : HasBoundedZigzagDamage zig_net zag_net ε t)
+    (r : ℕ) (J : Interval n) :
+    let v'' := zag_net.exec (zig_net.exec v)
+    treeWrongnessV2 n t v'' J r ≤
+      64 * A ^ 2 * (treeWrongnessV2 n t v J (r + 1) +
+                    if r ≥ 5 then 3 * ε * treeWrongnessV2 n t v J (r - 4)
+                    else 3 * ε) := by
+  intro v''
+  -- Algebraic wrapper: HasBoundedZigzagDamage gives element-level bound with r → r+1
+  -- shift. Divide by J.size, consolidate ε error terms, scale by 64A² ≥ 1.
+  -- Same pattern as cherry_wrongness_after_nearsort_v2.
   sorry
 
 /-- **Lemma 4: Displacement from Wrongness** (AKS page 8-9, Equation 4)
