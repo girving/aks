@@ -246,15 +246,181 @@ def checkAllRowsDomPure (rotBytes certBytes : ByteArray) (n d : Nat)
               checkRowDomPure rotBytes certBytes n d c₁ c₂ c₃ m
 
 
+/-! **Column-norm bound check (O(n²))** -/
+
+/-- Check that Z column norms are bounded relative to diagonal entries.
+    Combined with the PSD check (minDiag, epsMax), this implies K = Z^T M Z
+    is strictly diag-dominant — without the O(n³) K computation.
+
+    For each row i, diagonal dominance requires:
+      Z[i,i] · (minDiag + epsMax) > epsMax · T_i
+    where T_i = ∑_{j<i} S_j + (n-i) · S_i and S_j = ∑_{k≤j} |Z[k,j]|.
+
+    This function recomputes minDiag and epsMax from the certificate, then
+    checks the column-norm inequality. Complexity: O(n²·d) for minDiag/epsMax
+    (same as PSD check), O(n²) for column norms. -/
+def checkColumnNormBound (rotBytes certBytes : ByteArray) (n d : Nat)
+    (c₁ c₂ c₃ : Int) : Bool :=
+  if certBytes.size != n * (n + 1) / 2 * 5 then false
+  else Id.run do
+    -- Phase 1: Compute minDiag and epsMax (same as checkPSDCertificate)
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
+    let mut first := true
+    for j in [:n] do
+      let colStart := j * (j + 1) / 2
+      let mut zCol := Array.replicate n (0 : Int)
+      for k in [:j+1] do
+        zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
+      let bz := mulAdj rotBytes zCol n d
+      let b2z := mulAdj rotBytes bz n d
+      let mut colSum : Int := 0
+      for k in [:j+1] do
+        colSum := colSum + zCol[k]!
+      for i in [:n] do
+        let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+        if i == j then
+          if first then
+            minDiag := pij
+            first := false
+          else if pij < minDiag then
+            minDiag := pij
+        else if i < j then
+          let absPij := if pij >= 0 then pij else -pij
+          if absPij > epsMax then
+            epsMax := absPij
+    -- Phase 2: Compute column norms S_j = ∑_{k≤j} |Z[k,j]|
+    let mut colNorms := Array.replicate n (0 : Int)
+    for j in [:n] do
+      let colStart := j * (j + 1) / 2
+      let mut norm : Int := 0
+      for k in [:j+1] do
+        let entry := decodeBase85Int certBytes (colStart + k)
+        norm := norm + (if entry >= 0 then entry else -entry)
+      colNorms := colNorms.set! j norm
+    -- Phase 3: Check Z[i,i] · (minDiag + epsMax) > epsMax · T_i for each row
+    let mdpe := minDiag + epsMax  -- minDiag + epsMax
+    let mut prefSum : Int := 0  -- ∑_{j<i} S_j
+    for i in [:n] do
+      let colStartI := i * (i + 1) / 2
+      let diag := decodeBase85Int certBytes (colStartI + i)
+      -- T_i = prefSum + (n - i) · S_i
+      let ti := prefSum + (↑(n - i) : Int) * colNorms[i]!
+      if !(diag * mdpe > epsMax * ti) then return false
+      prefSum := prefSum + colNorms[i]!
+    return true
+
+
+/-! **Fast implementations with pre-decoded data** -/
+
+/-- Pre-decode all neighbor vertices from the rotation map. -/
+def decodeNeighbors (rotBytes : ByteArray) (n d : Nat) : Array Nat :=
+  Id.run do
+    let nd := n * d
+    let mut arr := Array.replicate nd 0
+    for k in [:nd] do
+      arr := arr.set! k (decodeBase85Nat rotBytes (2 * k))
+    return arr
+
+/-- Pre-decode all certificate Z entries (upper triangular, packed). -/
+def decodeCertEntries (certBytes : ByteArray) (n : Nat) : Array Int :=
+  Id.run do
+    let total := n * (n + 1) / 2
+    let mut arr := Array.replicate total 0
+    for k in [:total] do
+      arr := arr.set! k (decodeBase85Int certBytes k)
+    return arr
+
+/-- `mulAdj` with pre-decoded neighbor array. -/
+def mulAdjPre (neighbors : Array Nat) (z : Array Int) (n d : Nat) : Array Int :=
+  Id.run do
+    let mut result := Array.replicate n 0
+    for v in [:n] do
+      let mut acc : Int := 0
+      for p in [:d] do
+        let w := neighbors[v * d + p]!
+        acc := acc + z[w]!
+      result := result.set! v acc
+    return result
+
+/-- Fast K diagonal dominance check with pre-decoded data. -/
+def checkKRowDominantPre (neighbors : Array Nat) (zEntries : Array Int)
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+  Id.run do
+    -- Phase 1: Compute P = M · Z
+    let mut pMatrix : Array Int := Array.replicate (n * n) 0
+    for j in [:n] do
+      let colStart := j * (j + 1) / 2
+      let mut zCol := Array.replicate n (0 : Int)
+      for k in [:j+1] do
+        zCol := zCol.set! k (zEntries[colStart + k]!)
+      let bz := mulAdjPre neighbors zCol n d
+      let b2z := mulAdjPre neighbors bz n d
+      let mut colSum : Int := 0
+      for k in [:j+1] do
+        colSum := colSum + zCol[k]!
+      for i in [:n] do
+        pMatrix := pMatrix.set! (i * n + j) (c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum)
+    -- Phase 2: Check rows using pre-decoded Z
+    for i in [:n] do
+      let colStartI := i * (i + 1) / 2
+      let mut diagVal : Int := 0
+      let mut offDiagSum : Int := 0
+      for j in [:n] do
+        let mut kij : Int := 0
+        for k in [:i+1] do
+          kij := kij + zEntries[colStartI + k]! * pMatrix[k * n + j]!
+        if j == i then
+          diagVal := kij
+        else
+          offDiagSum := offDiagSum + (if kij >= 0 then kij else -kij)
+      if offDiagSum >= diagVal then return false
+    return true
+
+/-- Fast PSD check with pre-decoded data. -/
+def checkPSDCertificatePre (neighbors : Array Nat) (zEntries : Array Int)
+    (certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+  if certBytes.size != n * (n + 1) / 2 * 5 then false
+  else allDiagPositive certBytes n && Id.run do
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
+    let mut first := true
+    for j in [:n] do
+      let colStart := j * (j + 1) / 2
+      let mut zCol := Array.replicate n (0 : Int)
+      for k in [:j+1] do
+        zCol := zCol.set! k (zEntries[colStart + k]!)
+      let bz := mulAdjPre neighbors zCol n d
+      let b2z := mulAdjPre neighbors bz n d
+      let mut colSum : Int := 0
+      for k in [:j+1] do
+        colSum := colSum + zCol[k]!
+      for i in [:n] do
+        let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+        if i == j then
+          if first then
+            minDiag := pij
+            first := false
+          else if pij < minDiag then
+            minDiag := pij
+        else if i < j then
+          let absPij := if pij >= 0 then pij else -pij
+          if absPij > epsMax then
+            epsMax := absPij
+    let threshold := epsMax * (n * (n + 1) / 2)
+    decide (minDiag > threshold)
+
+
 /-! **Combined check** -/
 
-/-- Full certificate check: involution + PSD + K diagonal dominance.
-    Both rotation map and certificate are base-85 encoded `String`s. -/
+/-- Full certificate check: involution + PSD + column-norm bound.
+    Both rotation map and certificate are base-85 encoded `String`s.
+    All sub-checks are O(n²·d), making `native_decide` feasible for n ≤ ~10000. -/
 def checkCertificate (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   checkInvolution rotBytes n d &&
   checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ &&
-  checkKRowDominant rotBytes certBytes n d c₁ c₂ c₃ &&
-  checkAllRowsDomPure rotBytes certBytes n d c₁ c₂ c₃ n
+  checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃
+
