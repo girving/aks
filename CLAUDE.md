@@ -28,9 +28,13 @@ No tests or linters — correctness is verified through Lean's type checker.
 Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state). For checking all files, prefer `scripts/lean-check --all` — it uses the daemon cache and is much faster.
 
 ```bash
-lake build          # Full rebuild — slow, use only as fallback
-lake clean          # Clean build artifacts
+lake exe cache get    # Download prebuilt Mathlib oleans (run after lake clean or fresh clone)
+lake build CertChecker  # Build precompiled certificate checker (must run before lake build)
+lake build            # Full rebuild — slow, use only as fallback
+lake clean            # Clean build artifacts
 ```
+
+**After `lake clean` or a fresh clone, run `lake exe cache get` then `lake build CertChecker` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). The CertChecker build produces a precompiled shared library that the AKS lib loads via `--load-dynlib` for fast `native_decide` (130s → 2s). Without it, `lake build` fails on files that need the shared lib. The `lean-check` daemon handles this automatically.
 
 ### Python Scripts
 

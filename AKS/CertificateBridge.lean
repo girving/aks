@@ -209,6 +209,163 @@ private theorem kEntry_eq {n d : ℕ} (G : RegularGraph n d)
       pEntry_eq G rotBytes certBytes hn hd hmatch c₁ c₂ c₃ k j]
   push_cast; ring
 
+
+/-! **Column-norm bound approach** -/
+
+/-- Column ℓ₁-norm of Z over all indices: `∑_{k<n} |Z[k,j]|`.
+    Equals `∑_{k≤j} |Z[k,j]|` since `Z` is upper triangular (`certEntryInt(k,j) = 0` for `k > j`). -/
+private def zColNorm (certBytes : ByteArray) (n j : Nat) : Int :=
+  sumTo (fun k ↦ |certEntryInt certBytes k j|) n
+
+/-- `zColNorm` expressed as a `Finset.sum`. -/
+private theorem zColNorm_eq_sum (certBytes : ByteArray) (n j : Nat) :
+    zColNorm certBytes n j = ∑ k : Fin n, |certEntryInt certBytes k.val j| := by
+  simp only [zColNorm, sumTo_eq_sum]
+
+/-! **Pure recursive helpers for `checkColumnNormBound` spec** -/
+
+/-- Maximum `|pEntryPure k j|` over `k < bound`, for fixed column `j`. -/
+private def epsMaxCol (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (j : Nat) : Nat → Int
+  | 0 => 0
+  | k + 1 => max (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j k)
+                  |pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k j|
+
+/-- Maximum `|pEntryPure k j|` over `k < j`, over all `j < bound`. -/
+private def epsMaxVal (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) : Nat → Int
+  | 0 => 0
+  | j + 1 => max (epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ j)
+                  (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j j)
+
+/-- Minimum `pEntryPure j j` over `j < bound`. Returns `0` for `bound = 0` (unused). -/
+private def minDiagVal (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) : Nat → Int
+  | 0 => 0
+  | 1 => pEntryPure rotBytes certBytes n d c₁ c₂ c₃ 0 0
+  | m + 2 => min (minDiagVal rotBytes certBytes n d c₁ c₂ c₃ (m + 1))
+                  (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ (m + 1) (m + 1))
+
+private lemma epsMaxCol_nonneg (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (j m : Nat) : 0 ≤ epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j m := by
+  induction m with
+  | zero => simp [epsMaxCol]
+  | succ k ih => simp only [epsMaxCol]; exact le_max_of_le_left ih
+
+private lemma epsMaxVal_nonneg (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (m : Nat) : 0 ≤ epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ m := by
+  induction m with
+  | zero => simp [epsMaxVal]
+  | succ j ih => simp only [epsMaxVal]; exact le_max_of_le_left ih
+
+private lemma epsMaxCol_bound (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (j k bound : Nat) (hk : k < bound) :
+    |pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k j| ≤
+    epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j bound := by
+  induction bound with
+  | zero => omega
+  | succ m ih =>
+    simp only [epsMaxCol]
+    by_cases hkm : k < m
+    · exact le_max_of_le_left (ih hkm)
+    · have : k = m := by omega
+      subst this; exact le_max_right _ _
+
+private lemma epsMaxVal_bound (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (k j bound : Nat) (hkj : k < j) (hjb : j < bound) :
+    |pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k j| ≤
+    epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ bound := by
+  induction bound with
+  | zero => omega
+  | succ m ih =>
+    simp only [epsMaxVal]
+    by_cases hjm : j < m
+    · exact le_max_of_le_left (ih hjm)
+    · have : j = m := by omega
+      subst this; exact le_max_of_le_right (epsMaxCol_bound _ _ _ _ _ _ _ _ _ _ hkj)
+
+private lemma minDiagVal_bound (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (j m : Nat) (hj : j < m) (hm : 0 < m) :
+    minDiagVal rotBytes certBytes n d c₁ c₂ c₃ m ≤
+    pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j := by
+  induction m with
+  | zero => omega
+  | succ m ih =>
+    match m, hj with
+    | 0, hj =>
+      have hj0 : j = 0 := by omega
+      subst hj0; exact le_refl _
+    | m' + 1, hj =>
+      simp only [minDiagVal]
+      by_cases hjm : j < m' + 1
+      · exact le_trans (min_le_left _ _) (ih hjm (by omega))
+      · have : j = m' + 1 := by omega
+        subst this; exact min_le_right _ _
+
+/-- Per-row column-norm inequality extracted from `checkColumnNormBound`.
+    The imperative Phase 3 loop checks exactly this condition with the same
+    `epsMaxVal`/`minDiagVal` values computed in Phase 1.
+    TODO: prove by connecting the imperative `Id.run do` loop to the pure definitions. -/
+private theorem checkColumnNormBound_perRow
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (hcnb : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true) (hn : 0 < n) :
+    ∀ i, i < n →
+      certEntryInt certBytes i i *
+        (minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n +
+         epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n) >
+      epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n *
+        (sumTo (fun j ↦ zColNorm certBytes n j) i +
+         (↑(n - i) : Int) * zColNorm certBytes n i) := by
+  sorry
+
+/-- Specification of what `checkColumnNormBound = true` guarantees.
+    Properties 1-3 (non-negativity and bound properties) are proved from
+    pure recursive helpers. Property 4 (per-row inequality) is from
+    `checkColumnNormBound_perRow`. -/
+private theorem checkColumnNormBound_spec
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (hcnb : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true) (hn : 0 < n) :
+    ∃ epsMax minDiag : Int,
+      (0 ≤ epsMax) ∧
+      (∀ k j, k < j → j < n →
+        |pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k j| ≤ epsMax) ∧
+      (∀ j, j < n → minDiag ≤ pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j) ∧
+      (∀ i, i < n →
+        certEntryInt certBytes i i * (minDiag + epsMax) >
+        epsMax * (sumTo (fun j ↦ zColNorm certBytes n j) i +
+                  (↑(n - i) : Int) * zColNorm certBytes n i)) := by
+  refine ⟨epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n,
+          minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n,
+          epsMaxVal_nonneg _ _ _ _ _ _ _ _,
+          fun k j hkj hjn ↦ epsMaxVal_bound _ _ _ _ _ _ _ _ _ _ hkj hjn,
+          fun j hj ↦ minDiagVal_bound _ _ _ _ _ _ _ _ _ hj hn,
+          checkColumnNormBound_perRow _ _ _ _ _ _ _ hcnb hn⟩
+
+/-- `kEntryPure` is symmetric: `K[i,j] = K[j,i]` (from `K = Z*MZ` Hermitian). -/
+private theorem kEntryPure_comm {n d : ℕ} (G : RegularGraph n d)
+    (rotBytes certBytes : ByteArray) (hn : 0 < n) (hd : 0 < d)
+    (hmatch : ∀ vp : Fin n × Fin d,
+      G.rot vp = (⟨decodeBase85Nat rotBytes (2 * (vp.1.val * d + vp.2.val)) % n,
+                    Nat.mod_lt _ hn⟩,
+                  ⟨decodeBase85Nat rotBytes (2 * (vp.1.val * d + vp.2.val) + 1) % d,
+                    Nat.mod_lt _ hd⟩))
+    (c₁ c₂ c₃ : ℤ) (i j : Fin n) :
+    kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val j.val =
+    kEntryPure rotBytes certBytes n d c₁ c₂ c₃ j.val i.val := by
+  -- Both sides cast to K[i,j] and K[j,i] via kEntry_eq
+  have h1 := kEntry_eq G rotBytes certBytes hn hd hmatch c₁ c₂ c₃ i j
+  have h2 := kEntry_eq G rotBytes certBytes hn hd hmatch c₁ c₂ c₃ j i
+  -- K is Hermitian, so K[i,j] = K[j,i] for real matrices
+  have hK := isHermitian_conjTranspose_mul_mul (certMatrixReal certBytes n)
+    (spectralMatrix_isHermitian G ↑c₁ ↑c₂ ↑c₃)
+  have hsym : (star (certMatrixReal certBytes n) * spectralMatrix G ↑c₁ ↑c₂ ↑c₃ *
+    certMatrixReal certBytes n) i j =
+    (star (certMatrixReal certBytes n) * spectralMatrix G ↑c₁ ↑c₂ ↑c₃ *
+    certMatrixReal certBytes n) j i := by
+    have h := congr_fun (congr_fun hK i) j
+    rw [conjTranspose_apply, star_trivial] at h
+    exact h.symm
+  rw [h1, h2] at hsym
+  exact_mod_cast hsym
+
 /-- Extraction: `checkAllRowsDomPure ... n = true` implies each row is checked. -/
 private theorem checkAllRows_spec (rotBytes certBytes : ByteArray) (n d : ℕ)
     (c₁ c₂ c₃ : ℤ) (m : ℕ)
@@ -225,12 +382,15 @@ private theorem checkAllRows_spec (rotBytes certBytes : ByteArray) (n d : ℕ)
       subst this; exact h.2
 
 /-- Bridge lemma: if `checkAllRowsDomPure` passes and the rotation map matches,
-    then K = star Z * M * Z is strictly row-diag-dominant. -/
+    then K = star Z * M * Z is strictly row-diag-dominant.
+
+    This theorem takes `checkAllRowsDomPure` directly (not via `checkCertificate`)
+    so it remains valid regardless of which checks `checkCertificate` includes. -/
 theorem kRowDominant_implies_diagDominant
     (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     (G : RegularGraph n d)
     (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
-    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
+    (hpure : checkAllRowsDomPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ n = true)
     (hmatch : ∀ vp : Fin n × Fin d,
       G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
                     Nat.mod_lt _ hn⟩,
@@ -243,9 +403,6 @@ theorem kRowDominant_implies_diagDominant
       (star Z * M * Z) i i := by
   -- Introduce let bindings and universally quantified variable
   intro _ _ i
-  -- Extract pure functional check from checkCertificate
-  have hpure : checkAllRowsDomPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ n = true := by
-    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.2
   -- Get row-level check for this i
   have hrow := checkAllRows_spec rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ n hpure i.val i.isLt
   -- Extract integer inequality from checkRowDomPure
@@ -298,10 +455,37 @@ theorem kRowDominant_implies_diagDominant
       · exact abs_of_neg (by omega)]
     exact hint
 
+/-- Sum of `S(min(i, j))` over `j : Fin n` splits as
+    `∑_{j<i} S(j) + (n-i)·S(i) = sumTo S i + (n-i)·S(i)`. -/
+private lemma sum_min_split (S : ℕ → ℤ) : ∀ (n i : ℕ), i < n →
+    ∑ j : Fin n, S (min i j.val) = sumTo S i + ↑(n - i) * S i := by
+  intro n; induction n with
+  | zero => intro i hi; omega
+  | succ m ih =>
+    intro i hi
+    rw [Fin.sum_univ_castSucc]
+    simp only [Fin.val_castSucc, Fin.val_last]
+    by_cases hin : i < m
+    · rw [ih i hin, Nat.min_eq_left (Nat.le_of_lt hin)]
+      have hcast : (↑(m + 1 - i) : ℤ) = ↑(m - i) + 1 := by
+        rw [Nat.succ_sub (Nat.le_of_lt hin)]; push_cast; ring
+      rw [hcast]; ring
+    · -- i = m: all terms in ∑_{j<m} have min(i,j) = j, last term is S(i)
+      have hi_eq : i = m := Nat.le_antisymm (Nat.lt_succ_iff.mp hi) (Nat.not_lt.mp hin)
+      have hterms : ∀ j : Fin m, S (min i j.val) = S j.val := by
+        intro j; rw [hi_eq, Nat.min_eq_right (Nat.le_of_lt j.isLt)]
+      simp_rw [hterms, ← sumTo_eq_sum, hi_eq, Nat.min_self]
+      have : (↑(m + 1 - m) : ℤ) = 1 := by omega
+      rw [this]; ring
+
 /-- `K = Z* · M · Z` is strictly row-diag-dominant when the certificate checker passes.
 
-    Proved by extracting `checkKRowDominant = true` from `checkCertificate` and
-    applying `kRowDominant_implies_diagDominant`. -/
+    The proof uses `checkColumnNormBound` (extracted from `checkCertificate`) together
+    with the PSD check bounds (minDiag, epsMax) to establish diagonal dominance
+    mathematically via the upper-triangular structure of Z:
+    - Off-diagonal: `|K[i,j]| ≤ epsMax · S_{min(i,j)}` where `S_j = ∑_{k≤j} |Z[k,j]|`
+    - Diagonal: `K[i,i] ≥ Z[i,i] · minDiag - (S_i - Z[i,i]) · epsMax`
+    - Column-norm bound checks: `Z[i,i] · (minDiag + epsMax) > epsMax · T_i` -/
 theorem congruence_diagDominant
     (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     (G : RegularGraph n d)
@@ -317,10 +501,161 @@ theorem congruence_diagDominant
     ∀ i : Fin n,
       ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
       (star Z * M * Z) i i := by
-  -- Extract K diagonal dominance check from checkCertificate
-  have hkdom : checkKRowDominant rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
+  intro _ _ i
+  set rotBytes := rotStr.toUTF8
+  set certBytes := certStr.toUTF8
+  -- Extract sub-checks from checkCertificate
+  have hcnb : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true := by
+    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.2
+  have hpsd : checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ = true := by
     simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.1.2
-  exact kRowDominant_implies_diagDominant n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hmatch
+  -- Get Z[i,i] > 0 from PSD check (reuse certMatrix_posdiag)
+  have hZii_pos : 0 < certEntryInt certBytes i.val i.val := by
+    have h := certMatrix_posdiag n certBytes rotBytes d c₁ c₂ c₃ hpsd i
+    rw [certEntry_eq] at h; exact_mod_cast h
+  -- Get epsMax, minDiag, and their properties
+  obtain ⟨ε, δ, hε_nn, hP_bound, hP_diag, hrow_check⟩ :=
+    checkColumnNormBound_spec rotBytes certBytes n d c₁ c₂ c₃ hcnb hn
+  -- Abbreviate column norm
+  set S := zColNorm certBytes n
+  -- K entry correspondence
+  have hentry : ∀ a b : Fin n,
+      (star (certMatrixReal certBytes n) * spectralMatrix G ↑c₁ ↑c₂ ↑c₃ *
+        certMatrixReal certBytes n) a b =
+      ↑(kEntryPure rotBytes certBytes n d c₁ c₂ c₃ a.val b.val) :=
+    fun a b ↦ kEntry_eq G rotBytes certBytes hn hd hmatch c₁ c₂ c₃ a b
+  -- Rewrite goal in terms of kEntryPure
+  rw [hentry i i]
+  conv_lhs => arg 2; ext j; rw [hentry i j, Real.norm_eq_abs, ← Int.cast_abs]
+  rw [← Int.cast_sum]
+  -- Reduce to integer inequality
+  exact_mod_cast show ∑ j ∈ Finset.univ.erase i,
+      |kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val j.val| <
+      kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val i.val from by
+    -- Helper: certEntryInt(k,col) = 0 when k > col (upper triangular)
+    have hcert_zero : ∀ k col : ℕ, ¬(k ≤ col) →
+        certEntryInt certBytes k col = 0 := by
+      intro k col hk; unfold certEntryInt; exact if_neg hk
+    -- Bound |∑_k Z[k,col]*P[k,row]| ≤ ε * S(col) when col < row
+    have habs_bound : ∀ col row : ℕ, col < n → row < n → col < row →
+        |∑ k : Fin n, certEntryInt certBytes k.val col *
+          pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val row| ≤
+        ε * S col := by
+      intro col row hcol hrow hlt
+      calc |∑ k : Fin n, certEntryInt certBytes k.val col *
+            pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val row|
+          ≤ ∑ k : Fin n, |certEntryInt certBytes k.val col| *
+            |pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val row| := by
+            calc _ ≤ ∑ k : Fin n, |certEntryInt certBytes k.val col *
+                  pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val row| :=
+                  Finset.abs_sum_le_sum_abs _ _
+              _ = _ := by apply Finset.sum_congr rfl; intro k _; exact abs_mul _ _
+        _ ≤ ∑ k : Fin n, |certEntryInt certBytes k.val col| * ε := by
+            apply Finset.sum_le_sum; intro k _
+            by_cases hk : k.val ≤ col
+            · exact mul_le_mul_of_nonneg_left (hP_bound k.val row (by omega) hrow) (abs_nonneg _)
+            · simp [hcert_zero k.val col hk]
+        _ = ε * S col := by
+            rw [← Finset.sum_mul, ← zColNorm_eq_sum]; ring
+    -- Key: |K[i,j]| ≤ ε * S(min(i,j)) for j ≠ i
+    have hK_bound : ∀ j : Fin n, j ≠ i →
+        |kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val j.val| ≤
+        ε * S (min i.val j.val) := by
+      intro j hne
+      by_cases hij : i.val < j.val
+      · -- Case j > i: col=i, row=j
+        rw [Nat.min_eq_left (le_of_lt hij)]
+        unfold kEntryPure; rw [sumTo_eq_sum]
+        exact habs_bound i.val j.val i.isLt j.isLt hij
+      · -- Case j < i: use K symmetry to swap, then col=j, row=i
+        have hji : j.val < i.val := by omega
+        rw [Nat.min_eq_right (le_of_lt hji),
+            kEntryPure_comm G rotBytes certBytes hn hd hmatch c₁ c₂ c₃ i j]
+        unfold kEntryPure; rw [sumTo_eq_sum]
+        exact habs_bound j.val i.val j.isLt i.isLt hji
+    -- Off-diagonal sum bound: ∑|K[i,j]| + ε*S(i) ≤ ε*(sumTo S i + (n-i)*S(i))
+    have hoff : ∑ j ∈ Finset.univ.erase i,
+        |kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val j.val| + ε * S i.val ≤
+        ε * (sumTo (fun j ↦ S j) i.val + ↑(n - i.val) * S i.val) := by
+      -- Step 1: bound each |K[i,j]| by ε * S(min(i,j))
+      have h1 : ∑ j ∈ Finset.univ.erase i,
+          |kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val j.val| ≤
+          ε * ∑ j ∈ Finset.univ.erase i, S (min i.val j.val) := by
+        rw [Finset.mul_sum]
+        exact Finset.sum_le_sum (fun j hj ↦ hK_bound j (Finset.ne_of_mem_erase hj))
+      -- Step 2: add back the i-th term to recover full sum
+      have h2 : ε * ∑ j ∈ Finset.univ.erase i, S (min i.val j.val) + ε * S i.val =
+          ε * ∑ j : Fin n, S (min i.val j.val) := by
+        rw [← mul_add, add_comm]
+        congr 1
+        have h := Finset.add_sum_erase Finset.univ
+          (fun j : Fin n ↦ S (min i.val j.val)) (Finset.mem_univ i)
+        simp only [Nat.min_self] at h
+        exact h
+      -- Step 3: sum identity
+      have h3 : ∑ j : Fin n, S (min i.val j.val) =
+          sumTo (fun j ↦ S j) i.val + ↑(n - i.val) * S i.val :=
+        sum_min_split S n i.val i.isLt
+      have h4 : ε * ∑ j : Fin n, S (min i.val j.val) =
+          ε * (sumTo (fun j ↦ S j) i.val + ↑(n - i.val) * S i.val) := by rw [h3]
+      linarith
+    -- Diagonal lower bound: K[i,i] ≥ Z[i,i]*(δ+ε) - S_i*ε
+    have hdiag : kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val i.val ≥
+        certEntryInt certBytes i.val i.val * (δ + ε) - S i.val * ε := by
+      -- Express K[i,i] as sum, split at k = i
+      have hsplit := Finset.add_sum_erase Finset.univ
+        (fun k : Fin n ↦ certEntryInt certBytes k.val i.val *
+          pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val i.val)
+        (Finset.mem_univ i)
+      unfold kEntryPure; rw [sumTo_eq_sum, ← hsplit]
+      -- Bound the i-th term: Z[i,i]*P[i,i] ≥ Z[i,i]*δ
+      have hdiag_term : certEntryInt certBytes i.val i.val *
+          pEntryPure rotBytes certBytes n d c₁ c₂ c₃ i.val i.val ≥
+          certEntryInt certBytes i.val i.val * δ :=
+        mul_le_mul_of_nonneg_left (hP_diag i.val i.isLt) (le_of_lt hZii_pos)
+      -- Bound off-diagonal terms: -∑_{k≠i} ≤ ε*(S_i - Z[i,i])
+      have hoff_abs : |∑ k ∈ Finset.univ.erase i,
+          certEntryInt certBytes k.val i.val *
+            pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val i.val| ≤
+          ε * (S i.val - certEntryInt certBytes i.val i.val) := by
+        calc |∑ k ∈ Finset.univ.erase i, certEntryInt certBytes k.val i.val *
+              pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val i.val|
+            ≤ ∑ k ∈ Finset.univ.erase i, |certEntryInt certBytes k.val i.val| *
+              |pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val i.val| := by
+              calc _ ≤ ∑ k ∈ Finset.univ.erase i,
+                    |certEntryInt certBytes k.val i.val *
+                      pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val i.val| :=
+                    Finset.abs_sum_le_sum_abs _ _
+                _ = _ := by apply Finset.sum_congr rfl; intro k _; exact abs_mul _ _
+          _ ≤ ∑ k ∈ Finset.univ.erase i, |certEntryInt certBytes k.val i.val| * ε := by
+              apply Finset.sum_le_sum; intro k hk
+              have hne := Finset.ne_of_mem_erase hk
+              by_cases hk_lt : k.val < i.val
+              · exact mul_le_mul_of_nonneg_left (hP_bound k.val i.val hk_lt i.isLt) (abs_nonneg _)
+              · have hgt : ¬(k.val ≤ i.val) := by
+                  intro hle; exact hne (Fin.ext (Nat.le_antisymm hle (by omega)))
+                simp [hcert_zero k.val i.val hgt]
+          _ = ε * (S i.val - certEntryInt certBytes i.val i.val) := by
+              rw [← Finset.sum_mul, mul_comm]; congr 1
+              have herase := Finset.add_sum_erase Finset.univ
+                (fun k : Fin n ↦ |certEntryInt certBytes k.val i.val|)
+                (Finset.mem_univ i)
+              rw [← zColNorm_eq_sum] at herase
+              have : |certEntryInt certBytes i.val i.val| =
+                  certEntryInt certBytes i.val i.val := abs_of_pos hZii_pos
+              linarith
+      -- From |X| ≤ B, get -X ≤ B, so X ≥ -B
+      have hoff_neg := neg_abs_le (∑ k ∈ Finset.univ.erase i,
+          certEntryInt certBytes k.val i.val *
+            pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k.val i.val)
+      -- Combine: f(i) + ∑_{k≠i} ≥ Z[i,i]*δ - ε*(S_i - Z[i,i]) = Z[i,i]*(δ+ε) - S_i*ε
+      linarith
+    -- Per-row check
+    have hrow := hrow_check i.val i.isLt
+    -- Combine: K[i,i] ≥ Z[i,i]*(δ+ε) - S_i*ε > ε*T_i - S_i*ε ≥ off-diag sum
+    -- The key: ε*T_i - S_i*ε = ε*(sumTo S i + (n-i)*S_i) - ε*S_i
+    --                         = ε*(sumTo S i + (n-i)*S_i - S_i) ≥ off-diag sum (by hoff)
+    linarith [hoff, hdiag, hrow]
 
 
 /-! **Layer 3: Certificate → spectral matrix PSD** -/
@@ -348,7 +683,7 @@ theorem checker_implies_spectralMatrix_psd
     Matrix.PosSemidef (spectralMatrix G (↑c₁) (↑c₂) (↑c₃)) := by
   -- Extract PSD check from combined check
   have hpsd : checkPSDCertificate rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
-    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.1.1.2
+    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.1.2
   -- Define Z and M
   set Z := certMatrixReal certStr.toUTF8 n with hZ_def
   set M := spectralMatrix G (↑c₁ : ℝ) (↑c₂) (↑c₃) with hM_def

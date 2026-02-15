@@ -11,18 +11,6 @@
 import AKS.Certificate
 
 
-/-! **Pre-decode rotation map** -/
-
-/-- Decode rotBytes into a flat neighbor array: `result[v*d+p] = neighbor vertex`. -/
-def decodeNeighbors (rotBytes : ByteArray) (n d : Nat) : Array Nat :=
-  Id.run do
-    let nd := n * d
-    let mut arr := Array.replicate nd 0
-    for k in [:nd] do
-      arr := arr.set! k (decodeBase85Nat rotBytes (2 * k))
-    return arr
-
-
 /-! **Optimized mulAdj via pre-decoded array** -/
 
 /-- Matrix-vector product using pre-decoded neighbor array (no base-85 in hot loop). -/
