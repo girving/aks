@@ -221,6 +221,24 @@ theorem zero_one_principle {n : ℕ} (net : ComparatorNetwork n) :
   exact absurd h_sorted (by decide)
 
 
+/-! **Comparator Network Embedding** -/
+
+/-- Shift all comparator indices by `offset` and embed into a larger network.
+    Maps each comparator `(i, j)` to `(offset + i, offset + j)`. -/
+def ComparatorNetwork.shiftEmbed {m : ℕ} (net : ComparatorNetwork m)
+    (n offset : ℕ) (h : offset + m ≤ n) : ComparatorNetwork n :=
+  { comparators := net.comparators.map fun c ↦
+      { i := ⟨offset + c.i.val, by omega⟩
+        j := ⟨offset + c.j.val, by omega⟩
+        h := by show offset + c.i.val < offset + c.j.val
+                have := c.h; simp only [Fin.lt_iff_val_lt_val] at this; omega } }
+
+theorem ComparatorNetwork.shiftEmbed_size {m : ℕ} (net : ComparatorNetwork m)
+    (n offset : ℕ) (h : offset + m ≤ n) :
+    (net.shiftEmbed n offset h).size = net.size := by
+  simp [shiftEmbed, size, List.length_map]
+
+
 /-! **Complexity Notation** -/
 
 /-- Asymptotic notation for stating complexity bounds. -/
