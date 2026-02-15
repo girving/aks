@@ -22,6 +22,13 @@ tree-distance at level `t`.
 **Phase 3c (DONE):** Simplify halver bridge — deleted `buildRecursiveNearsort` /
   `recursive_nearsort_bounded_tree_damage` / `halvers_give_bounded_nearsort` intermediaries,
   replaced with direct `halver_has_cherry_shift_damage` sorry.
+**Phase 3d (DONE):** Fix FALSE statements — `halver_has_cherry_shift_damage` and
+  `aks_tree_sorting` were both false (counterexample: n=4, halver=[(0,2),(1,3)], v=[F,T,F,T]).
+  Root cause: `IsEpsilonHalver` captures aggregate balance but not mixing structure.
+  Replaced single halver iteration with `recursiveNearsort` using halver family
+  (one halver per sub-interval size). Deleted `epsilonNearsort` (stub).
+  New sorries: `recursive_nearsort_has_cherry_shift_damage`, `aks_tree_sorting` (halver family version).
+  Also eliminated odd-case sorry in `zigzag_implies_aks_network`.
 
 ## The fundamental issue: time-independent distance
 
@@ -48,20 +55,22 @@ is **never used in the body**. This means:
 
 ## Per-sorry assessment
 
-### 1. `halver_has_cherry_shift_damage` — sorry
+### 1. `recursive_nearsort_has_cherry_shift_damage` — sorry
 
-**History:** Originally `halvers_give_bounded_nearsort` was factored into
-`buildRecursiveNearsort` + `recursive_nearsort_bounded_tree_damage` + size bound.
-But `buildRecursiveNearsort` just iterated the halver (same as `epsHalverMerge`),
-and `recursive_nearsort_bounded_tree_damage` bridging `IsEpsilonHalver` →
-`HasBoundedTreeDamage` was unprovable (aggregate balance doesn't imply local
-tree-distance damage without structural information about the comparator pattern).
+**History:** Originally `halver_has_cherry_shift_damage` (single halver → cherry-shift damage).
+This was **FALSE**: counterexample n=4, halver=[(0,2),(1,3)], v=[F,T,F,T] shows a perfect
+ε=0 halver that is a fixed point, but `HasCherryShiftDamage` at t=1, r=0 requires ε ≥ 0.5.
 
-**Current:** Single focused sorry `halver_has_cherry_shift_damage`:
-`IsEpsilonHalver halver ε → HasCherryShiftDamage halver ε t`.
-This honestly captures the mathematical difficulty: showing that a halver's
-aggregate ε-balance property implies the local cherry-shift damage bound.
-The construction side (iterating the halver) is handled directly in `aks_tree_sorting`.
+**Root cause:** `IsEpsilonHalver` captures aggregate balance but not the mixing/expansion
+structure from expander graphs. The AKS paper uses recursive sub-interval halving where
+**different halvers** are applied at each tree level.
+
+**Current:** `recursive_nearsort_has_cherry_shift_damage`:
+```
+(∀ m, IsEpsilonHalver (halvers m) ε) → HasCherryShiftDamage (recursiveNearsort n halvers (log₂ n)) ε t
+```
+This takes a **halver family** and shows the recursive nearsort (applying halvers at each
+tree level) satisfies the cherry-shift damage bound. The multi-scale structure is essential.
 
 ### 2. `register_reassignment_increases_wrongness` — DELETED
 
@@ -84,12 +93,15 @@ leading term). Proved `cherry_shift_damage_gives_zigzag`:
 
 Also proved `cherry_shift_implies_bounded_tree`: `HasCherryShiftDamage → HasBoundedTreeDamage`.
 
-### 5. `aks_tree_sorting` — FIXED (sorry)
+### 5. `aks_tree_sorting` — REFORMULATED (sorry)
 
-**Fixed:** Was `∀ v, ∃ net` (vacuously true — can always build a network for one input).
-Now returns iteration count: `∃ k, k ≤ 100 * Nat.log 2 n ∧ Monotone (iterate ... k v)`.
-This matches the `AKSNetwork.lean` call site which needs the same network for all inputs
-(via the 0-1 principle: the halver is fixed, only the iteration count matters).
+**History:** Original took single halver and `v : Fin n → Bool` input, returning iteration
+count `∃ k`. This was **FALSE** (same counterexample as `halver_has_cherry_shift_damage`).
+
+**Current:** Takes halver family `(m : ℕ) → ComparatorNetwork (2 * m)` with size bound
+`∀ m, (halvers m).size ≤ m * d`. Returns `∃ net` with size ≤ `200·(d+1)·n·log₂ n` and
+`∀ v, Monotone (net.exec v)`. The network is `recursiveNearsort n halvers (log₂ n)`.
+The `v` is universally quantified inside the existential — one network sorts all inputs.
 
 ## V2 sorry status
 
@@ -99,14 +111,14 @@ This matches the `AKSNetwork.lean` call site which needs the same network for al
 | `zigzag_decreases_wrongness_v2` | **PROVED** | From `HasBoundedZigzagDamage` + anti-monotonicity. |
 | `cherry_shift_damage_gives_zigzag` | **PROVED** | CherryShift + BoundedTree → Zigzag (algebraic). |
 | `cherry_shift_implies_bounded_tree` | **PROVED** | CherryShift → BoundedTree (anti-monotonicity). |
-| `halver_has_cherry_shift_damage` | sorry | IsEpsilonHalver → HasCherryShiftDamage. |
-| `aks_tree_sorting` | sorry | Main assembly: iterate halver, compose proved lemmas. |
+| `recursive_nearsort_has_cherry_shift_damage` | sorry | Recursive nearsort w/ halver family → HasCherryShiftDamage. |
+| `aks_tree_sorting` | sorry | Main assembly: halver family → O(n log n) sorting network. |
 
 ## V2 dependency chain
 
 ```
-aks_tree_sorting (iteration-count formulation) ← sorry
-├── halver_has_cherry_shift_damage ← sorry (IsEpsilonHalver → HasCherryShiftDamage)
+aks_tree_sorting (halver family formulation) ← sorry
+├── recursive_nearsort_has_cherry_shift_damage ← sorry (halver family → CherryShiftDamage)
 │   └── cherry_shift_implies_bounded_tree ← PROVED (gives HasBoundedTreeDamage too)
 ├── register_reassignment_increases_wrongness_v2 ← PROVED
 │   └── positionTreeDist_succ_le ← PROVED
@@ -160,7 +172,8 @@ wrongness at distance (r+1) - 2 = r - 1. Over multiple cycles, geometric decreas
 - ~~Factor `halvers_give_bounded_nearsort`~~ **DONE** (proved as composition)
 - ~~Reformulate `bounded_tree_damage_gives_zigzag`~~ **DONE** (proved via `HasCherryShiftDamage`)
 - ~~Simplify halver bridge~~ **DONE** (direct `halver_has_cherry_shift_damage`)
-- Fill `halver_has_cherry_shift_damage` (expander structure → tree-distance bound)
+- ~~Fix FALSE statements~~ **DONE** (replaced with `recursiveNearsort` + halver family)
+- Fill `recursive_nearsort_has_cherry_shift_damage` (multi-scale expander → tree-distance bound)
 - Wire V2 chain into `aks_tree_sorting` proof
 
 ### Fallback options (unchanged)

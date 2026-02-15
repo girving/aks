@@ -73,7 +73,6 @@ theorem ComparatorNetwork.embed_size {m : ℕ} (net : ComparatorNetwork m) (n : 
     (net.embed n h).size = net.size := by
   simp [embed, size, List.length_map]
 
-
 /-! **Size Bound Helper** -/
 
 /-- Key arithmetic for the AKS size bound: `100 * Nat.log 2 n * s ≤ c * n * log n`
@@ -126,9 +125,8 @@ private theorem aks_size_bound (m d : ℕ) (hm : 0 < m) (s : ℕ) (hs : s ≤ m 
     bounded by `β < 1/2`, there exist O(n log n) sorting networks for all sizes.
 
     The construction:
-    1. `expander_gives_halver`: expander at size `n/2` → β-halver on `n` wires
-    2. `aks_tree_sorting`: β-halver sorts in O(log n) iterations (since β < 1/2)
-    3. `epsHalverMerge`: concatenate O(log n) copies → O(n log n) comparators
+    1. `expander_gives_halver`: expander at each size → β-halver family
+    2. `aks_tree_sorting`: recursive nearsort with halver family sorts in O(n log n)
 
     The spectral gap requirement `β < 1/2` comes from `aks_tree_sorting`. -/
 theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :
@@ -138,39 +136,47 @@ theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β 
       IsSortingNetwork net ∧
       (net.size : ℝ) ≤ c * n * Real.log n := by
   intro ⟨d, hfamily⟩
-  -- The constant: each halver has size ≤ m*d ≤ n*d/2, iterated K = 100*log₂ n times.
-  -- Total ≤ 50*d*n*log₂ n = 50*d*n*(log n / log 2) ≤ 100*d*n*log n.
-  -- We use c = 100*(d+1) to handle the d=0 edge case.
-  refine ⟨100 * (↑d + 1), by positivity, ?_⟩
-  -- Suffices to prove for each even size; then lift to odd via embedding
+  -- c = 400*(d+1): factor of 200 from aks_tree_sorting, factor of 2 for 1/log 2 < 2
+  refine ⟨400 * (↑d + 1), by positivity, ?_⟩
   intro n hn
-  -- Use m for n / 2
-  obtain ⟨m, hm_even | hm_odd⟩ : ∃ m, n = 2 * m ∨ n = 2 * m + 1 :=
-    ⟨n / 2, by omega⟩
-  · -- EVEN CASE: n = 2 * m
-    subst hm_even
-    have hm_pos : 0 < m := by omega
-    obtain ⟨G, hG⟩ := hfamily m (by omega)
-    obtain ⟨halver₀, hhalver₀_eps, hhalver₀_size⟩ := expander_gives_halver m d G β hG
-    set K := 100 * Nat.log 2 (2 * m)
-    set net := epsHalverMerge (2 * m) β K halver₀
-    refine ⟨net, ?_, ?_⟩
-    · -- Correctness via 0-1 principle + tree sorting
-      apply zero_one_principle; intro v
-      obtain ⟨k, hk_le, hk_sorted⟩ := aks_tree_sorting β hβ_pos hβ_half halver₀ hhalver₀_eps v
-      rw [epsHalverMerge_exec_eq_iterate]
-      exact mono_of_iterate_mono halver₀ v k K hk_le hk_sorted
-    · -- Size bound
-      have hsize_eq : net.size = K * halver₀.size := epsHalverMerge_size halver₀ β K
-      have hKsize : K * halver₀.size ≤ 100 * Nat.log 2 (2 * m) * (m * d) :=
-        Nat.mul_le_mul_left K hhalver₀_size
-      calc (net.size : ℝ) = ↑(K * halver₀.size) := by exact_mod_cast hsize_eq
-        _ ≤ ↑(100 * Nat.log 2 (2 * m) * (m * d)) := by exact_mod_cast hKsize
-        _ ≤ 100 * (↑d + 1) * ↑(2 * m) * Real.log ↑(2 * m) :=
-            aks_size_bound m d hm_pos (m * d) le_rfl
-  · -- ODD CASE: n = 2 * m + 1
-    -- Strategy: build sorting network on 2*(m+1) wires, then restrict to first 2*m+1.
-    -- This requires proving that restriction of a sorting network still sorts, which
-    -- needs a lemma about the 0-1 principle on subsequences. Sorry'd for now.
-    subst hm_odd
-    sorry
+  -- Build halver family: for each m, get a β-halver on 2*m wires from the expander at size m.
+  have halver_exists : ∀ m, ∃ (net : ComparatorNetwork (2 * m)),
+      IsEpsilonHalver net β ∧ net.size ≤ m * d := by
+    intro m
+    rcases Nat.eq_zero_or_pos m with rfl | hm
+    · -- m = 0: empty network
+      exact ⟨{ comparators := [] }, by intro v; simp, by simp [ComparatorNetwork.size]⟩
+    · obtain ⟨G, hG⟩ := hfamily m hm
+      exact expander_gives_halver m d G β hG
+  set halvers := fun m ↦ (halver_exists m).choose
+  have hhalvers_eps : ∀ m, IsEpsilonHalver (halvers m) β :=
+    fun m ↦ ((halver_exists m).choose_spec).1
+  have hhalvers_size : ∀ m, (halvers m).size ≤ m * d :=
+    fun m ↦ ((halver_exists m).choose_spec).2
+  -- Apply aks_tree_sorting with the halver family
+  obtain ⟨net, hsize, hmono⟩ := aks_tree_sorting β d hβ_pos hβ_half halvers hhalvers_eps hhalvers_size
+  refine ⟨net, ?_, ?_⟩
+  · -- Correctness via 0-1 principle
+    exact zero_one_principle net hmono
+  · -- Size bound: 200*(d+1)*n*log₂(n) ≤ 400*(d+1)*n*log(n)
+    -- Key: Nat.log 2 n ≤ logb 2 n = log n / log 2, and 1/log 2 < 2 (since log 2 > 1/2).
+    have hlog2_pos : (0:ℝ) < Real.log 2 := Real.log_pos (by norm_num : (1:ℝ) < 2)
+    have hlog2_half : (1:ℝ) / 2 < Real.log 2 := by
+      rw [show (1:ℝ)/2 = Real.log (Real.exp (1/2)) from (Real.log_exp (1/2)).symm]
+      exact Real.log_lt_log (by positivity) (by
+        calc Real.exp (1/2) < 1 / (1 - 1/2) :=
+                Real.exp_bound_div_one_sub_of_interval' (by norm_num) (by norm_num)
+          _ = 2 := by norm_num)
+    have hn_real : (1:ℝ) ≤ ↑n := by exact_mod_cast (show 1 ≤ n by omega)
+    have hlog_nn : (0:ℝ) ≤ Real.log ↑n := Real.log_nonneg hn_real
+    calc (net.size : ℝ) ≤ 200 * (↑d + 1) * ↑n * ↑(Nat.log 2 n) := hsize
+      _ ≤ 200 * (↑d + 1) * ↑n * (Real.log ↑n / Real.log 2) := by
+          apply mul_le_mul_of_nonneg_left _ (by positivity)
+          have : (↑(Nat.log 2 n) : ℝ) ≤ Real.logb 2 ↑n := by exact_mod_cast natLog_le_logb n 2
+          rwa [Real.logb, Real.log_div_log] at this
+      _ ≤ 200 * (↑d + 1) * ↑n * (2 * Real.log ↑n) := by
+          apply mul_le_mul_of_nonneg_left _ (by positivity)
+          rw [div_le_iff₀ hlog2_pos]
+          -- Need: log n ≤ 2 * log n * log 2, i.e. 1 ≤ 2 * log 2 (when log n ≥ 0)
+          nlinarith
+      _ = 400 * (↑d + 1) * ↑n * Real.log ↑n := by ring
