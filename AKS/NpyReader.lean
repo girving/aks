@@ -182,17 +182,16 @@ def ensureCertificateData (n d : Nat) (seed : Nat := 42) (scaleExp : Nat := 30) 
   IO.eprintln s!"Certificate data missing for n={n}, generating..."
   -- Ensure output directory exists
   IO.FS.createDirAll dir
-  let child ← IO.Process.spawn {
+  let output ← IO.Process.output {
     cmd := "cargo"
     args := #["run", "--release",
               "--manifest-path", "rust/compute-certificate/Cargo.toml",
               "--", s!"{n}", s!"{d}", s!"{seed}", s!"{scaleExp}", dir.toString]
-    stdout := .inherit
-    stderr := .inherit
   }
-  let exitCode ← child.wait
-  if exitCode != 0 then
-    throw (IO.userError s!"compute-certificate failed for n={n} (exit code {exitCode})")
+  if output.exitCode != 0 then
+    IO.eprintln output.stderr
+    IO.eprintln output.stdout
+    throw (IO.userError s!"compute-certificate failed for n={n} (exit code {output.exitCode})")
   -- Verify the file was actually created
   unless ← certFile.pathExists do
     throw (IO.userError s!"compute-certificate ran but {certFile} was not created")
