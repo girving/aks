@@ -74,6 +74,64 @@ def mulAdj (rotBytes : ByteArray) (z : Array Int) (n d : Nat) : Array Int :=
     return result
 
 
+/-! **Diagonal positivity check** -/
+
+/-- Check that all diagonal entries `Z[j,j]` in the packed certificate are positive.
+    Column `j` of the upper-triangular matrix `Z` is stored at byte positions
+    `j*(j+1)/2 + k` for `k = 0..j`, so `Z[j,j]` is at index `j*(j+1)/2 + j`. -/
+def allDiagPositive (certBytes : ByteArray) (n : Nat) : Bool :=
+  match n with
+  | 0 => true
+  | k + 1 =>
+    allDiagPositive certBytes k &&
+    decide (0 < decodeBase85Int certBytes (k * (k + 1) / 2 + k))
+
+
+/-! **K = Z^T * M * Z diagonal dominance check** -/
+
+/-- Check that K = Z^T · (M · Z) is strictly row-diag-dominant, where
+    P = M · Z is computed column-by-column via `c₁·z − c₂·B²z + c₃·(1ᵀz)·1`,
+    and K[i,j] = ∑_{k≤i} Z[k,i] · P[k,j].
+
+    This is the concrete computational check corresponding to the formal
+    `congruence_diagDominant` theorem in `CertificateBridge.lean`.
+    Complexity: O(n²·d) for P, O(n³) for K — feasible for n ≤ ~2000. -/
+def checkKRowDominant (rotBytes certBytes : ByteArray) (n d : Nat)
+    (c₁ c₂ c₃ : Int) : Bool :=
+  Id.run do
+    -- Phase 1: Compute P = M · Z (stored row-major: P[i,j] = pMatrix[i*n+j])
+    let mut pMatrix : Array Int := Array.replicate (n * n) 0
+    for j in [:n] do
+      let colStart := j * (j + 1) / 2
+      let mut zCol := Array.replicate n (0 : Int)
+      for k in [:j+1] do
+        zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
+      let bz := mulAdj rotBytes zCol n d
+      let b2z := mulAdj rotBytes bz n d
+      let mut colSum : Int := 0
+      for k in [:j+1] do
+        colSum := colSum + zCol[k]!
+      for i in [:n] do
+        pMatrix := pMatrix.set! (i * n + j) (c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum)
+    -- Phase 2: For each row i of K = Z^T · P, check diagonal dominance
+    for i in [:n] do
+      let colStartI := i * (i + 1) / 2
+      let mut diagVal : Int := 0
+      let mut offDiagSum : Int := 0
+      for j in [:n] do
+        -- K[i,j] = ∑_{k=0}^{i} Z[k,i] · P[k,j]
+        let mut kij : Int := 0
+        for k in [:i+1] do
+          let zki := decodeBase85Int certBytes (colStartI + k)
+          kij := kij + zki * pMatrix[k * n + j]!
+        if j == i then
+          diagVal := kij
+        else
+          offDiagSum := offDiagSum + (if kij >= 0 then kij else -kij)
+      if offDiagSum >= diagVal then return false
+    return true
+
+
 /-! **PSD Certificate Check** -/
 
 /-- Check the PSD certificate for `M = c₁I − c₂B² + c₃J`.
@@ -84,11 +142,12 @@ def mulAdj (rotBytes : ByteArray) (z : Array Int) (n d : Nat) : Array Int :=
     - Track `ε_max` (max upper-triangle `|P[i,j]|` for `i < j`)
     - Track `min_diag` (min diagonal `P[i,i]`)
 
-    Then verify: `min_diag > ε_max · n · (n+1) / 2` (Gershgorin condition). -/
+    Then verify: `min_diag > ε_max · n · (n+1) / 2` (Gershgorin condition)
+    AND all diagonal entries `Z[j,j] > 0`. -/
 def checkPSDCertificate (rotBytes certBytes : ByteArray)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
-  else Id.run do
+  else allDiagPositive certBytes n && Id.run do
     let mut epsMax : Int := 0
     let mut minDiag : Int := 0
     let mut first := true
@@ -140,13 +199,62 @@ def rotFun (rotStr : String) (n d : Nat) (hn : 0 < n) (hd : 0 < d)
    ⟨decodeBase85Nat rotBytes (2 * k + 1) % d, Nat.mod_lt _ hd⟩)
 
 
+/-! **Pure functional definitions for bridge proofs** -/
+
+/-- Sum `f(0) + f(1) + ... + f(n-1)`. -/
+def sumTo (f : Nat → Int) : Nat → Int
+  | 0 => 0
+  | n + 1 => sumTo f n + f n
+
+/-- Certificate matrix entry `Z[i,j]` as integer. Zero when `i > j`. -/
+def certEntryInt (certBytes : ByteArray) (i j : Nat) : Int :=
+  if i ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + i) else 0
+
+/-- Unnormalized adjacency-vector product: `(B·z)[v] = ∑_{p<d} z[neighbor(v,p) % n]`. -/
+def adjMulPure (rotBytes : ByteArray) (z : Nat → Int) (n d v : Nat) : Int :=
+  sumTo (fun p => z (decodeBase85Nat rotBytes (2 * (v * d + p)) % n)) d
+
+/-- `P = M · Z` entry at `(k, j)` in integers. -/
+def pEntryPure (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (k j : Nat) : Int :=
+  let zj : Nat → Int := fun i => certEntryInt certBytes i j
+  let b2zj_k := adjMulPure rotBytes (fun v => adjMulPure rotBytes zj n d v) n d k
+  let colSum := sumTo (fun l => certEntryInt certBytes l j) n
+  c₁ * certEntryInt certBytes k j - c₂ * b2zj_k + c₃ * colSum
+
+/-- `K = Zᵀ · M · Z` entry at `(i, j)` in integers. -/
+def kEntryPure (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (i j : Nat) : Int :=
+  sumTo (fun k => certEntryInt certBytes k i *
+    pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k j) n
+
+/-- Check diagonal dominance for row `i` (pure functional). -/
+def checkRowDomPure (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (i : Nat) : Bool :=
+  let diag := kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i i
+  let offDiag := sumTo (fun j =>
+    if j == i then 0
+    else let v := kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i j
+         if v >= 0 then v else -v) n
+  decide (offDiag < diag)
+
+/-- Check diagonal dominance for all rows `0..m-1` (pure functional). -/
+def checkAllRowsDomPure (rotBytes certBytes : ByteArray) (n d : Nat)
+    (c₁ c₂ c₃ : Int) : Nat → Bool
+  | 0 => true
+  | m + 1 => checkAllRowsDomPure rotBytes certBytes n d c₁ c₂ c₃ m &&
+              checkRowDomPure rotBytes certBytes n d c₁ c₂ c₃ m
+
+
 /-! **Combined check** -/
 
-/-- Full certificate check: involution + PSD.
+/-- Full certificate check: involution + PSD + K diagonal dominance.
     Both rotation map and certificate are base-85 encoded `String`s. -/
 def checkCertificate (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   checkInvolution rotBytes n d &&
-  checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃
+  checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ &&
+  checkKRowDominant rotBytes certBytes n d c₁ c₂ c₃ &&
+  checkAllRowsDomPure rotBytes certBytes n d c₁ c₂ c₃ n

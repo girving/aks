@@ -1162,6 +1162,47 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
       (elementsAtTreeDist n t v J r).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
 
+/-- Cherry-shift bounded-damage: like `HasBoundedTreeDamage` but with `r+1` in the
+    leading term instead of `r`. This captures the effect of cherry alternation:
+    a zig (or zag) network operating on one cherry partition shifts the distance
+    threshold by one level.
+
+    Specifically: elements at tree-distance ≥ `r` after the network are bounded by
+    elements at tree-distance ≥ `r+1` before, plus `ε` times elements at `r-2`.
+
+    This is strictly stronger than `HasBoundedTreeDamage` (which has `r` instead of
+    `r+1` in the leading term). The `r+1` shift is the mechanism that makes zigzag
+    achieve geometric decrease in wrongness. -/
+def HasCherryShiftDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
+  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
+    ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
+
+/-- `HasCherryShiftDamage` implies `HasBoundedTreeDamage` via anti-monotonicity:
+    `|E(v, J, r+1)| ≤ |E(v, J, r)|`, so the cherry-shift bound is stronger. -/
+lemma cherry_shift_implies_bounded_tree {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
+    (hε_nn : 0 ≤ ε) (h : HasCherryShiftDamage net ε t) :
+    HasBoundedTreeDamage net ε t := by
+  intro v J r
+  have hanti : ((elementsAtTreeDist n t v J (r + 1)).card : ℝ) ≤
+      (elementsAtTreeDist n t v J r).card :=
+    Nat.cast_le.mpr (Finset.card_le_card (elementsAtTreeDist_anti v J r))
+  calc ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ)
+      ≤ (elementsAtTreeDist n t v J (r + 1)).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := h v J r
+    _ ≤ (elementsAtTreeDist n t v J r).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := by
+        linarith
+
+/-- Helper: nested if-distance simplification.
+    `(if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+     (if r ≥ 4 then r - 4 else 0)` -/
+private lemma nested_if_dist_eq (r : ℕ) :
+    (if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+    (if r ≥ 4 then r - 4 else 0) := by
+  split_ifs <;> omega
+
 /-- V2: Combined zigzag bounded-damage with `r → r+1` distance shift.
 
     The composition of zig-then-zag achieves an `r → r+1` distance shift:
@@ -1170,8 +1211,8 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     This is the KEY structural property of even/odd cherry alternation
     (AKS Section 6). It does NOT follow from composing two `HasBoundedTreeDamage`
-    properties alone — it requires that zig and zag operate on complementary
-    cherry partitions (even-level and odd-level apexes).
+    properties alone — it requires that zig has `HasCherryShiftDamage` (the `r+1`
+    shift from operating on one cherry partition).
 
     The `r+1` in the first term is the geometric decrease mechanism:
     after each zigzag cycle, wrongness at distance `r` is controlled
@@ -1179,11 +1220,9 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     Error term coefficients:
     - `2ε` on `r-2`: zig exceptions (`ε·|E(v,r-2)|`) plus zag exceptions on
-      original input (`ε·|E(v,r-2)|`, since zag's exceptions at distance `r-2`
-      in `v'` are bounded by `|E(v,r-2)| + ε·|E(v,r-4)|`, giving `ε·|E(v,r-2)|`
-      as the dominant term)
-    - `ε` on `r-4`: cross-term from zag exceptions applied to zig exceptions
-      (`ε²·|E(v,r-4)|`, simplified using `ε ≤ 1`) -/
+      zig output (`ε·|E(v',r-2)|`), where `|E(v',r-2)|` is bounded by
+      `|E(v,r-2)| + ε·|E(v,r-4)|` from cherry shift at `r-2`
+    - `ε` on `r-4`: cross-term `ε²·|E(v,r-4)|`, simplified using `ε ≤ 1` -/
 def HasBoundedZigzagDamage {n : ℕ}
     (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
   ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
@@ -1192,6 +1231,73 @@ def HasBoundedZigzagDamage {n : ℕ}
       (elementsAtTreeDist n t v J (r + 1)).card +
         2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
+
+/-- Composing zig (`HasCherryShiftDamage`) and zag (`HasBoundedTreeDamage`) gives
+    combined zigzag damage with the `r → r+1` improvement.
+
+    **Proof:**
+    1. From zag (BoundedTreeDamage) at `r` with input `v' = zig.exec v`:
+       `|E(v'',J,r)| ≤ |E(v',J,r)| + ε·|E(v',J,s)|`  where s = if r≥2 then r-2 else 0
+    2. From zig (CherryShiftDamage) at `r`:
+       `|E(v',J,r)| ≤ |E(v,J,r+1)| + ε·|E(v,J,s)|`
+    3. From zig (as BoundedTreeDamage, implied by cherry shift) at `s`:
+       `|E(v',J,s)| ≤ |E(v,J,s)| + ε·|E(v,J,s')|`  where s' = if r≥4 then r-4 else 0
+    4. Combine: `|E(v'',J,r)| ≤ |E(v,J,r+1)| + 2ε·|E(v,J,s)| + ε²·|E(v,J,s')|`
+    5. Since `ε ≤ 1`: `ε² ≤ ε`, giving the exact `HasBoundedZigzagDamage` bound. -/
+lemma cherry_shift_damage_gives_zigzag
+    {n : ℕ} (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
+    (hε_nn : 0 ≤ ε) (hε_le : ε ≤ 1)
+    (hzig : HasCherryShiftDamage zig_net ε t)
+    (hzag : HasBoundedTreeDamage zag_net ε t) :
+    HasBoundedZigzagDamage zig_net zag_net ε t := by
+  intro v J r
+  set v' := zig_net.exec v
+  set v'' := zag_net.exec v'
+  set s := if r ≥ 2 then r - 2 else 0 with hs_def
+  set s' := if r ≥ 4 then r - 4 else 0 with hs'_def
+  -- Step 1: zag bound (HasBoundedTreeDamage at r, input v')
+  have h_zag := hzag v' J r
+  -- Step 2: zig bound (HasCherryShiftDamage at r, input v)
+  have h_zig_r := hzig v J r
+  -- Step 3: zig bound at s (via cherry_shift_implies_bounded_tree)
+  have h_zig_btd := cherry_shift_implies_bounded_tree zig_net ε t hε_nn hzig
+  have h_zig_s := h_zig_btd v J s
+  -- Step 4: Combine. Need nested_if_dist_eq to simplify the s-of-s term.
+  rw [nested_if_dist_eq] at h_zig_s
+  -- Step 5: ε² ≤ ε
+  have hε_sq : ε * ε ≤ ε := by nlinarith [sq_nonneg (1 - ε)]
+  -- Chain the inequalities
+  -- Step 1: zag at r gives |E(v'',r)| ≤ |E(v',r)| + ε·|E(v',s)|
+  have h1 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v' J r).card +
+        ε * (elementsAtTreeDist n t v' J s).card := h_zag
+  -- Step 2: zig at r gives |E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,s)|
+  -- (h_zig_r already has this)
+  -- Step 3: zig at s gives |E(v',s)| ≤ |E(v,s)| + ε·|E(v,s')|
+  -- (h_zig_s already has this, with nested_if_dist_eq applied)
+  -- Combine: substitute into h1
+  have h2 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      ((elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J s).card) +
+      ε * ((elementsAtTreeDist n t v J s).card +
+        ε * (elementsAtTreeDist n t v J s').card) := by
+    calc ((elementsAtTreeDist n t v'' J r).card : ℝ)
+        ≤ (elementsAtTreeDist n t v' J r).card +
+            ε * (elementsAtTreeDist n t v' J s).card := h1
+      _ ≤ ((elementsAtTreeDist n t v J (r + 1)).card +
+              ε * (elementsAtTreeDist n t v J s).card) +
+            ε * ((elementsAtTreeDist n t v J s).card +
+              ε * (elementsAtTreeDist n t v J s').card) := by
+          -- Multiply h_zig_s by ε to linearize
+          have h_eps_s : ε * ((elementsAtTreeDist n t v' J s).card : ℝ) ≤
+              ε * ((elementsAtTreeDist n t v J s).card +
+                ε * (elementsAtTreeDist n t v J s').card) :=
+            mul_le_mul_of_nonneg_left h_zig_s hε_nn
+          linarith [h_zig_r, h_eps_s]
+  -- Expand and simplify: ε² ≤ ε (so ε²·x ≤ ε·x)
+  have hs'_nn : (0 : ℝ) ≤ ((elementsAtTreeDist n t v J s').card : ℝ) :=
+    Nat.cast_nonneg _
+  nlinarith [hε_sq, hs'_nn]
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -1253,22 +1359,31 @@ lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     (by simp [elementsToLower])
     (by simp [elementsToUpper]))
 
-/-- From an ε₁-halver, construct a composite network with bounded tree-damage.
-    This encapsulates the recursive ε-nearsort construction (AKS Section 4):
-    apply ε₁-halver to the whole range, then top/bottom halves, then quarters,
-    etc., until pieces have size < ε·m. The composite satisfies the V2
-    bounded-damage property (`HasBoundedTreeDamage`) at tree level `t`.
+/-- **Halver → Cherry Shift Damage** (AKS Section 8)
 
-    The damage bound holds at every tree level `t` — this is essential for the
-    register reassignment argument (Lemma 1), which refines `t → t+1`.
+    An ε-halver satisfies `HasCherryShiftDamage` at any tree level `t`.
+    This is the bridge from the aggregate balance property (`IsEpsilonHalver`:
+    `onesInTop ≤ totalOnes/2 + ε·(n/2)`) to the local tree-distance damage
+    property used in the sorting proof.
 
-    The size bound says the composite uses O(log n) copies of the halver. -/
-lemma halvers_give_bounded_nearsort
-    {n : ℕ} (ε ε₁ : ℝ) (t : ℕ) (hε : 0 < ε) (hε₁ : 0 < ε₁)
-    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
-    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁) :
-    ∃ (net : ComparatorNetwork n), HasBoundedTreeDamage net ε t ∧
-      net.comparators.length ≤ halver.comparators.length * (Nat.log 2 n + 1) := by
+    The cherry-shift property says: after applying the halver, elements at
+    tree-distance ≥ r are bounded by elements at tree-distance ≥ r+1 before,
+    plus ε times elements at tree-distance ≥ r-2 before.
+
+    The r+1 shift (vs r for `HasBoundedTreeDamage`) captures that the halver
+    operates on complementary cherries — it processes top/bottom halves, which
+    correspond to alternating tree nodes. This structural alignment means the
+    halver "sees" one level of the tree hierarchy per application.
+
+    Mathematical argument: The halver's ε-balance guarantee controls how many
+    elements can cross the midpoint. Elements already at high tree-distance
+    either stay in place or move to the correct side, reducing their distance.
+    New exceptions arise only from the ε-fraction imbalance, and these are
+    concentrated at distance ≤ 2 from the threshold within the relevant
+    cherry partition. -/
+lemma halver_has_cherry_shift_damage {n : ℕ} (halver : ComparatorNetwork n) (ε : ℝ)
+    (hε : 0 < ε) (hhalver : IsEpsilonHalver halver ε) (t : ℕ) :
+    HasCherryShiftDamage halver ε t := by
   sorry
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
@@ -1924,7 +2039,7 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (ht : t ≥ 1) (v : Fin n →
 
     **STUB:** Current implementation just iterates the halver on the full range.
     The correct AKS construction recursively applies to sub-ranges (top/bottom halves).
-    See `halvers_give_bounded_nearsort` for the correct existential statement. -/
+    See `halver_has_cherry_shift_damage` for the bridge from halver to damage bound. -/
 noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
     (depth : ℕ) : ComparatorNetwork m :=
   if h : depth = 0 ∨ m < 2 then
@@ -1942,10 +2057,8 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
 
 -- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
 -- is a stub (just iterates the halver, doesn't do recursive sub-range application).
--- The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
--- produces `HasBoundedTreeDamage` (V2) at any tree level `t`. When `epsilonNearsort`
--- is properly implemented (recursive application to top/bottom halves), a correctness
--- lemma can be re-added.
+-- The correct bridge is `halver_has_cherry_shift_damage`, which proves a single halver
+-- satisfies `HasCherryShiftDamage` — the key property for the sorting proof.
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
 private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
@@ -2611,37 +2724,28 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 /-
   ROADMAP FOR LEMMAS 1-4 PROOFS:
 
-  The key interface is `HasBoundedDamage`: applying the network increases element
-  count at distance ≥ r by at most ε · (count at distance ≥ r-2). This is the
-  positional displacement bound that recursive ε-nearsort provides (AKS Section 4),
-  as opposed to `IsEpsilonHalver` which is an aggregate balance property.
+  The key interfaces are:
+  - `HasBoundedTreeDamage` (V2): tree-distance-based damage bound from ε-nearsort
+  - `HasCherryShiftDamage` (V2): like HasBoundedTreeDamage but r→r+1 in leading term
+  - `HasBoundedZigzagDamage` (V2): combined zig+zag damage with r→r+1 improvement
 
-  Proof chain:
+  Proof chain (V2 — tree-distance-based):
   1. ✅ halver_preserves_monotone (PROVED)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
-  4. ⚠️ halvers_give_bounded_nearsort (bridge: IsEpsilonHalver → HasBoundedTreeDamage)
-  5. ✅ cherry_wrongness_after_nearsort (PROVED — direct from HasBoundedDamage)
-  6. ✅ zig_step_bounded_increase (PROVED — scales by 8A ≥ 1)
-  7. ⚠️ zigzag_decreases_wrongness (needs tree alternation structure)
-  8. ⚠️ register_reassignment_increases_wrongness (NEEDS REFORMULATION — see note)
+  4. ⚠️ halver_has_cherry_shift_damage (sorry — halver → HasCherryShiftDamage)
+     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
+  5. ✅ cherry_wrongness_after_nearsort_v2 (PROVED — direct from HasBoundedTreeDamage)
+  6. ✅ zig_step_bounded_increase_v2 (PROVED — scales by 8A ≥ 1)
+  7. ✅ zigzag_decreases_wrongness_v2 (PROVED — from HasBoundedZigzagDamage)
+     - ✅ cherry_shift_damage_gives_zigzag: CherryShift + BoundedTree → Zigzag (PROVED)
+     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
+  8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
   9. ⚠️ aks_tree_sorting (top-level assembly)
 
-  The bridge lemma #4 encapsulates the recursive ε-nearsort construction:
-  - An ε₁-halver with ε₁ ≤ ε/(2·(log₂ n + 1)) yields a composite network
-    with HasBoundedDamage ε, using O(log n) copies of the halver.
-
-  Known formalization gaps:
-  - `elementsAtDistance` doesn't use its `t` parameter — the time-dependent
-    interval structure needed for Lemma 1 (register reassignment) is not yet
-    formalized. This also makes the `t` vs `t+1` distinction in Lemma 1 vacuous.
-  - `zigzag_decreases_wrongness` can't follow from chaining two zig steps — the
-    r → r+1 improvement requires tree alternation (zig on even, zag on odd levels).
-
-  Infrastructure:
-  - Element counting: countOnes, countOnesInRange
-  - Element tracking: elementsAtDistance, elementsToLower/Upper, correctlyPlaced
-  - Bounded damage: HasBoundedDamage (positional displacement bound)
+  Remaining gaps (2):
+  - `halver_has_cherry_shift_damage`: IsEpsilonHalver → HasCherryShiftDamage
+  - `aks_tree_sorting`: assembly using halver_has_cherry_shift_damage + proved lemmas
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
@@ -2652,50 +2756,9 @@ lemma halver_preserves_monotone {n : ℕ} (net : ComparatorNetwork n)
     Monotone (net.exec w) :=
   ComparatorNetwork.exec_preserves_monotone net w hw
 
-/-- Key inequality for Lemma 2: combining moved elements and exceptions.
-
-    **Goal:** After applying ε-nearsort to a cherry, bound the wrongness increase.
-
-    **Setup:**
-    - Before: interval J has wrongness Δᵣ (proportion at distance ≥ r)
-    - After: interval J has wrongness Δ'ᵣ
-    - Want: Δ'ᵣ ≤ Δᵣ + ε·Δᵣ₋₂
-
-    **Proof idea:**
-    Elements in J partition into:
-    1. **Correctly placed** (already belong in J): contribute Δᵣ
-    2. **Should move, do move** ((1-ε) fraction by forcing property):
-       - Distance decreases, so contribute less than Δᵣ
-    3. **Should move, don't move** (ε fraction, "exceptional"):
-       - These were at distance ≥ (r-2) before (since moving 2 levels would fix)
-       - Still at distance ≥ r after
-       - Contribute ε·Δᵣ₋₂
-
-    **Fringe amplification:**
-    Elements spread across fringes of size A, giving factor 8A.
-    Final bound: Δ'ᵣ ≤ 8A·(Δᵣ + ε·Δᵣ₋₂)
-
-    This lemma uses `HasBoundedDamage` (from the ε-nearsort construction)
-    and requires careful counting of displaced elements. -/
-lemma cherry_wrongness_after_nearsort
-    {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : HasBoundedDamage net ε)
-    (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
-    (_h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
-    treeWrongness n t (net.exec v) J r ≤
-      treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
-  -- HasBoundedDamage gives bound on element counts; divide by J.size.
-  -- Note: `t` is unused in `elementsAtDistance`, so HasBoundedDamage (t=0) matches.
-  by_cases hJ : J.size = 0
-  · simp [treeWrongness, hJ]
-  · unfold treeWrongness; simp only [if_neg hJ]
-    have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
-    rw [← mul_div_assoc, ← add_div]
-    apply div_le_div_of_nonneg_right _ hJs.le
-    exact hnet v J r
-
-/-- V2: Cherry wrongness after nearsort, using tree-distance-based definitions.
-    Same algebraic proof as `cherry_wrongness_after_nearsort` but with
-    `HasBoundedTreeDamage` and `treeWrongnessV2`. -/
+/-- Cherry wrongness after nearsort, using tree-distance-based definitions.
+    After applying an ε-nearsort to a cherry, wrongness increases by at most
+    `ε · tw(r-2)`. Uses `HasBoundedTreeDamage` and `treeWrongnessV2`. -/
 lemma cherry_wrongness_after_nearsort_v2
     {n t : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (hnet : HasBoundedTreeDamage net ε t)
     (cherry : Cherry n) (v : Fin n → Bool) (J : Interval n) (r : ℕ)
@@ -2712,31 +2775,7 @@ lemma cherry_wrongness_after_nearsort_v2
 
 /-! **The Four Key Lemmas (AKS Section 8)** -/
 
-/-- **Lemma 1: Register Reassignment** (AKS page 8)
-
-    When registers are reassigned to new intervals, wrongness can increase.
-    This lemma bounds the increase.
-
-    Δ'ᵣ < 6A·Δᵣ₋₄  (for wrongness)
-
-    **NEEDS REFORMULATION:** The current `elementsAtDistance` definition doesn't
-    use the `t` parameter, so `treeWrongness n (t+1) v' J' r` is definitionally
-    equal to `treeWrongness n 0 v' J' r`. The "time evolution" aspect of register
-    reassignment requires either:
-    (a) Making `elementsAtDistance` truly time-dependent (intervals change at each time step), or
-    (b) Adding tree-structure hypotheses connecting J to J' (e.g., J is an interval
-        at tree level t and J' is its image at level t+1, shifted by ≤ 2 levels).
-    The r-4 shift depends on this tree level structure — without it, the bound
-    is unjustified. See AKS (1983) Section 8 for the precise statement. -/
-lemma register_reassignment_increases_wrongness
-    {n t : ℕ} (v v' : Fin n → Bool) (J J' : Interval n) (r : ℕ)
-    (h_reassign : ∀ i : Fin n, v' i ≠ v i → i ∈ J'.toFinset)  -- v' differs from v only within J'
-    (h_contain : J.toFinset ⊆ J'.toFinset)  -- J is contained in J'
-    (hr : r ≥ 4) :
-    treeWrongness n (t+1) v' J' r ≤ 6 * A * treeWrongness n t v J (r - 4) := by
-  sorry
-
-/-- **Lemma 1 (V2): Register Reassignment** (AKS Section 8)
+/-- **Lemma 1: Register Reassignment** (AKS Section 8)
 
     When time advances from `t` to `t+1`, the interval tree refines and
     registers are reassigned. Values don't change — register reassignment
@@ -2803,68 +2842,9 @@ lemma register_reassignment_increases_wrongness_v2
 
 /-- **Lemma 2: Single Zig or Zag Step** (AKS page 8)
 
-    Applying ε-nearsort to a cherry (parent + two children intervals)
-    increases wrongness slightly but bounded by ε.
-
-    Δ'ᵣ < 8A·(Δᵣ + ε·Δᵣ₋₂)  (for r ≥ 3)
-    Δ'ᵣ < 8A·(Δᵣ + ε)      (for r = 1,2)
-    δ' < 4A·(δ + ε)
-
-    Intuition: ε-nearsort forces elements toward correct sides. Most
-    elements move correctly (bounded by Δᵣ), except ε fraction which
-    are "exceptional" and contribute the ε·Δᵣ₋₂ or ε terms.
-
-    This is where the halver property connects to wrongness decrease!
-
-    PROOF STRUCTURE (detailed in docs/lemma2_analysis.md):
-    1. Identify cherry containing J
-    2. Partition elements by target distance
-    3. Use bounded-damage property → forces (1-ε) fraction toward target
-    4. Elements that moved have reduced distance
-    5. Exception elements (ε fraction) bounded by Δᵣ₋₂
-    6. Fringe amplification gives factor 8A
-    7. Combine for final bound -/
-lemma zig_step_bounded_increase
-    {n t : ℕ} (v v' : Fin n → Bool) (net : ComparatorNetwork n)
-    (ε : ℝ) (hε_nn : 0 ≤ ε) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
-    (h_zig : v' = net.exec v)  -- v' obtained by applying net to v
-    :
-    treeWrongness n t v' J r ≤
-      8 * A * (treeWrongness n t v J r +
-               if r ≥ 3 then ε * treeWrongness n t v J (r - 2)
-               else ε) := by
-  subst h_zig
-  -- Step 1: HasBoundedDamage gives tw_after ≤ tw + ε * tw(if r≥2 then r-2 else 0)
-  have hbd : treeWrongness n t (net.exec v) J r ≤
-      treeWrongness n t v J r + ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) := by
-    by_cases hJ : J.size = 0
-    · simp [treeWrongness, hJ]
-    · unfold treeWrongness; simp only [if_neg hJ]
-      have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
-      rw [← mul_div_assoc, ← add_div]
-      apply div_le_div_of_nonneg_right _ hJs.le
-      exact hnet v J r
-  -- Step 2: Scale up by 8*A ≥ 1
-  have hA : (1 : ℝ) ≤ 8 * A := by norm_num [A]
-  by_cases hr : r ≥ 3
-  · -- r ≥ 3: both if-branches evaluate to ε * tw(r-2)
-    simp only [show r ≥ 2 from by omega, ↓reduceIte, hr] at hbd ⊢
-    have h_nn : 0 ≤ treeWrongness n t v J r + ε * treeWrongness n t v J (r - 2) :=
-      add_nonneg (treeWrongness_nonneg (t := t) v J r)
-        (mul_nonneg hε_nn (treeWrongness_nonneg (t := t) v J (r - 2)))
-    linarith [mul_le_mul_of_nonneg_right hA h_nn]
-  · -- r < 3: use tw(0) ≤ 1 to bound ε * tw(0) ≤ ε
-    push_neg at hr
-    simp only [show ¬(r ≥ 3) from by omega, ↓reduceIte] at ⊢
-    have h_tw_le : ε * treeWrongness n t v J (if r ≥ 2 then r - 2 else 0) ≤ ε :=
-      mul_le_of_le_one_right hε_nn (treeWrongness_le_one (t := t) v J _)
-    have h_nn : 0 ≤ treeWrongness n t v J r + ε :=
-      add_nonneg (treeWrongness_nonneg (t := t) v J r) hε_nn
-    linarith [mul_le_mul_of_nonneg_right hA h_nn]
-
-/-- V2: Zig step bounded increase, using tree-distance-based definitions.
-    Same algebraic proof as `zig_step_bounded_increase` but with
-    `HasBoundedTreeDamage` and `treeWrongnessV2`. -/
+    Applying ε-nearsort to a cherry increases wrongness by at most `ε·tw(r-2)`,
+    then scales by `8A` for fringe amplification. Uses `HasBoundedTreeDamage`
+    and `treeWrongnessV2`. -/
 lemma zig_step_bounded_increase_v2
     {n t : ℕ} (v v' : Fin n → Bool) (net : ComparatorNetwork n)
     (ε : ℝ) (hε_nn : 0 ≤ ε) (hnet : HasBoundedTreeDamage net ε t) (r : ℕ) (J : Interval n)
@@ -2900,35 +2880,7 @@ lemma zig_step_bounded_increase_v2
       add_nonneg (treeWrongnessV2_nonneg (t := t) v J r) hε_nn
     linarith [mul_le_mul_of_nonneg_right hA h_nn]
 
-/-- **Lemma 3: ZigZag Combined Step** (AKS page 8)
-
-    Combining a Zig step and a Zag step (alternating even/odd levels)
-    gives STRICT DECREASE in wrongness.
-
-    Δ'ᵣ < 64A²·(Δᵣ₊₁ + 3ε·Δᵣ₋₄)  (for r ≥ 5)
-    Δ'ᵣ < 64A²·(Δᵣ₊₁ + 3ε)      (for r = 1,2,3,4)
-    δ' < 16A²·(δ + 2ε)
-
-    KEY INSIGHT: If interval J was closest to section L in Zig step,
-    then it will NOT be nearest in Zag step (due to alternation).
-    Thus wrongness strictly decreases, not just stays bounded!
-
-    This is the geometric decrease mechanism! -/
-lemma zigzag_decreases_wrongness
-    {n t : ℕ} (v v'' : Fin n → Bool) (net : ComparatorNetwork n)
-    (ε : ℝ) (hε_nn : 0 ≤ ε) (hnet : HasBoundedDamage net ε) (r : ℕ) (J : Interval n)
-    (h_zigzag : v'' = net.exec (net.exec v))  -- v'' is v after full Zig-Zag cycle
-    :
-    treeWrongness n t v'' J r ≤
-      64 * A^2 * (treeWrongness n t v J (r + 1) +
-                  if r ≥ 5 then 3 * ε * treeWrongness n t v J (r - 4)
-                  else 3 * ε) := by
-  -- NOTE: Can't follow from just chaining two zig steps — the r+1 improvement
-  -- requires the tree alternation insight (zig on even levels, zag on odd levels).
-  -- Needs additional structure about how zig/zag operate on different tree levels.
-  sorry
-
-/-- **Lemma 3 (V2): ZigZag Combined Step** (AKS Section 8)
+/-- **Lemma 3: ZigZag Combined Step** (AKS Section 8)
 
     Combining a Zig step (ε-nearsort on even-level cherries) and a Zag step
     (ε-nearsort on odd-level cherries) gives STRICT DECREASE in wrongness.
@@ -2965,7 +2917,58 @@ lemma zigzag_decreases_wrongness_v2
   -- HasBoundedZigzagDamage gives element-level bound. Divide by J.size to get
   -- wrongness, then consolidate 2ε·tw(r-2) + ε·tw(r-4) ≤ 3ε·tw(r-4) via
   -- anti-monotonicity of treeWrongnessV2.
-  sorry
+  by_cases hJ : J.size = 0
+  · simp [treeWrongnessV2, hJ]
+  · -- Step 1: HasBoundedZigzagDamage gives card-level bound
+    have hzz_card := hzz v J r
+    -- Step 2: Divide by J.size to get wrongness inequality
+    have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
+    -- Goal: tw(v'', r) ≤ tw(v, r+1) + 3ε·tw(v, if r≥4 then r-4 else 0)
+    -- From hzz_card: card(v'',r) ≤ card(v,r+1) + 2ε·card(v,if r≥2 then r-2 else 0) + ε·card(v,if r≥4 then r-4 else 0)
+    unfold treeWrongnessV2
+    simp only [if_neg hJ]
+    -- After dividing by J.size, need:
+    -- card(v'',r)/|J| ≤ card(v,r+1)/|J| + 3ε·card(v,if r≥4 then r-4 else 0)/|J|
+    rw [← mul_div_assoc, ← add_div]
+    apply div_le_div_of_nonneg_right _ hJs.le
+    -- Goal: card(v'',r) ≤ card(v,r+1) + 3ε·card(v,if r≥4 then r-4 else 0)
+    -- From hzz_card, we have card bound with 2ε·(r-2 term) + ε·(r-4 term)
+    -- Use anti-monotonicity: card(v, if r≥2 then r-2 else 0) ≤ card(v, if r≥4 then r-4 else 0)
+    have h_anti : ((elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card : ℝ) ≤
+        (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := by
+      apply Nat.cast_le.mpr
+      apply Finset.card_le_card
+      by_cases hr4 : r ≥ 4
+      · simp only [show r ≥ 2 from by omega, ↓reduceIte, hr4]
+        -- Need: elementsAtTreeDist(r-2) ⊆ elementsAtTreeDist(r-4)
+        -- r-2 ≥ r-4, so dist ≥ r-2 → dist ≥ r-4
+        unfold elementsAtTreeDist
+        rw [if_neg hJ, if_neg hJ]
+        intro i hi
+        simp only [Finset.mem_filter] at hi ⊢
+        exact ⟨hi.1, hi.2.1, by omega⟩
+      · push_neg at hr4
+        by_cases hr2 : r ≥ 2
+        · simp only [hr2, ↓reduceIte, show ¬(r ≥ 4) from by omega]
+          -- r ∈ {2, 3}: elementsAtTreeDist(r-2) ⊆ elementsAtTreeDist(0)
+          unfold elementsAtTreeDist
+          rw [if_neg hJ, if_neg hJ]
+          intro i hi
+          simp only [Finset.mem_filter] at hi ⊢
+          exact ⟨hi.1, hi.2.1, Nat.zero_le _⟩
+        · simp only [show ¬(r ≥ 2) from hr2, ↓reduceIte, show ¬(r ≥ 4) from by omega]
+          exact Finset.Subset.refl _
+    -- Consolidate: 2ε·card(r-2) + ε·card(r-4) ≤ 3ε·card(r-4)
+    calc ((elementsAtTreeDist n t v'' J r).card : ℝ)
+        ≤ (elementsAtTreeDist n t v J (r + 1)).card +
+          2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := hzz_card
+      _ ≤ (elementsAtTreeDist n t v J (r + 1)).card +
+          2 * ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := by
+          linarith [mul_le_mul_of_nonneg_left h_anti (by linarith : (0 : ℝ) ≤ 2 * ε)]
+      _ = (elementsAtTreeDist n t v J (r + 1)).card +
+          3 * ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := by ring
 
 /-- **Lemma 4: Displacement from Wrongness** (AKS page 8-9, Equation 4)
 

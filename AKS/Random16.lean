@@ -12,6 +12,8 @@ import AKS.NpyReader
 
 namespace Random16
 
+#eval ensureCertificateData 16 4
+
 def rotData : String := bin_base85% "data/16/rot_map.bin"
 def certData : String := bin_base85% "data/16/cert_z.bin"
 
