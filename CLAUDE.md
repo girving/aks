@@ -333,7 +333,7 @@ No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGr
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
 - *Done (11/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`, `hat_block_norm` (‖QΣQ - P‖ ≤ spectralGap G₁), `withinCluster_tilde_contraction` (‖B(I-Q)‖ ≤ spectralGap G₂, 1 sorry in d₂=0 degenerate case)
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
-- *Hard (2-4 weeks):* `rvw_operator_norm_bound` (mathematical core — uses reflection structure of Σ, NOT triangle inequality; see `reflection_quadratic_bound`). **Status doc:** `scripts/RVW_QUADRATIC_PROOF_STATUS.md` — documents LP infeasibility of nlinarith, numerical analysis, and viable proof paths. Key finding: scalar multiplier nlinarith is PROVEN infeasible (LP, twice); need mathematical proof via variable elimination + case analysis or full SOS Positivstellensatz.
+- *Hard (2-4 weeks):* `rvw_quadratic_ineq` — the sole remaining `sorry` in `rvw_operator_norm_bound`. See **RVW Quadratic Inequality** section below for detailed analysis. `rayleigh_quotient_bound` is also sorry'd but currently unused.
 
 **Substantial (months):** TreeSorting.lean sorrys (5): `cherry_wrongness_after_nearsort`, `register_reassignment_increases_wrongness`, `zig_step_bounded_increase`, `zigzag_decreases_wrongness`, `aks_tree_sorting`. These require: (1) fixing `halver_implies_nearsort_property` from a `True := trivial` stub to a proper statement, (2) adding missing hypotheses to lemma statements (e.g., relationships between intervals J and J'), (3) fixing helper stubs (`fringe_amplification_bound`, `moving_reduces_tree_distance`, etc.)
 
@@ -346,3 +346,51 @@ No files have `#exit`. `expander_gives_halver` is fully proved (takes `RegularGr
 Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `CertificateBridge.lean` (sorry'd bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for the bridge theorem proof plan.
 
 **Bridge proof plan** (`docs/bridge-proof-plan.md`): Factor into three lemmas: (1) certificate → walk bound on mean-zero vectors [sorry'd, needs checker augmentation], (2) walk bound → `spectralGap` bound via `opNorm_le_bound` [provable, LOW risk], (3) coefficient arithmetic via `√` monotonicity [provable, LOW risk]. Key insight: avoid eigenvalue decomposition entirely — use quadratic forms on `1⊥` where `J` vanishes.
+
+## RVW Quadratic Inequality (`rvw_quadratic_ineq`)
+
+The sole remaining `sorry` in `rvw_operator_norm_bound` (`AKS/RVWBound.lean`, ~line 814). This is the scalar core of the RVW spectral bound: after the operator-level proof reduces to a scalar inequality via reflection structure and Cauchy-Schwarz, we need:
+
+```
+X² ≤ (1 - μ₂²) · μ₁ · |X| + μ₂²
+```
+
+After clearing denominators: `G = AC + (B-C)·|p|·|X| - AB·X² ≥ 0` where `A = a²`, `B = 1-A`, `C = c²`, `X = p + 2q + r`, with constraints `|p| ≤ A`, `|r| ≤ C`, `q² ≤ (A±p)(C±r)`.
+
+### What has been proven impossible
+
+**`nlinarith` (diagonal Positivstellensatz) is structurally infeasible.** The inequality is tight on a 1D manifold `{C = B, p = A, r = C}` where `G = AB(1 - (A+C)²) = 0`. This forces every diagonal certificate term `h_i · m²` to vanish on the manifold, leaving too few degrees of freedom. Proven via LP at degrees 4-8, with multiple variable substitutions and constraint sets (158 Python scripts tested). **Do not attempt further LP/nlinarith variations** — the obstruction is structural, not a matter of finding the right hints or reparameterization.
+
+**Full-matrix SOS certificates exist but can't be extracted.** SDP solvers (SCS, CLARABEL) find near-feasible degree-6 certificates, confirming the Putinar representation exists. But first-order solvers achieve only ~0.003 primal residual — insufficient for rational reconstruction (~1e-10 needed). Rounding and LP-fitting the numerical certificate also fails.
+
+### What is already proved in Lean
+
+The scaffold in `RVWBound.lean` (lines 765-813) already handles:
+- Clearing denominators (`suffices h : A * B * X ^ 2 ≤ ...`)
+- Derived bounds: `q² ≤ AC + pr` (sum CS), `A·q² ≤ C·(A²-p²)` (weighted CS)
+- `concave_quad_min_boundary` helper lemma (concavity reduction)
+
+### Viable proof paths (in order of preference)
+
+**Path A: High-precision SDP → exact certificate → `nlinarith` hints.** Install MOSEK (free academic license) or SDPA-GMP (arbitrary precision). These achieve 1e-15+ precision, making rational reconstruction trivial. Extract the PSD matrix entries as exact rationals, decompose into squared linear combinations, and feed to `nlinarith` as `sq_nonneg (c₁·A + c₂·C + c₃·u + c₄·t + ...)` hints. This is mechanical once the solver is available. The SOS certificate uses the `(A,C,u,t)` variables where `u = √(A-p)`, `t = √(C-r)`.
+
+**Path B: Trigonometric proof (RVW paper Section 4.2, Claim 4.4).** Formalize the paper's geometric proof: (1) recognize Σ̃ as a reflection → `⟨Σ̃v,v⟩ = cos(2θ)·‖v‖²`, (2) bound `|cos(2θ)| · cos²φ/cos²φ'` by case-splitting on angle ranges, (3) optimize over φ direction → yields `rvwBound(μ₁,μ₂)`. Risk: trig identity manipulation is laborious in Lean, but mathematically guaranteed to work.
+
+**Path C: Axiomatize and move on.** Leave the `sorry` and work on other parts. Come back when a high-precision solver is available.
+
+### Lessons learned (for future hard inequalities)
+
+1. **When an LP is proven infeasible, do not try LP-like variations.** Reparameterizing variables, adding derived constraints, or increasing degree cannot fix a structural obstruction (tight manifold forcing diagonal terms to vanish). One clear infeasibility proof is sufficient.
+
+2. **Distinguish diagonal SOS (LP) from full-matrix SOS (SDP) early.** `nlinarith` uses diagonal Positivstellensatz — each certificate term is `(single constraint product) × (single monomial)²`. Full-matrix SOS allows cross-terms `(constraint) × (linear combination of monomials)²`. When the LP is infeasible but the inequality is true, the proof requires cross-terms, which means either `nlinarith` with explicit `sq_nonneg` hints (if you know the right linear combinations) or a fundamentally different proof technique.
+
+3. **SDP solver precision matters.** First-order solvers (SCS, CLARABEL) are fine for optimization but inadequate for exact certificate extraction. For proof-carrying code, use interior-point solvers (MOSEK, SDPA-GMP) that achieve 1e-12+ precision.
+
+4. **Algebraic rearrangements of a hard inequality are an infinite trap.** When you have a degree-6 inequality in 4+ variables, there are infinitely many decompositions, substitutions, and case splits. Each feels like progress but they all reduce to the same core difficulty. After ~5 failed decompositions, the probability of the next one working is negligible — switch to a fundamentally different approach.
+
+5. **Count your scripts.** If you've written 10+ analysis scripts for the same lemma without converging, you are thrashing. Stop, document what's been tried, and escalate.
+
+### Reference
+
+- Status document: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
+- Analysis scripts: `scripts/rvw/` (saved) and `/tmp/rvw_*.py` (ephemeral, 158 scripts from Feb 2026 sessions)
