@@ -152,6 +152,14 @@ class LeanDaemon:
 
     def start(self):
         """Start lake serve and initialize LSP."""
+        # Ensure CertChecker shared lib is built before starting LSP.
+        # The AKS lib passes --load-dynlib for it, so it must exist.
+        print(f"[lean-daemon] Building CertChecker shared lib...")
+        subprocess.run(
+            ["lake", "build", "CertChecker"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+        )
         print(f"[lean-daemon] Starting lake serve in {PROJECT_ROOT}...")
         proc = subprocess.Popen(
             ["lake", "serve"],
