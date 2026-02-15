@@ -320,7 +320,7 @@ const PROOF_DATA = {
     { id: "rayleigh_quotient_bound", file: "AKS/RVWBound.lean", line: 331, status: "sorry", kind: "lemma",
       sig: "rayleigh_quotient_bound : ‖A‖ = sSup (range (fun x ↦ |⟨Ax, x⟩|))",
       desc: "Rayleigh quotient characterization of self-adjoint operator norm.", difficulty: "weeks" },
-    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1237, status: "proved", kind: "theorem",
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1234, status: "proved", kind: "theorem",
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
       desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Uses hat/tilde decomposition, reflection Rayleigh quotients, and the RVW quadratic inequality." },
 
@@ -377,13 +377,13 @@ const PROOF_DATA = {
       sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
-    // ── Random.lean ──
-    { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
-      sig: "axiom baseExpander : RegularGraph 20736 12",
-      desc: "Base expander: 12-regular graph on 20736 = 12^4 vertices. Axiomatized (certificate is infeasible)." },
-    { id: "baseExpander_gap", file: "AKS/Random.lean", line: 108, status: "axiom", kind: "axiom",
-      sig: "axiom baseExpander_gap : spectralGap baseExpander ≤ 5/9",
-      desc: "Base expander has spectral gap ≤ 5/9 ≈ 0.556 (just above Alon-Boppana bound)." },
+    // ── Random20736.lean ──
+    { id: "Random20736.graph", file: "AKS/Random20736.lean", line: 31, status: "proved", kind: "def",
+      sig: "def Random20736.graph : RegularGraph 20736 12",
+      desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
+    { id: "Random20736.gap", file: "AKS/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
+      sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
+      desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
 
     // ── ZigZag.lean ──
     { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 30, status: "proved", kind: "theorem",
@@ -595,7 +595,6 @@ const PROOF_DATA = {
     ["rvwBound", "rvwBound_mono_right"],
     ["rvwBound", "rvw_quadratic_ineq"],
     ["rvw_quadratic_ineq", "rvw_operator_norm_bound"],
-    ["rayleigh_quotient_bound", "rvw_operator_norm_bound"],
 
     // Zig-zag assembly
     ["zigzag_walkCLM_eq", "zigzag_spectral_bound"],
@@ -627,10 +626,10 @@ const PROOF_DATA = {
     ["zigzagFamily_gap", "explicit_expanders_exist_zigzag"],
     ["zigzagFamily", "explicit_expanders_exist_zigzag"],
 
-    // Base expander
-    ["RegularGraph", "baseExpander"],
-    ["spectralGap", "baseExpander_gap"],
-    ["baseExpander", "baseExpander_gap"],
+    // Base expander (Random20736)
+    ["RegularGraph", "Random20736.graph"],
+    ["certificate_bridge", "Random20736.gap"],
+    ["Random20736.graph", "Random20736.gap"],
 
     // AKSNetwork.lean — helper lemmas
     ["epsHalverMerge", "epsHalverMerge_exec_eq_iterate"],
@@ -736,7 +735,7 @@ const PROOF_DATA = {
     { id: "AKS/SpectralMatrix.lean", label: "SpectralMatrix.lean", color: "#1a1e24" },
     { id: "AKS/DiagDominant.lean", label: "DiagDominant.lean", color: "#1a1e24" },
     { id: "AKS/CertificateBridge.lean", label: "CertificateBridge.lean", color: "#1a1e24" },
-    { id: "AKS/Random.lean", label: "Random.lean", color: "#1a1e24" },
+    { id: "AKS/Random20736.lean", label: "Random20736.lean", color: "#1a1e24" },
     { id: "AKS/TreeSorting.lean", label: "TreeSorting.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]

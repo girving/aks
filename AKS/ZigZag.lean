@@ -112,8 +112,8 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     • n_k = D^(4(k+1)) vertices (exponential growth)
     • λ(G_k) ≤ c < 1 (constant spectral gap, from `zigzagFamily_gap`)
 
-    For the concrete instantiation with `baseExpander` (D = 12):
-    D² = 144, D⁴ = 20736, `baseExpander_gap ≤ 5/9`, family spectral gap ≤ 93/100.
+    For the concrete instantiation with `Random20736.graph` (D = 12):
+    D² = 144, D⁴ = 20736, spectral gap ≤ 10/12, family spectral gap ≤ 93/100.
 
     The key point: the degree D² is a CONSTANT independent of n,
     which is what we need for the AKS sorting network. -/
