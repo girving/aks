@@ -25,13 +25,13 @@ def rotData : String := bin_base85% "data/20736/rot_map.bin"
 -- def certData : String := bin_base85% "data/20736/cert_z.bin"
 axiom certData : String
 
-theorem involution_check : checkInvolution (rotData.toUTF8) 20736 12 = true := by
+theorem involution_check : checkInvolutionSpec (rotData.toUTF8) 20736 12 = true := by
   native_decide
 
 def graph : RegularGraph 20736 12 where
   rot := rotFun rotData 20736 12 (by decide) (by decide)
   rot_involution :=
-    checkInvolution_implies_rotFun_involution rotData 20736 12 (by decide) (by decide)
+    checkInvolutionSpec_implies_rotFun_involution rotData 20736 12 (by decide) (by decide)
       involution_check
 
 theorem certificate_passes :
