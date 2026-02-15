@@ -15,8 +15,9 @@
   4. `sqrt_coeff_le_frac` (in `WalkBound.lean`): coefficient arithmetic
 
   Layer 3 is decomposed into a structural proof (congruence, invertibility,
-  Hermiticity, PSD assembly — all proved) and two narrow arithmetic sorry's
-  (`certMatrix_posdiag`, `congruence_diagDominant`).
+  Hermiticity, PSD assembly — all proved) and one narrow sorry
+  (`kRowDominant_implies_diagDominant`: connecting integer checker computation
+  to the formal real matrix via `hmatch`).
 -/
 
 import AKS.Certificate
@@ -75,16 +76,37 @@ theorem certMatrix_posdiag (n : ℕ) (certBytes rotBytes : ByteArray)
   simp only [certMatrixReal, of_apply, le_refl, ite_true]
   exact Int.cast_pos.mpr hj_pos
 
+/-- Bridge lemma: if `checkKRowDominant` passes and the rotation map matches,
+    then K = star Z * M * Z is strictly row-diag-dominant.
+
+    The proof requires connecting the checker's integer computation to the
+    formal real matrix:
+    1. `mulAdj` correctly computes B·z via the rotation map (needs `hmatch`)
+    2. The checker's P computation matches formal `spectralMatrix * Z`
+    3. The checker's K computation matches formal `star Z * spectralMatrix * Z`
+    4. Integer diagonal dominance implies real diagonal dominance -/
+theorem kRowDominant_implies_diagDominant
+    (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
+    (G : RegularGraph n d)
+    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
+    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
+    (hmatch : ∀ vp : Fin n × Fin d,
+      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
+                    Nat.mod_lt _ hn⟩,
+                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
+                    Nat.mod_lt _ hd⟩))
+    (hkdom : checkKRowDominant rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true) :
+    let Z := certMatrixReal certStr.toUTF8 n
+    let M := spectralMatrix G (↑c₁) (↑c₂) (↑c₃)
+    ∀ i : Fin n,
+      ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
+      (star Z * M * Z) i i := by
+  sorry
+
 /-- `K = Z* · M · Z` is strictly row-diag-dominant when the certificate checker passes.
 
-    The proof chain would be:
-    1. `mulAdj` correctly computes unnormalized adjacency (via `hmatch`)
-    2. The checker's `P[:,j]` matches `(spectralMatrix * Z)[:,j]`
-    3. Upper triangle `|P[k,j]| ≤ epsMax`, diagonal `P[j,j] ≥ minDiag` (from checker)
-    4. `K[i,j]` bounded via upper-triangle trick on `Z`
-    5. Per-row Gershgorin from checker's `minDiag > epsMax * n*(n+1)/2`
-
-    Future: augment checker with per-row Gershgorin check. -/
+    Proved by extracting `checkKRowDominant = true` from `checkCertificate` and
+    applying `kRowDominant_implies_diagDominant`. -/
 theorem congruence_diagDominant
     (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     (G : RegularGraph n d)
@@ -100,7 +122,10 @@ theorem congruence_diagDominant
     ∀ i : Fin n,
       ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
       (star Z * M * Z) i i := by
-  sorry
+  -- Extract K diagonal dominance check from checkCertificate
+  have hkdom : checkKRowDominant rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
+    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.2
+  exact kRowDominant_implies_diagDominant n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hmatch hkdom
 
 
 /-! **Layer 3: Certificate → spectral matrix PSD** -/
@@ -112,7 +137,7 @@ theorem congruence_diagDominant
     1. Define `Z` = certificate matrix (upper triangular, from base-85 bytes)
     2. `Z` upper triangular → `det Z = ∏ Z[i,i]` → positive → `IsUnit Z`
     3. `K = Z* · M · Z` is Hermitian (from `M` Hermitian)
-    4. `K` is strictly row-diag-dominant (sorry'd: `congruence_diagDominant`)
+    4. `K` is strictly row-diag-dominant (via `congruence_diagDominant`)
     5. `K` is PSD (from Hermitian + diag-dominant)
     6. `M` is PSD (from `K` PSD + `Z` invertible, via congruence) -/
 theorem checker_implies_spectralMatrix_psd
@@ -128,7 +153,7 @@ theorem checker_implies_spectralMatrix_psd
     Matrix.PosSemidef (spectralMatrix G (↑c₁) (↑c₂) (↑c₃)) := by
   -- Extract PSD check from combined check
   have hpsd : checkPSDCertificate rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
-    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.2
+    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.1.2
   -- Define Z and M
   set Z := certMatrixReal certStr.toUTF8 n with hZ_def
   set M := spectralMatrix G (↑c₁ : ℝ) (↑c₂) (↑c₃) with hM_def
