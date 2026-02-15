@@ -306,11 +306,12 @@ fn compute_and_pack_z(m: Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
 }
 
 /// Post-process Z_int to reduce upper-triangular errors in P = M · Z_int.
-/// For each column j, computes P[:,j] exactly via rotation map (i64 arithmetic),
-/// then adjusts Z_int[i,j] by integer rounding to minimize |P[i,j]| for i < j.
+/// For each column j, computes P[i,j] for i < j exactly via rotation map
+/// (i64 arithmetic), then adjusts Z_int[i,j] by integer rounding to minimize
+/// |P[i,j]|.
 ///
-/// Columns are independent (each accesses a disjoint slice of packed), so we
-/// split packed into non-overlapping column slices and process in parallel.
+/// Uses scatter-based Bz (O(j·d) per column instead of O(n·d)) and only
+/// computes B²z for rows < j. Columns are independent, processed in parallel.
 fn refine_certificate(
     packed: &mut [i32],
     neighbors: &[usize],
@@ -339,42 +340,37 @@ fn refine_certificate(
     cols.into_par_iter().enumerate().for_each_init(
         || {
             (
-                vec![0i64; n],                      // z_col
-                vec![0i64; n],                      // bz
-                vec![0i64; n],                      // p_col
-                vec![0i32; n],                      // b2_col
-                Vec::<usize>::with_capacity(d * d), // touched
+                vec![0i64; n], // bz
+                vec![0i64; n], // p_col
             )
         },
-        |(z_col, bz, p_col, b2_col, touched), (j, col)| {
-            // Zero z_col (entries from previous column on this thread may be dirty)
-            for k in 0..n {
-                z_col[k] = 0;
-            }
+        |(bz, p_col), (j, col)| {
+            // Scatter-based Bz: only iterate over the j+1 nonzero entries of z_col.
+            bz[..n].fill(0);
             for k in 0..=j {
-                z_col[k] = col[k] as i64;
+                let val = col[k] as i64;
+                let base = k * d;
+                for p in 0..d {
+                    bz[neighbors[base + p]] += val;
+                }
             }
 
-            // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
-            for v in 0..n {
-                let mut acc: i64 = 0;
-                let base = v * d;
-                for p in 0..d {
-                    acc += z_col[neighbors[base + p]];
-                }
-                bz[v] = acc;
-            }
-            let col_sum: i64 = z_col[..=j].iter().sum();
-            for v in 0..n {
+            // Compute P[v,j] only for v < j (upper triangle is all we correct).
+            let col_sum: i64 = col.iter().map(|&x| x as i64).sum();
+            for v in 0..j {
                 let mut b2z_v: i64 = 0;
                 let base = v * d;
                 for p in 0..d {
                     b2z_v += bz[neighbors[base + p]];
                 }
-                p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
+                p_col[v] =
+                    c1 as i64 * col[v] as i64 - c2 as i64 * b2z_v + c3 as i64 * col_sum;
             }
 
-            // Greedy correction with B² cross-talk tracking.
+            // Greedy correction: adjust Z[i,j] to minimize |P[i,j]|.
+            // Cross-talk through c₃·J is tracked via running_delta_sum.
+            // Cross-talk through B² is NOT tracked within a pass — the next pass
+            // recomputes P from scratch to account for it.
             let mut running_delta_sum: i64 = 0;
 
             for i in 0..j {
@@ -386,33 +382,8 @@ fn refine_certificate(
                 if delta == 0 {
                     continue;
                 }
-                let d64 = delta as i64;
                 col[i] += delta;
-                running_delta_sum += d64;
-
-                // Compute B²[v,i] for all v via 2-hop neighbors of i
-                touched.clear();
-                let base_i = i * d;
-                for p in 0..d {
-                    let w = neighbors[base_i + p];
-                    let base_w = w * d;
-                    for q in 0..d {
-                        let v = neighbors[base_w + q];
-                        if b2_col[v] == 0 {
-                            touched.push(v);
-                        }
-                        b2_col[v] += 1;
-                    }
-                }
-
-                p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
-
-                for &v in touched.iter() {
-                    if v != i {
-                        p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
-                    }
-                    b2_col[v] = 0;
-                }
+                running_delta_sum += delta as i64;
             }
         },
     );
@@ -435,26 +406,23 @@ fn verify_certificate(
     let (min_diag, eps_max) = (0..n)
         .into_par_iter()
         .map_init(
-            || (vec![0i64; n], vec![0i64; n], vec![0i64; n]),
-            |(z_col, bz, b2z), j| {
+            || (vec![0i64; n], vec![0i64; n]),
+            |(bz, b2z), j| {
                 let col_start = j * (j + 1) / 2;
-                for k in 0..n {
-                    z_col[k] = 0;
-                }
+                let z_col = &z_packed[col_start..col_start + j + 1];
+
+                // Scatter-based Bz from the j+1 nonzero entries.
+                bz[..n].fill(0);
                 for k in 0..=j {
-                    z_col[k] = z_packed[col_start + k] as i64;
-                }
-
-                for v in 0..n {
-                    let mut acc: i64 = 0;
-                    let base = v * d;
+                    let val = z_col[k] as i64;
+                    let base = k * d;
                     for p in 0..d {
-                        acc += z_col[neighbors[base + p]];
+                        bz[neighbors[base + p]] += val;
                     }
-                    bz[v] = acc;
                 }
 
-                for v in 0..n {
+                // B²z only for v <= j (upper triangle + diagonal).
+                for v in 0..=j {
                     let mut acc: i64 = 0;
                     let base = v * d;
                     for p in 0..d {
@@ -463,22 +431,22 @@ fn verify_certificate(
                     b2z[v] = acc;
                 }
 
-                let col_sum: i64 = z_col[..=j].iter().sum();
+                let col_sum: i64 = z_col.iter().map(|&x| x as i64).sum();
 
                 let mut col_min_diag: i64 = i64::MAX;
                 let mut col_eps_max: i64 = 0;
 
-                // Only compute p_ij for i <= j (skip lower-triangular)
                 for i in 0..j {
-                    let p_ij =
-                        c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
+                    let p_ij = c1 as i64 * z_col[i] as i64 - c2 as i64 * b2z[i]
+                        + c3 as i64 * col_sum;
                     let abs_p = p_ij.abs();
                     if abs_p > col_eps_max {
                         col_eps_max = abs_p;
                     }
                 }
                 // Diagonal
-                let p_jj = c1 as i64 * z_col[j] - c2 as i64 * b2z[j] + c3 as i64 * col_sum;
+                let p_jj = c1 as i64 * z_col[j] as i64 - c2 as i64 * b2z[j]
+                    + c3 as i64 * col_sum;
                 col_min_diag = col_min_diag.min(p_jj);
 
                 (col_min_diag, col_eps_max)
@@ -627,9 +595,10 @@ fn main() {
 
     // Post-process: greedy Gershgorin correction (two passes for c₃ cross-talk convergence)
     let t0 = Instant::now();
-    eprintln!("Refining certificate (pass 1)...");
+    // Two refinement passes: each recomputes P[:,j] from scratch and applies
+    // greedy corrections. Pass 2 accounts for B² cross-talk missed by pass 1.
+    eprintln!("Refining certificate (2 passes)...");
     refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
-    eprintln!("Refining certificate (pass 2)...");
     refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
     eprintln!("  Refinement done [{}]", fmt_duration(t0.elapsed()));
 
