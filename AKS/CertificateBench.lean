@@ -14,6 +14,7 @@ import AKS.CertificateV4
 import AKS.CertificateV5
 import AKS.CertificateV6
 import AKS.CertificateParallel
+import AKS.CertificateV7
 import AKS.NpyReader
 
 /-- Format nanoseconds as human-readable string. -/
@@ -121,6 +122,10 @@ def benchBaseline (label : String) (rotStr certStr : String)
   -- V6: raw ByteArray decode
   timed "V6 raw ByteArray " fun () =>
     s!"ok={checkCertificateV6 rotStr certStr n d c₁ c₂ c₃}"
+
+  -- V7: buffer reuse + truncated loop + sparse mulAdj
+  timed "V7 buf+trunc+spr " fun () =>
+    s!"ok={checkCertificateV7 rotStr certStr n d c₁ c₂ c₃}"
 
   -- Parallel: task-parallel PSD check (various chunk counts)
   for numChunks in [2, 4, 8] do

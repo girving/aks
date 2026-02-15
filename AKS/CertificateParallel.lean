@@ -14,11 +14,13 @@
   4. Tracks epsMax (max off-diagonal |P[i,j]|) and minDiag (min diagonal P[j,j])
 
   Uses pre-decoded neighbor array (the V2/Fast optimization) to avoid
-  base-85 decoding in the hot loop.
+  base-85 decoding in the hot loop. Also uses V7 optimizations: buffer reuse,
+  truncated inner loop, sparse first mulAdj.
 -/
 
 import AKS.Certificate
 import AKS.CertificateFast
+import AKS.CertificateV7
 
 
 /-! **Chunk result type** -/
@@ -44,38 +46,52 @@ def ChunkResult.merge (a b : ChunkResult) : ChunkResult :=
 
 /-! **Per-chunk PSD computation** -/
 
-/-- Process columns `[lo, hi)` of the PSD certificate, returning the chunk's
-    `(epsMax, minDiag, first)`. Uses pre-decoded neighbor array for fast
-    matrix-vector products. -/
+/-- Process a list of column indices with buffer reuse, truncated loop, and
+    sparse first mulAdj. Columns must be processed in order within the chunk
+    for buffer reuse correctness (ascending column indices). -/
 def checkPSDChunk (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) (lo hi : Nat) : ChunkResult :=
+    (n d : Nat) (c₁ c₂ c₃ : ℤ) (columns : Array Nat) : ChunkResult :=
   Id.run do
     let mut epsMax : ℤ := 0
     let mut minDiag : ℤ := 0
     let mut first := true
 
-    for j in [lo:hi] do
+    -- Preallocate buffers (reused across columns within this chunk)
+    let mut zCol := Array.replicate n (0 : ℤ)
+    let mut bz := Array.replicate n (0 : ℤ)
+
+    for j in columns do
       let colStart := j * (j + 1) / 2
-      let mut zCol := Array.replicate n (0 : ℤ)
-      for k in [:j+1] do
-        zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
 
-      let bz := mulAdjFast neighbors zCol n d
-      let b2z := mulAdjFast neighbors bz n d
+      -- Zero bz for scatter
+      for v in [:n] do
+        bz := bz.set! v 0
 
+      -- Combined: decode cert → zCol, scatter → bz, accumulate colSum
       let mut colSum : ℤ := 0
       for k in [:j+1] do
-        colSum := colSum + zCol[k]!
+        let zk := decodeBase85Int certBytes (colStart + k)
+        zCol := zCol.set! k zk
+        colSum := colSum + zk
+        for p in [:d] do
+          let w := neighbors[k * d + p]!
+          bz := bz.set! w (bz[w]! + zk)
 
-      for i in [:n] do
-        let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+      -- Gershgorin check with inlined B²z
+      for i in [:j+1] do
+        -- Inline (B²z)[i] = (B·bz)[i]
+        let mut b2zi : ℤ := 0
+        for p in [:d] do
+          let w := neighbors[i * d + p]!
+          b2zi := b2zi + bz[w]!
+        let pij := c₁ * zCol[i]! - c₂ * b2zi + c₃ * colSum
         if i == j then
           if first then
             minDiag := pij
             first := false
           else if pij < minDiag then
             minDiag := pij
-        else if i < j then
+        else
           let absPij := if pij >= 0 then pij else -pij
           if absPij > epsMax then
             epsMax := absPij
@@ -86,24 +102,29 @@ def checkPSDChunk (neighbors : Array Nat) (certBytes : ByteArray)
 /-! **Parallel PSD certificate check** -/
 
 /-- Check the PSD certificate using task parallelism.
-    Splits `n` columns into `numChunks` chunks, processes each on a dedicated
-    OS thread via `Task.spawn`, then merges results. -/
+    Interleaves columns across chunks for load balancing (column j has
+    O(j + n*d) work, so contiguous chunks are unbalanced).
+    Uses `Task.spawn .dedicated` to run on dedicated OS threads. -/
 def checkPSDCertificateParallel (neighbors : Array Nat) (certBytes : ByteArray)
     (n d : Nat) (c₁ c₂ c₃ : ℤ) (numChunks : Nat := 4) : IO Bool := do
   if certBytes.size != n * (n + 1) / 2 * 5 then return false
 
-  -- Compute chunk boundaries
   let nc := if numChunks == 0 then 1 else numChunks
-  let chunkSize := (n + nc - 1) / nc
+
+  -- Build interleaved column lists for load balancing
+  -- Chunk c gets columns c, c+nc, c+2*nc, ...
+  let mut columnLists := Array.replicate nc (Array.mkEmpty (n / nc + 1))
+  for j in [:n] do
+    let c := j % nc
+    columnLists := columnLists.set! c (columnLists[c]!.push j)
 
   -- Launch pure tasks on dedicated OS threads
   let mut tasks : Array (Task ChunkResult) := #[]
   for c in [:nc] do
-    let lo := c * chunkSize
-    let hi := min ((c + 1) * chunkSize) n
-    if lo < hi then
+    let cols := columnLists[c]!
+    if cols.size > 0 then
       let task := Task.spawn (prio := .dedicated) fun () =>
-        checkPSDChunk neighbors certBytes n d c₁ c₂ c₃ lo hi
+        checkPSDChunk neighbors certBytes n d c₁ c₂ c₃ cols
       tasks := tasks.push task
 
   -- Collect results
