@@ -11,4 +11,4 @@
     `cargo run --release -p compute-certificate -- <n> <d> <seed> <scale_exp>`
 -/
 
-import AKS.Random16
+import AKS.Random20736
