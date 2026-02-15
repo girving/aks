@@ -1162,6 +1162,47 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
       (elementsAtTreeDist n t v J r).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
 
+/-- Cherry-shift bounded-damage: like `HasBoundedTreeDamage` but with `r+1` in the
+    leading term instead of `r`. This captures the effect of cherry alternation:
+    a zig (or zag) network operating on one cherry partition shifts the distance
+    threshold by one level.
+
+    Specifically: elements at tree-distance ≥ `r` after the network are bounded by
+    elements at tree-distance ≥ `r+1` before, plus `ε` times elements at `r-2`.
+
+    This is strictly stronger than `HasBoundedTreeDamage` (which has `r` instead of
+    `r+1` in the leading term). The `r+1` shift is the mechanism that makes zigzag
+    achieve geometric decrease in wrongness. -/
+def HasCherryShiftDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
+  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
+    ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
+
+/-- `HasCherryShiftDamage` implies `HasBoundedTreeDamage` via anti-monotonicity:
+    `|E(v, J, r+1)| ≤ |E(v, J, r)|`, so the cherry-shift bound is stronger. -/
+lemma cherry_shift_implies_bounded_tree {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
+    (hε_nn : 0 ≤ ε) (h : HasCherryShiftDamage net ε t) :
+    HasBoundedTreeDamage net ε t := by
+  intro v J r
+  have hanti : ((elementsAtTreeDist n t v J (r + 1)).card : ℝ) ≤
+      (elementsAtTreeDist n t v J r).card :=
+    Nat.cast_le.mpr (Finset.card_le_card (elementsAtTreeDist_anti v J r))
+  calc ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ)
+      ≤ (elementsAtTreeDist n t v J (r + 1)).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := h v J r
+    _ ≤ (elementsAtTreeDist n t v J r).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := by
+        linarith
+
+/-- Helper: nested if-distance simplification.
+    `(if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+     (if r ≥ 4 then r - 4 else 0)` -/
+private lemma nested_if_dist_eq (r : ℕ) :
+    (if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+    (if r ≥ 4 then r - 4 else 0) := by
+  split_ifs <;> omega
+
 /-- V2: Combined zigzag bounded-damage with `r → r+1` distance shift.
 
     The composition of zig-then-zag achieves an `r → r+1` distance shift:
@@ -1170,8 +1211,8 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     This is the KEY structural property of even/odd cherry alternation
     (AKS Section 6). It does NOT follow from composing two `HasBoundedTreeDamage`
-    properties alone — it requires that zig and zag operate on complementary
-    cherry partitions (even-level and odd-level apexes).
+    properties alone — it requires that zig has `HasCherryShiftDamage` (the `r+1`
+    shift from operating on one cherry partition).
 
     The `r+1` in the first term is the geometric decrease mechanism:
     after each zigzag cycle, wrongness at distance `r` is controlled
@@ -1179,11 +1220,9 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     Error term coefficients:
     - `2ε` on `r-2`: zig exceptions (`ε·|E(v,r-2)|`) plus zag exceptions on
-      original input (`ε·|E(v,r-2)|`, since zag's exceptions at distance `r-2`
-      in `v'` are bounded by `|E(v,r-2)| + ε·|E(v,r-4)|`, giving `ε·|E(v,r-2)|`
-      as the dominant term)
-    - `ε` on `r-4`: cross-term from zag exceptions applied to zig exceptions
-      (`ε²·|E(v,r-4)|`, simplified using `ε ≤ 1`) -/
+      zig output (`ε·|E(v',r-2)|`), where `|E(v',r-2)|` is bounded by
+      `|E(v,r-2)| + ε·|E(v,r-4)|` from cherry shift at `r-2`
+    - `ε` on `r-4`: cross-term `ε²·|E(v,r-4)|`, simplified using `ε ≤ 1` -/
 def HasBoundedZigzagDamage {n : ℕ}
     (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
   ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
@@ -1193,23 +1232,72 @@ def HasBoundedZigzagDamage {n : ℕ}
         2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
 
-/-- Composing zig (even-level cherries) and zag (odd-level cherries) gives
+/-- Composing zig (`HasCherryShiftDamage`) and zag (`HasBoundedTreeDamage`) gives
     combined zigzag damage with the `r → r+1` improvement.
-    The `r+1` shift comes from cherry alternation: zig and zag process
-    complementary cherry partitions, so the same interval `J` benefits
-    from one tree level of geometric improvement.
 
-    Proof requires analyzing how zig exceptions interact with zag exceptions
-    across complementary cherry partitions. The even/odd structure ensures
-    that elements displaced by zig into an interval are then processed by
-    zag at the adjacent tree level, giving the `r+1` shift. -/
-lemma bounded_tree_damage_gives_zigzag
+    **Proof:**
+    1. From zag (BoundedTreeDamage) at `r` with input `v' = zig.exec v`:
+       `|E(v'',J,r)| ≤ |E(v',J,r)| + ε·|E(v',J,s)|`  where s = if r≥2 then r-2 else 0
+    2. From zig (CherryShiftDamage) at `r`:
+       `|E(v',J,r)| ≤ |E(v,J,r+1)| + ε·|E(v,J,s)|`
+    3. From zig (as BoundedTreeDamage, implied by cherry shift) at `s`:
+       `|E(v',J,s)| ≤ |E(v,J,s)| + ε·|E(v,J,s')|`  where s' = if r≥4 then r-4 else 0
+    4. Combine: `|E(v'',J,r)| ≤ |E(v,J,r+1)| + 2ε·|E(v,J,s)| + ε²·|E(v,J,s')|`
+    5. Since `ε ≤ 1`: `ε² ≤ ε`, giving the exact `HasBoundedZigzagDamage` bound. -/
+lemma cherry_shift_damage_gives_zigzag
     {n : ℕ} (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
     (hε_nn : 0 ≤ ε) (hε_le : ε ≤ 1)
-    (hzig : HasBoundedTreeDamage zig_net ε t)
+    (hzig : HasCherryShiftDamage zig_net ε t)
     (hzag : HasBoundedTreeDamage zag_net ε t) :
     HasBoundedZigzagDamage zig_net zag_net ε t := by
-  sorry
+  intro v J r
+  set v' := zig_net.exec v
+  set v'' := zag_net.exec v'
+  set s := if r ≥ 2 then r - 2 else 0 with hs_def
+  set s' := if r ≥ 4 then r - 4 else 0 with hs'_def
+  -- Step 1: zag bound (HasBoundedTreeDamage at r, input v')
+  have h_zag := hzag v' J r
+  -- Step 2: zig bound (HasCherryShiftDamage at r, input v)
+  have h_zig_r := hzig v J r
+  -- Step 3: zig bound at s (via cherry_shift_implies_bounded_tree)
+  have h_zig_btd := cherry_shift_implies_bounded_tree zig_net ε t hε_nn hzig
+  have h_zig_s := h_zig_btd v J s
+  -- Step 4: Combine. Need nested_if_dist_eq to simplify the s-of-s term.
+  rw [nested_if_dist_eq] at h_zig_s
+  -- Step 5: ε² ≤ ε
+  have hε_sq : ε * ε ≤ ε := by nlinarith [sq_nonneg (1 - ε)]
+  -- Chain the inequalities
+  -- Step 1: zag at r gives |E(v'',r)| ≤ |E(v',r)| + ε·|E(v',s)|
+  have h1 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v' J r).card +
+        ε * (elementsAtTreeDist n t v' J s).card := h_zag
+  -- Step 2: zig at r gives |E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,s)|
+  -- (h_zig_r already has this)
+  -- Step 3: zig at s gives |E(v',s)| ≤ |E(v,s)| + ε·|E(v,s')|
+  -- (h_zig_s already has this, with nested_if_dist_eq applied)
+  -- Combine: substitute into h1
+  have h2 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      ((elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J s).card) +
+      ε * ((elementsAtTreeDist n t v J s).card +
+        ε * (elementsAtTreeDist n t v J s').card) := by
+    calc ((elementsAtTreeDist n t v'' J r).card : ℝ)
+        ≤ (elementsAtTreeDist n t v' J r).card +
+            ε * (elementsAtTreeDist n t v' J s).card := h1
+      _ ≤ ((elementsAtTreeDist n t v J (r + 1)).card +
+              ε * (elementsAtTreeDist n t v J s).card) +
+            ε * ((elementsAtTreeDist n t v J s).card +
+              ε * (elementsAtTreeDist n t v J s').card) := by
+          -- Multiply h_zig_s by ε to linearize
+          have h_eps_s : ε * ((elementsAtTreeDist n t v' J s).card : ℝ) ≤
+              ε * ((elementsAtTreeDist n t v J s).card +
+                ε * (elementsAtTreeDist n t v J s').card) :=
+            mul_le_mul_of_nonneg_left h_zig_s hε_nn
+          linarith [h_zig_r, h_eps_s]
+  -- Expand and simplify: ε² ≤ ε (so ε²·x ≤ ε·x)
+  have hs'_nn : (0 : ℝ) ≤ ((elementsAtTreeDist n t v J s').card : ℝ) :=
+    Nat.cast_nonneg _
+  nlinarith [hε_sq, hs'_nn]
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -1271,68 +1359,32 @@ lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     (by simp [elementsToLower])
     (by simp [elementsToUpper]))
 
-/-- Build the recursive ε-nearsort network: iterate the halver `Nat.log 2 n + 1` times.
-    Each iteration applies the halver to sub-intervals at the next subdivision level.
-    After `log₂(n) + 1` iterations, all sub-intervals have been processed.
+/-- **Halver → Cherry Shift Damage** (AKS Section 8)
 
-    This is the computational core of AKS Section 4: apply ε₁-halver to the whole
-    range, then top/bottom halves, then quarters, etc. -/
-def buildRecursiveNearsort {n : ℕ} (halver : ComparatorNetwork n) : ComparatorNetwork n :=
-  epsHalverMerge n 0 (Nat.log 2 n + 1) halver
+    An ε-halver satisfies `HasCherryShiftDamage` at any tree level `t`.
+    This is the bridge from the aggregate balance property (`IsEpsilonHalver`:
+    `onesInTop ≤ totalOnes/2 + ε·(n/2)`) to the local tree-distance damage
+    property used in the sorting proof.
 
-/-- The recursive nearsort uses `(log₂ n + 1)` copies of the halver. -/
-lemma buildRecursiveNearsort_size {n : ℕ} (halver : ComparatorNetwork n) :
-    (buildRecursiveNearsort halver).comparators.length =
-      (Nat.log 2 n + 1) * halver.comparators.length := by
-  simp only [buildRecursiveNearsort, epsHalverMerge, ComparatorNetwork.size,
-    List.length_flatten, List.map_replicate, List.sum_replicate, smul_eq_mul]
+    The cherry-shift property says: after applying the halver, elements at
+    tree-distance ≥ r are bounded by elements at tree-distance ≥ r+1 before,
+    plus ε times elements at tree-distance ≥ r-2 before.
 
-/-- The recursive nearsort has bounded size. -/
-lemma buildRecursiveNearsort_size_le {n : ℕ} (halver : ComparatorNetwork n) :
-    (buildRecursiveNearsort halver).comparators.length ≤
-      halver.comparators.length * (Nat.log 2 n + 1) := by
-  rw [buildRecursiveNearsort_size, mul_comm]
+    The r+1 shift (vs r for `HasBoundedTreeDamage`) captures that the halver
+    operates on complementary cherries — it processes top/bottom halves, which
+    correspond to alternating tree nodes. This structural alignment means the
+    halver "sees" one level of the tree hierarchy per application.
 
-/-- The recursive ε-nearsort satisfies bounded tree-distance damage.
-    This is the mathematical core: from an ε₁-halver with ε₁ small enough,
-    the iterated construction produces a network with `HasBoundedTreeDamage ε t`.
-
-    Proof sketch (by induction on recursion depth):
-    - Each level l adds halvers on sub-intervals of size n/2^l
-    - Within each sub-interval, all positions share the same section at level l
-    - New displacements from the halver are bounded by ε₁ · |sub-interval|
-    - Tree-distance shift within a section is bounded
-    - Summing over all levels: total damage ≤ (Nat.log 2 n + 1) · ε₁ ≤ ε -/
-lemma recursive_nearsort_bounded_tree_damage
-    {n : ℕ} (ε ε₁ : ℝ) (t : ℕ) (hε : 0 < ε) (hε₁ : 0 < ε₁)
-    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
-    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁) :
-    HasBoundedTreeDamage (buildRecursiveNearsort halver) ε t := by
+    Mathematical argument: The halver's ε-balance guarantee controls how many
+    elements can cross the midpoint. Elements already at high tree-distance
+    either stay in place or move to the correct side, reducing their distance.
+    New exceptions arise only from the ε-fraction imbalance, and these are
+    concentrated at distance ≤ 2 from the threshold within the relevant
+    cherry partition. -/
+lemma halver_has_cherry_shift_damage {n : ℕ} (halver : ComparatorNetwork n) (ε : ℝ)
+    (hε : 0 < ε) (hhalver : IsEpsilonHalver halver ε) (t : ℕ) :
+    HasCherryShiftDamage halver ε t := by
   sorry
-
-/-- From an ε₁-halver, construct a composite network with bounded tree-damage.
-    This encapsulates the recursive ε-nearsort construction (AKS Section 4):
-    apply ε₁-halver to the whole range, then top/bottom halves, then quarters,
-    etc., until pieces have size < ε·m. The composite satisfies the V2
-    bounded-damage property (`HasBoundedTreeDamage`) at tree level `t`.
-
-    The damage bound holds at every tree level `t` — this is essential for the
-    register reassignment argument (Lemma 1), which refines `t → t+1`.
-
-    The size bound says the composite uses O(log n) copies of the halver.
-
-    Proved by composing `buildRecursiveNearsort` (construction) with
-    `recursive_nearsort_bounded_tree_damage` (property) and
-    `buildRecursiveNearsort_size_le` (size bound). -/
-lemma halvers_give_bounded_nearsort
-    {n : ℕ} (ε ε₁ : ℝ) (t : ℕ) (hε : 0 < ε) (hε₁ : 0 < ε₁)
-    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
-    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁) :
-    ∃ (net : ComparatorNetwork n), HasBoundedTreeDamage net ε t ∧
-      net.comparators.length ≤ halver.comparators.length * (Nat.log 2 n + 1) :=
-  ⟨buildRecursiveNearsort halver,
-   recursive_nearsort_bounded_tree_damage ε ε₁ t hε hε₁ hε₁_small halver hhalver,
-   buildRecursiveNearsort_size_le halver⟩
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
 
@@ -1987,7 +2039,7 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (ht : t ≥ 1) (v : Fin n →
 
     **STUB:** Current implementation just iterates the halver on the full range.
     The correct AKS construction recursively applies to sub-ranges (top/bottom halves).
-    See `halvers_give_bounded_nearsort` for the correct existential statement. -/
+    See `halver_has_cherry_shift_damage` for the bridge from halver to damage bound. -/
 noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
     (depth : ℕ) : ComparatorNetwork m :=
   if h : depth = 0 ∨ m < 2 then
@@ -2005,10 +2057,8 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
 
 -- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
 -- is a stub (just iterates the halver, doesn't do recursive sub-range application).
--- The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
--- produces `HasBoundedTreeDamage` (V2) at any tree level `t`. When `epsilonNearsort`
--- is properly implemented (recursive application to top/bottom halves), a correctness
--- lemma can be re-added.
+-- The correct bridge is `halver_has_cherry_shift_damage`, which proves a single halver
+-- satisfies `HasCherryShiftDamage` — the key property for the sorting proof.
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
 private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
@@ -2676,26 +2726,26 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 
   The key interfaces are:
   - `HasBoundedTreeDamage` (V2): tree-distance-based damage bound from ε-nearsort
+  - `HasCherryShiftDamage` (V2): like HasBoundedTreeDamage but r→r+1 in leading term
   - `HasBoundedZigzagDamage` (V2): combined zig+zag damage with r→r+1 improvement
 
   Proof chain (V2 — tree-distance-based):
   1. ✅ halver_preserves_monotone (PROVED)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
-  4. ✅ halvers_give_bounded_nearsort (PROVED — composition of construction + property)
-     - `buildRecursiveNearsort`: iterates halver log(n)+1 times
-     - ⚠️ `recursive_nearsort_bounded_tree_damage`: construction → HasBoundedTreeDamage
+  4. ⚠️ halver_has_cherry_shift_damage (sorry — halver → HasCherryShiftDamage)
+     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
   5. ✅ cherry_wrongness_after_nearsort_v2 (PROVED — direct from HasBoundedTreeDamage)
   6. ✅ zig_step_bounded_increase_v2 (PROVED — scales by 8A ≥ 1)
   7. ✅ zigzag_decreases_wrongness_v2 (PROVED — from HasBoundedZigzagDamage)
-     - ⚠️ `bounded_tree_damage_gives_zigzag`: HasBoundedTreeDamage → HasBoundedZigzagDamage
+     - ✅ cherry_shift_damage_gives_zigzag: CherryShift + BoundedTree → Zigzag (PROVED)
+     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
   8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
   9. ⚠️ aks_tree_sorting (top-level assembly)
 
-  Remaining gaps (3):
-  - `recursive_nearsort_bounded_tree_damage`: induction on recursion depth
-  - `bounded_tree_damage_gives_zigzag`: cherry alternation analysis
-  - `aks_tree_sorting`: assembly of all lemmas
+  Remaining gaps (2):
+  - `halver_has_cherry_shift_damage`: IsEpsilonHalver → HasCherryShiftDamage
+  - `aks_tree_sorting`: assembly using halver_has_cherry_shift_damage + proved lemmas
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
