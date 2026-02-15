@@ -319,6 +319,44 @@ const PROOF_DATA = {
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
       desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Uses hat/tilde decomposition, reflection Rayleigh quotients, and the RVW quadratic inequality." },
 
+    // ── WalkBound.lean ──
+    { id: "spectralGap_le_of_walk_bound", file: "AKS/WalkBound.lean", line: 26, status: "proved", kind: "theorem",
+      sig: "spectralGap_le_of_walk_bound : (∀ f, meanCLM n f = 0 → c₂·d²·‖Wf‖² ≤ c₁·‖f‖²) → spectralGap G ≤ √(c₁/(c₂·d²))",
+      desc: "Walk bound on mean-zero vectors implies spectral gap bound via operator norm characterization." },
+    { id: "sqrt_coeff_le_frac", file: "AKS/WalkBound.lean", line: 75, status: "proved", kind: "theorem",
+      sig: "sqrt_coeff_le_frac : c₁·βd² ≤ c₂·βn² → √(c₁/(c₂·d²)) ≤ βn/(βd·d)",
+      desc: "Coefficient arithmetic: converts walk bound ratio to rational fraction." },
+
+    // ── SpectralMatrix.lean ──
+    { id: "spectralMatrix", file: "AKS/SpectralMatrix.lean", line: 33, status: "definition", kind: "def",
+      sig: "spectralMatrix G c₁ c₂ c₃ = c₁·I - c₂·A² + c₃·J\n  where A = d · adjMatrix G (unnormalized)",
+      desc: "Spectral matrix M = c₁I - c₂A² + c₃J with unnormalized adjacency A = d · adjMatrix." },
+    { id: "spectralMatrix_isHermitian", file: "AKS/SpectralMatrix.lean", line: 43, status: "proved", kind: "theorem",
+      sig: "spectralMatrix_isHermitian : (spectralMatrix G c₁ c₂ c₃).IsHermitian",
+      desc: "Spectral matrix is Hermitian (real symmetric)." },
+    { id: "spectralMatrix_posSemidef_implies_walk_bound", file: "AKS/SpectralMatrix.lean", line: 119, status: "proved", kind: "theorem",
+      sig: "spectralMatrix_posSemidef_implies_walk_bound :\n  M.PosSemidef → c₂·d²·‖Wf‖² ≤ c₁·‖f‖²",
+      desc: "Layer 1: PSD spectral matrix implies walk bound. Proof: PSD → nonneg quadratic form, J vanishes on mean-zero vectors, unnormalized adjacency gives d² factor." },
+
+    // ── DiagDominant.lean ──
+    { id: "diagDominant_isUnit", file: "AKS/DiagDominant.lean", line: 25, status: "proved", kind: "theorem",
+      sig: "diagDominant_isUnit : (∀ k, ∑ j≠k ‖M k j‖ < ‖M k k‖) → IsUnit M",
+      desc: "Strict row diagonal dominance implies invertibility via Gershgorin circle theorem." },
+    { id: "diagDominant_posSemidef", file: "AKS/DiagDominant.lean", line: 55, status: "proved", kind: "theorem",
+      sig: "diagDominant_posSemidef : M.IsHermitian → (∀ i, ∑ j≠i ‖M i j‖ < M i i) → M.PosSemidef",
+      desc: "Layer 2: Hermitian + strict diagonal dominance implies PSD. Direct quadratic form bound via AM-GM regrouping." },
+
+    // ── CertificateBridge.lean ──
+    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 36, status: "sorry", kind: "theorem",
+      sig: "checker_implies_spectralMatrix_psd :\n  checkCertificate = true → (spectralMatrix G c₁ c₂ c₃).PosSemidef",
+      desc: "Layer 3 (sorry'd): certificate checker passes → spectral matrix PSD. Purely integer arithmetic: Z from certificate, K=ZᵀMZ diag-dominant, congruence.", difficulty: "weeks" },
+    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 56, status: "proved", kind: "theorem",
+      sig: "certificate_implies_walk_bound :\n  checkCertificate = true → c₂·d²·‖Wf‖² ≤ c₁·‖f‖²",
+      desc: "Certificate → walk bound. Chains Layer 3 (certificate → PSD) with Layer 1 (PSD → walk bound)." },
+    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 86, status: "proved", kind: "theorem",
+      sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
+      desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
+
     // ── Random.lean ──
     { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
       sig: "axiom baseExpander : RegularGraph 20736 12",
@@ -641,7 +679,28 @@ const PROOF_DATA = {
     ["spectralGap_squareIter", "expander_family_small_gap"],
     ["exists_pow_two_pow_lt", "expander_family_small_gap"],
     ["expander_family_small_gap", "aks_sorting_networks_exist"],
-    ["zigzag_implies_aks_network", "aks_sorting_networks_exist"]
+    ["zigzag_implies_aks_network", "aks_sorting_networks_exist"],
+
+    // WalkBound
+    ["spectralGap", "spectralGap_le_of_walk_bound"],
+    ["walkCLM", "spectralGap_le_of_walk_bound"],
+
+    // SpectralMatrix
+    ["RegularGraph", "spectralMatrix"],
+    ["spectralMatrix", "spectralMatrix_isHermitian"],
+    ["spectralMatrix", "spectralMatrix_posSemidef_implies_walk_bound"],
+    ["walkCLM", "spectralMatrix_posSemidef_implies_walk_bound"],
+    ["meanCLM", "spectralMatrix_posSemidef_implies_walk_bound"],
+
+    // DiagDominant (standalone, no AKS imports)
+
+    // CertificateBridge
+    ["spectralMatrix", "checker_implies_spectralMatrix_psd"],
+    ["checker_implies_spectralMatrix_psd", "certificate_implies_walk_bound"],
+    ["spectralMatrix_posSemidef_implies_walk_bound", "certificate_implies_walk_bound"],
+    ["certificate_implies_walk_bound", "certificate_bridge"],
+    ["spectralGap_le_of_walk_bound", "certificate_bridge"],
+    ["sqrt_coeff_le_frac", "certificate_bridge"]
   ],
 
   // File groupings with display names
@@ -658,6 +717,10 @@ const PROOF_DATA = {
     { id: "AKS/ZigZagSpectral.lean", label: "ZigZagSpectral.lean", color: "#1a1e24" },
     { id: "AKS/RVWBound.lean", label: "RVWBound.lean", color: "#1a1e24" },
     { id: "AKS/ZigZag.lean", label: "ZigZag.lean", color: "#1a1e24" },
+    { id: "AKS/WalkBound.lean", label: "WalkBound.lean", color: "#1a1e24" },
+    { id: "AKS/SpectralMatrix.lean", label: "SpectralMatrix.lean", color: "#1a1e24" },
+    { id: "AKS/DiagDominant.lean", label: "DiagDominant.lean", color: "#1a1e24" },
+    { id: "AKS/CertificateBridge.lean", label: "CertificateBridge.lean", color: "#1a1e24" },
     { id: "AKS/Random.lean", label: "Random.lean", color: "#1a1e24" },
     { id: "AKS/TreeSorting.lean", label: "TreeSorting.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
