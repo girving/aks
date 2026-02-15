@@ -23,6 +23,10 @@ import AKS.ZigZag
 import AKS.Random
 import AKS.Certificate
 import AKS.WalkBound
+import AKS.DiagDominant
+import AKS.SpectralMatrix
 import AKS.CertificateBridge
 import AKS.NpyReader
+import AKS.Random16
+import AKS.Random1728
 import AKS.Main

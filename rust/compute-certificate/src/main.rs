@@ -2,8 +2,10 @@
 //!
 //! Generates a random d-regular graph on n vertices, computes
 //! M = c₁I - c₂B² + c₃J, performs f32 Cholesky factorization in-place,
-//! extracts the unit upper-triangular certificate Z via BLAS triangular
-//! inversion, scales to i32, and outputs a Lean source file.
+//! then streams the certificate: for each block of columns, solves L^T·X = I
+//! to get rows of L⁻¹, packs/refines/verifies/writes to disk, and discards.
+//! Peak memory: M + one TRSM block ≈ 1.74 GB at n=20736 (no full L⁻¹ or
+//! z_packed allocation).
 
 use faer::linalg::cholesky::llt;
 use faer::linalg::cholesky::llt::factor::LltRegularization;
@@ -46,6 +48,16 @@ fn fmt_bytes(b: u64) -> String {
         format!("{:.1} MB", b as f64 / (1024.0 * 1024.0))
     } else {
         format!("{:.2} GB", b as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+/// Choose parallelism level based on matrix size.
+/// Par::rayon(0) has ~90ms overhead at n=1728 but massive wins at n=20736+.
+fn par_for_n(n: usize) -> Par {
+    if n >= 4000 {
+        Par::rayon(0)
+    } else {
+        Par::Seq
     }
 }
 
@@ -237,68 +249,72 @@ fn compute_m_inplace(
     m
 }
 
-/// Blocked TRSM + direct packing: compute Z_unit columns via L^{-T} and pack to i32.
+/// Pack TRSM solution into i32 z_packed format for columns [col_start..col_end).
 ///
-/// Instead of allocating a full n×n matrix for L^{-T}, processes columns in
-/// blocks of `block_size`. For each block, allocates n × block_size f32,
-/// solves L^T · B = I_block via BLAS TRSM, scales to Z_unit, and packs to i32.
+/// After solving L^T · X = I_block, column k of `sol` contains row (col_start+k)
+/// of L⁻¹. That is, sol[(i, k)] = L⁻¹[col_start+k, i].
 ///
-/// Peak scratch: n × block_size × 4 bytes (~20 MB for n=20736, block_size=256).
-fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
+/// Z_unit column j has entries: Z[i,j] = L⁻¹[j,i] * L[j,j] for i < j, Z[j,j] = scale.
+/// Returns (packed_block, max_offdiag) where packed_block contains the contiguous
+/// packed data for columns [col_start..col_end).
+fn pack_block(
+    sol: &Mat<f32>,
+    diag: &[f32],
+    col_start: usize,
+    col_end: usize,
+    scale: i32,
+) -> (Vec<i32>, f32) {
+    use rayon::prelude::*;
+
     let s = scale as f32;
-    let total = n * (n + 1) / 2;
-    let mut packed = vec![0i32; total];
-    let mut z_max_offdiag: f32 = 0.0;
+    let block_packed_len = col_end * (col_end + 1) / 2 - col_start * (col_start + 1) / 2;
+    let block_offset = col_start * (col_start + 1) / 2;
 
-    let block_size = 256.min(n);
-    let lt = m.as_ref().transpose(); // zero-cost view of L^T (upper triangular)
+    let mut packed = vec![0i32; block_packed_len];
+    let packed_ptr = packed.as_mut_ptr() as usize; // usize is Send+Sync
 
-    for j_start in (0..n).step_by(block_size) {
-        let j_end = (j_start + block_size).min(n);
-        let bs = j_end - j_start;
-
-        if j_start > 0 && j_start % (block_size * 10) == 0 {
-            eprintln!("  extracting columns {}/{}...", j_start, n);
-        }
-
-        // Fill block with columns j_start..j_end of the identity
-        let mut block: Mat<f32> = Mat::zeros(n, bs);
-        for k in 0..bs {
-            block[(j_start + k, k)] = 1.0;
-        }
-
-        // Solve L^T · block = I_block → block now holds L^{-T}[:,j_start..j_end]
-        triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::Seq);
-
-        // Scale and pack: Z_unit[:,j] = L^{-T}[:,j] * L[j,j], then round to i32
-        for k in 0..bs {
-            let j = j_start + k;
-            let l_jj = m[(j, j)];
-            let col_start = j * (j + 1) / 2;
+    let b_cols = col_end - col_start;
+    let block_max: f32 = (0..b_cols)
+        .into_par_iter()
+        .map(|k| {
+            let j = col_start + k;
+            let col_off = j * (j + 1) / 2 - block_offset;
+            let l_jj = diag[j];
+            let mut local_max: f32 = 0.0;
 
             for i in 0..j {
-                let z_val = block[(i, k)] * l_jj;
+                // sol[(i, k)] = L⁻¹[j, i]
+                let z_val = sol[(i, k)] * l_jj;
                 let abs_z = z_val.abs();
-                if abs_z > z_max_offdiag {
-                    z_max_offdiag = abs_z;
+                if abs_z > local_max {
+                    local_max = abs_z;
                 }
-                packed[col_start + i] = (z_val * s).round() as i32;
+                // SAFETY: Each column j writes to packed[col_off + i].
+                // Different columns have different j, so col_off ranges are disjoint.
+                unsafe {
+                    *(packed_ptr as *mut i32).add(col_off + i) = (z_val * s).round() as i32;
+                }
             }
-            packed[col_start + j] = scale; // diagonal = 1
-        }
-    }
+            // Diagonal entry
+            unsafe {
+                *(packed_ptr as *mut i32).add(col_off + j) = scale;
+            }
 
-    (packed, z_max_offdiag)
+            local_max
+        })
+        .reduce(|| 0.0f32, |a, b| a.max(b));
+
+    (packed, block_max)
 }
 
-/// Post-process Z_int to reduce upper-triangular errors in P = M · Z_int.
-/// For each column j, computes P[:,j] exactly via rotation map (i64 arithmetic),
-/// then adjusts Z_int[i,j] by integer rounding to minimize |P[i,j]| for i < j.
+/// Post-process Z_int columns [col_start..col_end) to reduce upper-triangular
+/// errors in P = M · Z_int. Columns are independent, processed in parallel.
 ///
-/// Columns are independent (each accesses a disjoint slice of packed), so we
-/// split packed into non-overlapping column slices and process in parallel.
-fn refine_certificate(
+/// `packed` contains the contiguous packed data for these columns only.
+fn refine_columns(
     packed: &mut [i32],
+    col_start: usize,
+    col_end: usize,
     neighbors: &[usize],
     n: usize,
     d: usize,
@@ -311,11 +327,11 @@ fn refine_certificate(
     let m_diag = c1 as i64 - c2 as i64 * d as i64 + c3 as i64;
 
     // Split packed into non-overlapping column slices.
-    // Column j occupies packed[j*(j+1)/2 .. j*(j+1)/2 + j + 1].
-    let mut cols: Vec<&mut [i32]> = Vec::with_capacity(n);
+    // Column j (absolute index) has j+1 entries.
+    let mut cols: Vec<&mut [i32]> = Vec::with_capacity(col_end - col_start);
     {
         let mut rest = &mut packed[..];
-        for j in 0..n {
+        for j in col_start..col_end {
             let (col, remaining) = rest.split_at_mut(j + 1);
             cols.push(col);
             rest = remaining;
@@ -325,44 +341,34 @@ fn refine_certificate(
     cols.into_par_iter().enumerate().for_each_init(
         || {
             (
-                vec![0i64; n],                      // z_col
-                vec![0i64; n],                      // bz
-                vec![0i64; n],                      // p_col
-                vec![0i32; n],                      // b2_col
-                Vec::<usize>::with_capacity(d * d), // touched
+                vec![0i64; n], // bz
+                vec![0i64; n], // p_col
             )
         },
-        |(z_col, bz, p_col, b2_col, touched), (j, col)| {
-            // Zero z_col (entries from previous column on this thread may be dirty)
-            for k in 0..n {
-                z_col[k] = 0;
-            }
+        |(bz, p_col), (idx, col)| {
+            let j = col_start + idx;
+
+            bz[..n].fill(0);
             for k in 0..=j {
-                z_col[k] = col[k] as i64;
+                let val = col[k] as i64;
+                let base = k * d;
+                for p in 0..d {
+                    bz[neighbors[base + p]] += val;
+                }
             }
 
-            // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
-            for v in 0..n {
-                let mut acc: i64 = 0;
-                let base = v * d;
-                for p in 0..d {
-                    acc += z_col[neighbors[base + p]];
-                }
-                bz[v] = acc;
-            }
-            let col_sum: i64 = z_col[..=j].iter().sum();
-            for v in 0..n {
+            let col_sum: i64 = col.iter().map(|&x| x as i64).sum();
+            for v in 0..j {
                 let mut b2z_v: i64 = 0;
                 let base = v * d;
                 for p in 0..d {
                     b2z_v += bz[neighbors[base + p]];
                 }
-                p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
+                p_col[v] =
+                    c1 as i64 * col[v] as i64 - c2 as i64 * b2z_v + c3 as i64 * col_sum;
             }
 
-            // Greedy correction with B² cross-talk tracking.
             let mut running_delta_sum: i64 = 0;
-
             for i in 0..j {
                 let effective_p = p_col[i] + c3 as i64 * running_delta_sum;
                 if effective_p == 0 {
@@ -372,75 +378,50 @@ fn refine_certificate(
                 if delta == 0 {
                     continue;
                 }
-                let d64 = delta as i64;
                 col[i] += delta;
-                running_delta_sum += d64;
-
-                // Compute B²[v,i] for all v via 2-hop neighbors of i
-                touched.clear();
-                let base_i = i * d;
-                for p in 0..d {
-                    let w = neighbors[base_i + p];
-                    let base_w = w * d;
-                    for q in 0..d {
-                        let v = neighbors[base_w + q];
-                        if b2_col[v] == 0 {
-                            touched.push(v);
-                        }
-                        b2_col[v] += 1;
-                    }
-                }
-
-                p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
-
-                for &v in touched.iter() {
-                    if v != i {
-                        p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
-                    }
-                    b2_col[v] = 0;
-                }
+                running_delta_sum += delta as i64;
             }
         },
     );
 }
 
-/// Verify the certificate using the same logic as the Lean checker.
-/// Columns are independent, so we process them in parallel.
-fn verify_certificate(
+/// Verify columns [col_start..col_end) of the certificate.
+/// Returns (min_diag, max_eps) for these columns.
+///
+/// `packed` contains the contiguous packed data for these columns only.
+fn verify_columns(
+    packed: &[i32],
+    col_start: usize,
+    col_end: usize,
     neighbors: &[usize],
-    z_packed: &[i32],
     n: usize,
     d: usize,
     c1: i32,
     c2: i32,
     c3: i32,
-) -> (bool, i64, i64, f64) {
+) -> (i64, i64) {
     use rayon::prelude::*;
 
-    // map_init allocates scratch buffers once per thread (not per column).
-    let (min_diag, eps_max) = (0..n)
+    let block_offset = col_start * (col_start + 1) / 2;
+
+    (col_start..col_end)
         .into_par_iter()
         .map_init(
-            || (vec![0i64; n], vec![0i64; n], vec![0i64; n]),
-            |(z_col, bz, b2z), j| {
-                let col_start = j * (j + 1) / 2;
-                for k in 0..n {
-                    z_col[k] = 0;
-                }
+            || (vec![0i64; n], vec![0i64; n]),
+            |(bz, b2z), j| {
+                let col_off = j * (j + 1) / 2 - block_offset;
+                let z_col = &packed[col_off..col_off + j + 1];
+
+                bz[..n].fill(0);
                 for k in 0..=j {
-                    z_col[k] = z_packed[col_start + k] as i64;
-                }
-
-                for v in 0..n {
-                    let mut acc: i64 = 0;
-                    let base = v * d;
+                    let val = z_col[k] as i64;
+                    let base = k * d;
                     for p in 0..d {
-                        acc += z_col[neighbors[base + p]];
+                        bz[neighbors[base + p]] += val;
                     }
-                    bz[v] = acc;
                 }
 
-                for v in 0..n {
+                for v in 0..=j {
                     let mut acc: i64 = 0;
                     let base = v * d;
                     for p in 0..d {
@@ -449,22 +430,22 @@ fn verify_certificate(
                     b2z[v] = acc;
                 }
 
-                let col_sum: i64 = z_col[..=j].iter().sum();
+                let col_sum: i64 = z_col.iter().map(|&x| x as i64).sum();
 
                 let mut col_min_diag: i64 = i64::MAX;
                 let mut col_eps_max: i64 = 0;
 
-                // Only compute p_ij for i <= j (skip lower-triangular)
                 for i in 0..j {
-                    let p_ij =
-                        c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
+                    let p_ij = c1 as i64 * z_col[i] as i64 - c2 as i64 * b2z[i]
+                        + c3 as i64 * col_sum;
                     let abs_p = p_ij.abs();
                     if abs_p > col_eps_max {
                         col_eps_max = abs_p;
                     }
                 }
                 // Diagonal
-                let p_jj = c1 as i64 * z_col[j] - c2 as i64 * b2z[j] + c3 as i64 * col_sum;
+                let p_jj = c1 as i64 * z_col[j] as i64 - c2 as i64 * b2z[j]
+                    + c3 as i64 * col_sum;
                 col_min_diag = col_min_diag.min(p_jj);
 
                 (col_min_diag, col_eps_max)
@@ -473,19 +454,7 @@ fn verify_certificate(
         .reduce(
             || (i64::MAX, 0i64),
             |(md1, em1), (md2, em2)| (md1.min(md2), em1.max(em2)),
-        );
-
-    let threshold = eps_max
-        .checked_mul((n * (n + 1) / 2) as i64)
-        .expect("threshold overflow");
-    let passes = min_diag > threshold;
-    let margin = if threshold > 0 {
-        min_diag as f64 / threshold as f64
-    } else {
-        f64::INFINITY
-    };
-
-    (passes, min_diag, eps_max, margin)
+        )
 }
 
 /// Write a slice of i32 values as little-endian bytes in a single bulk write.
@@ -566,7 +535,7 @@ fn main() {
     let t0 = Instant::now();
     {
         use faer::dyn_stack::{MemBuffer, MemStack};
-        let par = Par::Seq;
+        let par = par_for_n(n);
         let params = Default::default();
         let scratch_req = llt::factor::cholesky_in_place_scratch::<f32>(n, par, params);
         let mut buf = MemBuffer::new(scratch_req);
@@ -586,55 +555,115 @@ fn main() {
         fmt_duration(t0.elapsed())
     );
 
-    // Blocked TRSM + pack: compute Z_unit columns in blocks and pack to i32.
-    // Only allocates n × block_size f32 scratch (~20 MB), not a full n×n matrix.
+    // Streaming pipeline: for each block of z_packed columns, solve L^T · X = I,
+    // pack to i32, refine (2 passes), verify, and write to cert_z.bin.
+    // z_packed is never fully resident — only one block at a time.
+    // Peak memory: M + TRSM block ≈ 1.74 GB at n=20736.
+    let total = n * (n + 1) / 2;
+    let diag: Vec<f32> = (0..n).map(|j| m[(j, j)]).collect();
+    let par = par_for_n(n);
+
     eprintln!(
-        "Blocked TRSM + pack ({} packed i32)...",
-        fmt_bytes(n as u64 * (n as u64 + 1) / 2 * 4)
+        "Streaming TRSM + refine + verify ({} packed i32)...",
+        fmt_bytes(total as u64 * 4)
     );
     let t0 = Instant::now();
-    let (mut z_packed, z_max) = compute_and_pack_z(&m, n, scale);
-    let trsm_time = t0.elapsed();
-    drop(m); // Free L
-    eprintln!("  Z max off-diagonal: {z_max:.6}");
+
+    fs::create_dir_all(&output_dir).expect("Cannot create output dir");
+    let cert_path = output_dir.join("cert_z.bin");
+    let cert_file = fs::File::create(&cert_path)
+        .unwrap_or_else(|e| panic!("Cannot create {}: {}", cert_path.display(), e));
+    let mut cert_writer = std::io::BufWriter::new(cert_file);
+
+    const BLOCK: usize = 256;
+    let mut z_max_offdiag: f32 = 0.0;
+    let mut global_min_diag: i64 = i64::MAX;
+    let mut global_eps_max: i64 = 0;
+    let mut total_entries: usize = 0;
+
+    for b_start in (0..n).step_by(BLOCK) {
+        let b_end = (b_start + BLOCK).min(n);
+        let b_cols = b_end - b_start;
+
+        // Solve L^T · X = I_block. Column k of the solution gives row (b_start+k)
+        // of L⁻¹: sol[(i, k)] = L⁻¹[b_start+k, i]. These pack directly into
+        // contiguous z_packed columns [b_start..b_end).
+        let mut sol: Mat<f32> = Mat::zeros(n, b_cols);
+        for k in 0..b_cols {
+            sol[(b_start + k, k)] = 1.0;
+        }
+        triangular_solve::solve_upper_triangular_in_place(
+            m.as_ref().transpose(),
+            sol.as_mut(),
+            par,
+        );
+
+        // Pack TRSM results into i32.
+        let (mut packed_block, block_max) = pack_block(&sol, &diag, b_start, b_end, scale);
+        z_max_offdiag = z_max_offdiag.max(block_max);
+        drop(sol);
+
+        assert!(
+            (z_max_offdiag * scale as f32) < i32::MAX as f32,
+            "Z entries overflow i32! Reduce scale_exp."
+        );
+
+        // Refine (2 passes) and verify this block.
+        refine_columns(&mut packed_block, b_start, b_end, &neighbors, n, d, c1, c2, c3);
+        refine_columns(&mut packed_block, b_start, b_end, &neighbors, n, d, c1, c2, c3);
+
+        let (block_min, block_eps) =
+            verify_columns(&packed_block, b_start, b_end, &neighbors, n, d, c1, c2, c3);
+        global_min_diag = global_min_diag.min(block_min);
+        global_eps_max = global_eps_max.max(block_eps);
+
+        // Write block to cert_z.bin (blocks are contiguous and sequential).
+        {
+            use std::io::Write;
+            let bytes: &[u8] = bytemuck::cast_slice(&packed_block);
+            cert_writer
+                .write_all(bytes)
+                .unwrap_or_else(|e| panic!("Write failed: {}", e));
+        }
+        total_entries += packed_block.len();
+    }
+
+    {
+        use std::io::Write;
+        cert_writer.flush().unwrap();
+    }
+    drop(cert_writer);
+    drop(m);
+
+    let stream_time = t0.elapsed();
+    eprintln!("  Z max off-diagonal: {z_max_offdiag:.6}");
     eprintln!(
         "  Max |Z_int| ≈ {:.0}, i32 limit: {}",
-        z_max * scale as f32,
+        z_max_offdiag * scale as f32,
         i32::MAX
     );
-    assert!(
-        (z_max * scale as f32) < i32::MAX as f32,
-        "Z entries overflow i32! Reduce scale_exp."
-    );
-    eprintln!(
-        "  Packed: {} entries [{}]",
-        z_packed.len(),
-        fmt_duration(trsm_time)
-    );
+    eprintln!("  min P[j,j]: {global_min_diag}");
+    eprintln!("  max |P[i,j]| upper-tri: {global_eps_max}");
 
-    // Post-process: greedy Gershgorin correction (two passes for c₃ cross-talk convergence)
-    let t0 = Instant::now();
-    eprintln!("Refining certificate (pass 1)...");
-    refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
-    eprintln!("Refining certificate (pass 2)...");
-    refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
-    eprintln!("  Refinement done [{}]", fmt_duration(t0.elapsed()));
+    let threshold = global_eps_max
+        .checked_mul(total as i64)
+        .expect("threshold overflow");
+    let passes = global_min_diag > threshold;
+    let margin = if threshold > 0 {
+        global_min_diag as f64 / threshold as f64
+    } else {
+        f64::INFINITY
+    };
 
-    // Verify
-    eprintln!("Verifying certificate...");
-    let t0 = Instant::now();
-    let (passes, min_diag, eps_max, margin) =
-        verify_certificate(&neighbors, &z_packed, n, d, c1, c2, c3);
-    eprintln!("  min P[j,j]: {min_diag}");
-    eprintln!("  max |P[i,j]| upper-tri: {eps_max}");
     eprintln!(
         "  threshold: {}",
-        eps_max as i128 * ((n * (n + 1) / 2) as i128)
+        global_eps_max as i128 * (total as i128)
     );
     eprintln!("  Gershgorin margin: {margin:.1}x");
     eprintln!(
-        "  Certificate passes: {passes} [{}]",
-        fmt_duration(t0.elapsed())
+        "  Streamed: {} entries, passes={passes} [{}]",
+        total_entries,
+        fmt_duration(stream_time)
     );
 
     if !passes {
@@ -642,9 +671,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Write binary data files (bulk I/O)
-    fs::create_dir_all(&output_dir).expect("Cannot create output dir");
-
+    // Write rotation map
     let rot_path = output_dir.join("rot_map.bin");
     eprintln!("Writing rotation map to {}...", rot_path.display());
     write_i32_bulk(&rot_path, &rot);
@@ -653,14 +680,10 @@ fn main() {
         fmt_bytes(rot.len() as u64 * 4),
         rot.len()
     );
-
-    let cert_path = output_dir.join("cert_z.bin");
-    eprintln!("Writing certificate to {}...", cert_path.display());
-    write_i32_bulk(&cert_path, &z_packed);
     eprintln!(
-        "  {} ({} entries)",
-        fmt_bytes(z_packed.len() as u64 * 4),
-        z_packed.len()
+        "  cert_z.bin: {} ({} entries)",
+        fmt_bytes(total_entries as u64 * 4),
+        total_entries
     );
 
     // Summary
