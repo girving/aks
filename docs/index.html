@@ -108,9 +108,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <div class="item"><div class="dot size-dot" style="width:22px;height:22px;"></div> months</div>
   </div>
   <div class="section">
-    <div class="item" style="color:#484f58;">
-      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#484f58" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#484f58"/></svg>
-      depends on
+    <div class="section-title">Edges</div>
+    <div class="item">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#3fb950" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#3fb950"/></svg>
+      all proved below
+    </div>
+    <div class="item">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#d29922" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#d29922"/></svg>
+      sorry/axiom below
     </div>
   </div>
 </div>
@@ -347,25 +352,25 @@ const PROOF_DATA = {
       desc: "Layer 2: Hermitian + strict diagonal dominance implies PSD. Direct quadratic form bound via AM-GM regrouping." },
 
     // ── CertificateBridge.lean ──
-    { id: "certMatrixReal", file: "AKS/CertificateBridge.lean", line: 37, status: "definition", kind: "def",
+    { id: "certMatrixReal", file: "AKS/CertificateBridge.lean", line: 36, status: "definition", kind: "def",
       sig: "certMatrixReal (certBytes : ByteArray) (n : ℕ) : Matrix (Fin n) (Fin n) ℝ",
       desc: "Certificate matrix Z decoded from base-85 bytes. Upper triangular: Z[i,j] = 0 for i > j." },
-    { id: "certMatrix_posdiag", file: "AKS/CertificateBridge.lean", line: 62, status: "proved", kind: "theorem",
+    { id: "certMatrix_posdiag", file: "AKS/CertificateBridge.lean", line: 61, status: "proved", kind: "theorem",
       sig: "certMatrix_posdiag :\n  checkPSDCertificate = true → ∀ j, 0 < Z j j",
       desc: "Certificate matrix has positive diagonal when PSD checker passes. Proved by extracting allDiagPositive check from the augmented checker via induction." },
-    { id: "kRowDominant_implies_diagDominant", file: "AKS/CertificateBridge.lean", line: 88, status: "sorry", kind: "theorem",
-      sig: "kRowDominant_implies_diagDominant :\n  checkKRowDominant = true → hmatch → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
-      desc: "Bridge: checkKRowDominant integer computation matches formal star Z * M * Z. Needs connecting mulAdj to adjMatrix via hmatch, then integer diagonal dominance → real." },
-    { id: "congruence_diagDominant", file: "AKS/CertificateBridge.lean", line: 110, status: "proved", kind: "theorem",
+    { id: "kRowDominant_implies_diagDominant", file: "AKS/CertificateBridge.lean", line: 229, status: "proved", kind: "theorem",
+      sig: "kRowDominant_implies_diagDominant :\n  checkAllRowsDomPure = true → hmatch → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
+      desc: "Bridge: pure functional checker matches formal star Z * M * Z. Proved via chain: certEntry↔Z, adjMul↔unnorm_adj, pEntry↔M*Z, kEntry↔Z*M*Z, then integer diag-dominance → real." },
+    { id: "congruence_diagDominant", file: "AKS/CertificateBridge.lean", line: 305, status: "proved", kind: "theorem",
       sig: "congruence_diagDominant :\n  checkCertificate = true → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
       desc: "K = Z*MZ is strictly row-diag-dominant. Proved by extracting checkKRowDominant from checkCertificate and applying the bridge lemma." },
-    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 143, status: "proved", kind: "theorem",
+    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 338, status: "proved", kind: "theorem",
       sig: "checker_implies_spectralMatrix_psd :\n  checkCertificate = true → (spectralMatrix G c₁ c₂ c₃).PosSemidef",
       desc: "Layer 3: certificate checker passes → spectral matrix PSD. Proof: Z upper-tri + pos-diag → invertible; K=Z*MZ Hermitian + diag-dominant → PSD; congruence → M PSD." },
-    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 194, status: "proved", kind: "theorem",
+    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 389, status: "proved", kind: "theorem",
       sig: "certificate_implies_walk_bound :\n  checkCertificate = true → c₂·d²·‖Wf‖² ≤ c₁·‖f‖²",
       desc: "Certificate → walk bound. Chains Layer 3 (certificate → PSD) with Layer 1 (PSD → walk bound)." },
-    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 224, status: "proved", kind: "theorem",
+    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 419, status: "proved", kind: "theorem",
       sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
@@ -841,19 +846,21 @@ layers.forEach((nodesInLayer, d) => {
 const svg = d3.select("#graph");
 const g = svg.append("g");
 
-// Arrow marker
+// Arrow markers (green for clean edges, orange for edges with sorry/axiom below)
 const defs2 = svg.append("defs");
-defs2.append("marker")
-  .attr("id", "arrowhead")
-  .attr("viewBox", "0 0 10 6")
-  .attr("refX", 10)
-  .attr("refY", 3)
-  .attr("markerWidth", 8)
-  .attr("markerHeight", 5)
-  .attr("orient", "auto")
-  .append("polygon")
-  .attr("points", "0,0 10,3 0,6")
-  .attr("fill", "#484f58");
+[["arrow-green", "#3fb950"], ["arrow-orange", "#d29922"]].forEach(([id, color]) => {
+  defs2.append("marker")
+    .attr("id", id)
+    .attr("viewBox", "0 0 10 6")
+    .attr("refX", 10)
+    .attr("refY", 3)
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto")
+    .append("polygon")
+    .attr("points", "0,0 10,3 0,6")
+    .attr("fill", color);
+});
 
 // Zoom
 const zoom = d3.zoom()
@@ -889,6 +896,39 @@ function toggleLabels() {
 const links = PROOF_DATA.edges
   .filter(([s, t]) => nodeMap.has(s) && nodeMap.has(t))
   .map(([s, t]) => ({ source: nodeMap.get(s), target: nodeMap.get(t) }));
+
+// ── Edge color computation ──
+// For each node, compute whether it and all its transitive dependencies are
+// "clean" (proved or definition).  Edge color = green if source is clean,
+// orange if any dependency below is sorry/axiom.
+const depsMap = new Map();
+PROOF_DATA.nodes.forEach(n => depsMap.set(n.id, []));
+links.forEach(l => {
+  const arr = depsMap.get(l.target.id);
+  if (arr) arr.push(l.source.id);
+});
+
+let edgeCleanMap;
+function computeEdgeColors(getStatus) {
+  const clean = new Map();
+  function check(id) {
+    if (clean.has(id)) return clean.get(id);
+    clean.set(id, true); // cycle guard
+    const st = getStatus(id);
+    if (st !== "proved" && st !== "definition") { clean.set(id, false); return false; }
+    for (const dep of (depsMap.get(id) || [])) {
+      if (!check(dep)) { clean.set(id, false); return false; }
+    }
+    return true;
+  }
+  PROOF_DATA.nodes.forEach(n => check(n.id));
+  edgeCleanMap = clean;
+}
+function edgeStroke(l) { return edgeCleanMap.get(l.source.id) ? "#3fb950" : "#d29922"; }
+function edgeMarker(l) { return edgeCleanMap.get(l.source.id) ? "url(#arrow-green)" : "url(#arrow-orange)"; }
+
+// Initial computation from live statuses
+computeEdgeColors(id => nodeMap.get(id)?.status || "sorry");
 
 // ── Force simulation for organic layout ──
 // Strong Y force keeps depth ordering; charge + collision spread nodes apart
@@ -946,10 +986,10 @@ const linkSel = g.append("g")
   .data(links)
   .join("path")
   .attr("class", "link")
-  .attr("stroke", "#30363d")
+  .attr("stroke", edgeStroke)
   .attr("stroke-width", 1.2)
-  .attr("opacity", 0.3)
-  .attr("marker-end", "url(#arrowhead)");
+  .attr("opacity", 0.35)
+  .attr("marker-end", edgeMarker);
 
 // ── Draw nodes ──
 const nodeSel = g.append("g")
@@ -1082,7 +1122,7 @@ nodeSel.on("mouseover.highlight", (e, d) => {
   } else {
     nodeSel.attr("opacity", 1);
     labelSel.attr("opacity", labelsVisible ? 1 : 0);
-    linkSel.attr("opacity", 0.3);
+    linkSel.attr("opacity", 0.35).attr("stroke", edgeStroke).attr("marker-end", edgeMarker);
   }
 });
 
@@ -1164,11 +1204,19 @@ function applySnapshot(index, animated) {
     .attr("x", d => d.x).attr("y", d => d.y + d.radius + 12)
     .attr("opacity", d => (vis.get(d.id) && labelsVisible) ? 1 : 0);
 
-  // Edges: path + opacity (opacity hides arrows too, unlike stroke-opacity)
+  // Recompute edge colors for this snapshot's statuses
+  computeEdgeColors(id => {
+    const st = isLive ? nodeMap.get(id)?.status : (snapshot.nodes[id] || null);
+    return st || nodeMap.get(id)?.status || "sorry";
+  });
+
+  // Edges: path, color, opacity
   tw(linkSel)
     .attr("d", edgePath)
+    .attr("stroke", edgeStroke)
+    .attr("marker-end", edgeMarker)
     .attr("opacity", l => {
-      return (isLive || (vis.get(l.source.id) && vis.get(l.target.id))) ? 0.3 : 0;
+      return (isLive || (vis.get(l.source.id) && vis.get(l.target.id))) ? 0.35 : 0;
     });
 
   // Group rects: recompute bounds from visible nodes only
@@ -1406,7 +1454,7 @@ function dismissTooltip() {
   } else {
     nodeSel.attr('opacity', d => isNodeVisible(d.id) ? 1 : 0);
     labelSel.attr('opacity', d => (isNodeVisible(d.id) && labelsVisible) ? 1 : 0);
-    linkSel.attr('opacity', 0.3);
+    linkSel.attr('opacity', 0.35).attr('stroke', edgeStroke).attr('marker-end', edgeMarker);
   }
 }
 

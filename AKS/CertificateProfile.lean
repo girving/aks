@@ -12,6 +12,8 @@ import AKS.Certificate
 import AKS.CertificateFast
 import AKS.NpyReader
 
+#eval ensureCertificateData 1728 12
+
 def rotData1728p : String := bin_base85% "data/1728/rot_map.bin"
 def certData1728p : String := bin_base85% "data/1728/cert_z.bin"
 

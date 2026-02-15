@@ -9,8 +9,12 @@ package «aks» where
 
 require "leanprover-community" / "mathlib" @ git "v4.27.0"
 
+lean_lib «CertChecker» where
+  precompileModules := true
+
 @[default_target]
 lean_lib «AKS» where
+  moreLeanArgs := #[s!"--load-dynlib=.lake/build/lib/libaks_CertChecker.so"]
 
 lean_exe «cert-bench» where
   root := `AKS.CertificateBench
@@ -32,16 +36,15 @@ script «gen-cert» _args do
       IO.println s!"data/{n}/ already exists, skipping"
       continue
     IO.println s!"Generating certificate data for n={n}, d={d}..."
-    let child ← IO.Process.spawn {
+    let output ← IO.Process.output {
       cmd := "cargo"
       args := #["run", "--release",
                 "--manifest-path", "rust/compute-certificate/Cargo.toml",
                 "--", s!"{n}", s!"{d}", "42", "30", dir]
-      stdout := .inherit
-      stderr := .inherit
     }
-    let exitCode ← child.wait
-    if exitCode != 0 then
-      IO.eprintln s!"Failed to generate data for n={n} (exit code {exitCode})"
+    if output.exitCode != 0 then
+      IO.eprintln output.stderr
+      IO.eprintln output.stdout
+      IO.eprintln s!"Failed to generate data for n={n} (exit code {output.exitCode})"
       return 1
   return 0
