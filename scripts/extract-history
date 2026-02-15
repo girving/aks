@@ -53,7 +53,7 @@ TRACKED_IDS = {
     "meanCLM_eq_clusterMean_comp", "clusterMean_comp_meanCLM",
     "rvwBound", "rvwBound_mono_left", "rvwBound_mono_right",
     "quadratic_form_bound", "rvw_operator_norm_bound",
-    "baseExpander", "baseExpander_gap",
+    "Random20736.graph", "Random20736.gap",
     "zigzag_spectral_bound", "zigzagFamily", "zigzagFamily_gap",
     "explicit_expanders_exist_zigzag", "zigzag_implies_aks_network",
     "TreeNode", "treeWrongness", "halver_preserves_monotone",
