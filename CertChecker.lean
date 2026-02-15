@@ -11,6 +11,10 @@
 
   This file imports only `Init` (no Mathlib) so it can be precompiled into a
   shared library via `precompileModules := true` in `lakefile.lean`.
+
+  **Keep this file minimal:** definitions only, no proofs about them.
+  Proofs that these functions have desired properties go in
+  `AKS/CertificateBridge.lean` (which can import Mathlib).
 -/
 
 
@@ -198,16 +202,26 @@ def rotFun (rotStr : String) (n d : Nat) (hn : 0 < n) (hd : 0 < d)
   (⟨decodeBase85Nat rotBytes (2 * k) % n, Nat.mod_lt _ hn⟩,
    ⟨decodeBase85Nat rotBytes (2 * k + 1) % d, Nat.mod_lt _ hd⟩)
 
-/-- If `checkInvolution` passes on the raw bytes of `rotStr`, then `rotFun` is
-    an involution.  The proof is sorry'd: `checkInvolution` verifies that every
-    `k < n*d` round-trips (`rot(rot(k)) = k`) and that all decoded indices are
-    in-bounds, which makes `% n` / `% d` in `rotFun` no-ops, giving pointwise
-    equality. -/
-theorem checkInvolution_implies_rotFun_involution (rotStr : String) (n d : Nat)
-    (hn : 0 < n) (hd : 0 < d)
-    (h : checkInvolution (rotStr.toUTF8) n d = true) :
-    ∀ vp, rotFun rotStr n d hn hd (rotFun rotStr n d hn hd vp) = vp := by
-  sorry
+/-! **Pure involution spec (for `native_decide`)** -/
+
+/-- Check involution at a single index: decoded `(w,q)` is in-bounds and round-trips. -/
+def checkInvAt (rotBytes : ByteArray) (n d k : Nat) : Bool :=
+  let w := decodeBase85Nat rotBytes (2 * k)
+  let q := decodeBase85Nat rotBytes (2 * k + 1)
+  decide (w < n) && decide (q < d) &&
+  decide (decodeBase85Nat rotBytes (2 * (w * d + q)) * d +
+          decodeBase85Nat rotBytes (2 * (w * d + q) + 1) = k)
+
+/-- Check all indices from 0 to `m-1`. -/
+def checkInvBelow (rotBytes : ByteArray) (n d : Nat) : Nat → Bool
+  | 0 => true
+  | k + 1 => checkInvAt rotBytes n d k && checkInvBelow rotBytes n d k
+
+/-- Pure recursive involution check. Computationally equivalent to `checkInvolution`
+    but structured for formal reasoning (no imperative loop).
+    Bridge proof: `checkInvolutionSpec_implies_rotFun_involution` in `CertificateBridge.lean`. -/
+def checkInvolutionSpec (rotBytes : ByteArray) (n d : Nat) : Bool :=
+  decide (rotBytes.size = n * d * 2 * 5) && checkInvBelow rotBytes n d (n * d)
 
 
 /-! **Pure functional definitions for bridge proofs** -/

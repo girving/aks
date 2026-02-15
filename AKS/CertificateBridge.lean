@@ -771,3 +771,65 @@ theorem certificate_bridge (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     have h : ((c₁ * (↑βd * ↑βd) : ℤ) : ℝ) ≤ ((c₂ * (↑βn * ↑βn) : ℤ) : ℝ) :=
       Int.cast_le.mpr hβ
     push_cast at h; nlinarith))
+
+
+/-! **Involution bridge** -/
+
+private theorem checkInvBelow_all {rotBytes : ByteArray} {n d m : Nat}
+    (h : checkInvBelow rotBytes n d m = true) :
+    ∀ k, k < m → checkInvAt rotBytes n d k = true := by
+  induction m with
+  | zero => intro k hk; omega
+  | succ m ih =>
+    intro k hk
+    unfold checkInvBelow at h
+    rw [Bool.and_eq_true] at h
+    rcases Nat.eq_or_lt_of_le (Nat.lt_succ_iff.1 hk) with rfl | hlt
+    · exact h.1
+    · exact ih h.2 k hlt
+
+private theorem mul_add_lt {n d a b : Nat} (ha : a < n) (hb : b < d) :
+    a * d + b < n * d := by
+  nlinarith
+
+private theorem mul_add_inj {d : Nat} (hd : 0 < d) {a b c e : Nat}
+    (hb : b < d) (he : e < d) (h : a * d + b = c * d + e) :
+    a = c ∧ b = e := by
+  have ha : a = c := by
+    have h1 : (a * d + b) / d = a := by
+      rw [show a * d + b = d * a + b from by ring]
+      rw [Nat.mul_add_div hd, Nat.div_eq_of_lt hb, Nat.add_zero]
+    have h2 : (c * d + e) / d = c := by
+      rw [show c * d + e = d * c + e from by ring]
+      rw [Nat.mul_add_div hd, Nat.div_eq_of_lt he, Nat.add_zero]
+    calc a = (a * d + b) / d := h1.symm
+      _ = (c * d + e) / d := by rw [h]
+      _ = c := h2
+  exact ⟨ha, by subst ha; omega⟩
+
+/-- If the pure recursive involution check passes, then `rotFun` is an involution. -/
+theorem checkInvolutionSpec_implies_rotFun_involution (rotStr : String) (n d : Nat)
+    (hn : 0 < n) (hd : 0 < d)
+    (h : checkInvolutionSpec (rotStr.toUTF8) n d = true) :
+    ∀ vp, rotFun rotStr n d hn hd (rotFun rotStr n d hn hd vp) = vp := by
+  unfold checkInvolutionSpec at h
+  rw [Bool.and_eq_true] at h
+  intro ⟨v, p⟩
+  -- Extract properties at index k = v*d + p
+  have hk := checkInvBelow_all h.2 _ (mul_add_lt v.isLt p.isLt)
+  unfold checkInvAt at hk
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hk
+  obtain ⟨⟨hw, hq⟩, hrt⟩ := hk
+  -- Extract properties at index k2 = w*d + q (the image)
+  have hk2 := checkInvBelow_all h.2 _ (mul_add_lt hw hq)
+  unfold checkInvAt at hk2
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hk2
+  obtain ⟨⟨hv2, hp2⟩, _⟩ := hk2
+  -- By uniqueness of mixed-radix representation: v2 = v.val, p2 = p.val
+  have ⟨hveq, hpeq⟩ := mul_add_inj hd hp2 p.isLt hrt
+  -- Conclude by simplifying mod operations (all values in-bounds → mod is identity)
+  apply Prod.ext <;> apply Fin.ext <;>
+    simp only [rotFun, Nat.mod_eq_of_lt hw, Nat.mod_eq_of_lt hq,
+               Nat.mod_eq_of_lt hv2, Nat.mod_eq_of_lt hp2]
+  · exact hveq
+  · exact hpeq
