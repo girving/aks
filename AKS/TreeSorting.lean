@@ -847,6 +847,19 @@ lemma sectionIndex_lt {n t i : ℕ} (hi : i < n) :
   rw [if_neg (by omega : n ≠ 0)]
   exact Nat.div_lt_of_lt_mul (by nlinarith [Nat.pos_of_ne_zero (show 2 ^ t ≠ 0 from by positivity)])
 
+/-- Halving the section index at level `t+1` gives the section index at level `t`.
+    This is because `⌊i·2^(t+1)/n⌋ / 2 = ⌊i·2^t/n⌋`, which follows from the identity
+    `⌊2q/n⌋ / 2 = ⌊q/n⌋` (since `⌊2q/n⌋ ∈ {2⌊q/n⌋, 2⌊q/n⌋+1}`). -/
+lemma sectionIndex_succ_div_two (n t m : ℕ) :
+    sectionIndex n (t + 1) m / 2 = sectionIndex n t m := by
+  simp only [sectionIndex]
+  split_ifs with hn
+  · simp
+  · rw [Nat.div_div_eq_div_mul, pow_succ]
+    -- Goal: m * (2 ^ t * 2) / (n * 2) = m * 2 ^ t / n
+    have : m * (2 ^ t * 2) = m * 2 ^ t * 2 := by ring
+    rw [this, Nat.mul_div_mul_right _ _ (by omega : 0 < 2)]
+
 /-- `TreeNode` at level `t` corresponding to position `i ∈ [0, n)`.
     Maps each position to its section in the binary tree at depth `t`. -/
 def sectionNode (n t : ℕ) (i : Fin n) : TreeNode where
@@ -1055,7 +1068,54 @@ def positionTreeDist (n t : ℕ) (v : Fin n → Bool) (i : Fin n) : ℕ :=
     Either way, distance(t+1) ≤ distance(t) + 2. -/
 lemma positionTreeDist_succ_le {n t : ℕ} (v : Fin n → Bool) (i : Fin n) :
     positionTreeDist n (t + 1) v i ≤ positionTreeDist n t v i + 2 := by
-  sorry
+  simp only [positionTreeDist]
+  set k := n - countOnes v
+  by_cases hk : 0 < k ∧ k < n
+  · -- 0 < k ∧ k < n: both sides use treeDistance
+    rw [dif_pos hk, dif_pos hk]
+    -- Goal: treeDistance (sectionNode n (t+1) i) (sectionNode n (t+1) ⟨k, _⟩)
+    --     ≤ treeDistance (sectionNode n t i) (sectionNode n t ⟨k, _⟩) + 2
+    -- Key: common ancestor of (t+1)-pair has level ≥ common ancestor of t-pair
+    set a := sectionNode n t i
+    set b := sectionNode n t ⟨k, hk.2⟩
+    set a' := sectionNode n (t + 1) i
+    set b' := sectionNode n (t + 1) ⟨k, hk.2⟩
+    set ca := (commonAncestor a b).level
+    set ca' := (commonAncestor a' b').level
+    suffices h_ca : ca ≤ ca' by
+      simp only [treeDistance]
+      have ha : a.level = t := rfl
+      have hb : b.level = t := rfl
+      have ha' : a'.level = t + 1 := rfl
+      have hb' : b'.level = t + 1 := rfl
+      have hca_le_t : ca ≤ t := ha ▸ commonAncestor_level_le_left a b
+      have hca'_le_t1 : ca' ≤ t + 1 := ha' ▸ commonAncestor_level_le_left a' b'
+      omega
+    -- Prove ca ≤ ca' using indexAtLevel agreement
+    -- Step 1: from the t-pair common ancestor, get indexAtLevel agreement at level ca
+    have h_idx : indexAtLevel a ca = indexAtLevel b ca :=
+      commonAncestor_implies_indexAtLevel_eq a b ca le_rfl
+    -- Step 2: lift to the (t+1)-pair using sectionIndex_succ_div_two
+    have h_idx' : indexAtLevel a' ca = indexAtLevel b' ca := by
+      show a'.index / 2 ^ (a'.level - ca) = b'.index / 2 ^ (b'.level - ca)
+      -- a'.level = t+1, b'.level = t+1, a'.index = sectionIndex n (t+1) i.val, etc.
+      have ha'_level : a'.level = t + 1 := rfl
+      have hb'_level : b'.level = t + 1 := rfl
+      have ha'_index : a'.index = sectionIndex n (t + 1) i.val := rfl
+      have hb'_index : b'.index = sectionIndex n (t + 1) k := rfl
+      have hca_le : ca ≤ t := commonAncestor_level_le_left a b
+      rw [ha'_level, hb'_level, ha'_index, hb'_index,
+          show t + 1 - ca = (t - ca) + 1 from by omega, pow_succ,
+          mul_comm (2 ^ (t - ca)) 2,
+          ← Nat.div_div_eq_div_mul, ← Nat.div_div_eq_div_mul,
+          sectionIndex_succ_div_two, sectionIndex_succ_div_two]
+      exact h_idx
+    -- Step 3: apply reverse direction to get ca' ≥ ca
+    have hca_le_t1 : ca ≤ t + 1 :=
+      le_trans (commonAncestor_level_le_left a b) (by omega : t ≤ t + 1)
+    exact indexAtLevel_eq_implies_commonAncestor_ge a' b' ca hca_le_t1 hca_le_t1 h_idx'
+  · -- ¬(0 < k ∧ k < n): LHS is 0, trivially ≤ 0 + 2
+    rw [dif_neg hk, dif_neg hk]; omega
 
 /-- Elements in interval `J` displaced at tree-distance ≥ `r`.
     Unlike `elementsAtDistance` (position-based, `t` unused), this measures
