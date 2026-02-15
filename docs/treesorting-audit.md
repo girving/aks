@@ -1,7 +1,7 @@
 # TreeSorting.lean Audit — Statement Correctness and Proof Path
 
 **Date:** 2026-02-15
-**Sorry count:** 3 (all V1 orphans deleted; 2 focused sorry's + 1 assembly)
+**Sorry count:** 2 (1 focused sorry + 1 assembly)
 
 ## Summary
 
@@ -17,6 +17,8 @@ tree-distance at level `t`.
 **Phase 3 (IN PROGRESS):** Fill V2 sorries, connect V2 lemmas to `aks_tree_sorting`.
 **Phase 3a (DONE):** Factor `halvers_give_bounded_nearsort` (proved as composition),
   prove `zigzag_decreases_wrongness_v2`, delete V1 orphans.
+**Phase 3b (DONE):** Reformulate `bounded_tree_damage_gives_zigzag` — introduced
+  `HasCherryShiftDamage`, proved `cherry_shift_damage_gives_zigzag` algebraically.
 
 ## The fundamental issue: time-independent distance
 
@@ -37,6 +39,7 @@ is **never used in the body**. This means:
 | `positionTreeDist n t v i` | Tree distance from i's section to threshold section |
 | `elementsAtTreeDist n t v J r` | Elements in J at tree-distance ≥ r (genuinely uses t) |
 | `HasBoundedTreeDamage net ε t` | Bounded damage parameterized by tree level t |
+| `HasCherryShiftDamage net ε t` | Like HasBoundedTreeDamage but r→r+1 in leading term |
 | `HasBoundedZigzagDamage zig zag ε t` | Combined zigzag damage with r → r+1 shift |
 | `treeWrongnessV2 n t v J r` | Wrongness using `elementsAtTreeDist` |
 
@@ -58,9 +61,20 @@ V1 version deleted. V2 replacement `register_reassignment_increases_wrongness_v2
 
 V1 version deleted. V2 replacement `zigzag_decreases_wrongness_v2` — **PROVED** ✅.
 Proved from `HasBoundedZigzagDamage` + anti-monotonicity consolidation of error terms.
-New sorry: `bounded_tree_damage_gives_zigzag` (produces `HasBoundedZigzagDamage`).
 
-### 4. `aks_tree_sorting` — FIXED ✅ (sorry)
+### 4. `bounded_tree_damage_gives_zigzag` — REFORMULATED → **PROVED** ✅
+
+**Problem:** The original signature `HasBoundedTreeDamage zig + HasBoundedTreeDamage zag →
+HasBoundedZigzagDamage` was **unprovable** — identity networks satisfy `HasBoundedTreeDamage`
+trivially but fail `HasBoundedZigzagDamage` (the `r+1` shift can't emerge from two `r` bounds).
+
+**Fix:** Introduced `HasCherryShiftDamage` (like `HasBoundedTreeDamage` but with `r+1` in the
+leading term). Proved `cherry_shift_damage_gives_zigzag`:
+`HasCherryShiftDamage zig + HasBoundedTreeDamage zag → HasBoundedZigzagDamage` algebraically.
+
+Also proved `cherry_shift_implies_bounded_tree`: `HasCherryShiftDamage → HasBoundedTreeDamage`.
+
+### 5. `aks_tree_sorting` — FIXED ✅ (sorry)
 
 **Fixed:** Was `∀ v, ∃ net` (vacuously true — can always build a network for one input).
 Now returns iteration count: `∃ k, k ≤ 100 * Nat.log 2 n ∧ Monotone (iterate ... k v)`.
@@ -74,9 +88,10 @@ This matches the `AKSNetwork.lean` call site which needs the same network for al
 | `positionTreeDist_succ_le` | **PROVED** | Tree dist increases ≤ 2 when refining t → t+1. |
 | `halvers_give_bounded_nearsort` | **PROVED** | Composition of construction + property + size bound. |
 | `zigzag_decreases_wrongness_v2` | **PROVED** | From `HasBoundedZigzagDamage` + anti-monotonicity. |
+| `cherry_shift_damage_gives_zigzag` | **PROVED** | CherryShift + BoundedTree → Zigzag (algebraic). |
+| `cherry_shift_implies_bounded_tree` | **PROVED** | CherryShift → BoundedTree (anti-monotonicity). |
 | `recursive_nearsort_bounded_tree_damage` | sorry | Mathematical core: induction on recursion depth. |
-| `bounded_tree_damage_gives_zigzag` | sorry | Cherry alternation: `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`. |
-| `aks_tree_sorting` | sorry | Main assembly: induction on cycles, composing Lemmas 1-4. |
+| `aks_tree_sorting` | sorry | Main assembly: needs `HasCherryShiftDamage` for zig network. |
 
 ## V2 dependency chain
 
@@ -90,7 +105,9 @@ aks_tree_sorting (iteration-count formulation) ← sorry
 │   └── positionTreeDist_succ_le ← PROVED ✅
 ├── zigzag_decreases_wrongness_v2 ← PROVED ✅
 │   └── HasBoundedZigzagDamage ← definition
-│       └── bounded_tree_damage_gives_zigzag ← sorry
+│       └── cherry_shift_damage_gives_zigzag ← PROVED ✅
+│           ├── HasCherryShiftDamage ← definition (zig needs this)
+│           └── cherry_shift_implies_bounded_tree ← PROVED ✅
 ├── zig_step_bounded_increase_v2 ← PROVED ✅
 ├── cherry_wrongness_after_nearsort_v2 ← PROVED ✅
 ├── displacement_from_wrongness ← PROVED ✅
@@ -106,6 +123,8 @@ aks_tree_sorting (iteration-count formulation) ← sorry
 | `halvers_give_bounded_nearsort` | PROVED (composition) |
 | `buildRecursiveNearsort_size_le` | PROVED |
 | `zigzag_decreases_wrongness_v2` | PROVED |
+| `cherry_shift_damage_gives_zigzag` | PROVED |
+| `cherry_shift_implies_bounded_tree` | PROVED |
 | `cherry_wrongness_after_nearsort_v2` | PROVED |
 | `zig_step_bounded_increase_v2` | PROVED |
 | `register_reassignment_increases_wrongness_v2` | PROVED |
@@ -131,9 +150,9 @@ wrongness at distance (r+1) - 2 = r - 1. Over multiple cycles, geometric decreas
 - ~~Fill `positionTreeDist_succ_le`~~ **DONE**
 - ~~Fill `zigzag_decreases_wrongness_v2`~~ **DONE** (proved from `HasBoundedZigzagDamage`)
 - ~~Factor `halvers_give_bounded_nearsort`~~ **DONE** (proved as composition)
+- ~~Reformulate `bounded_tree_damage_gives_zigzag`~~ **DONE** (proved via `HasCherryShiftDamage`)
 - Fill `recursive_nearsort_bounded_tree_damage` (induction on recursion depth)
-- Fill `bounded_tree_damage_gives_zigzag` (cherry alternation analysis)
-- Wire V2 chain into `aks_tree_sorting` proof
+- Wire V2 chain into `aks_tree_sorting` proof (needs `HasCherryShiftDamage` for zig)
 
 ### Fallback options (unchanged)
 

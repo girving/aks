@@ -1162,6 +1162,47 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
       (elementsAtTreeDist n t v J r).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
 
+/-- Cherry-shift bounded-damage: like `HasBoundedTreeDamage` but with `r+1` in the
+    leading term instead of `r`. This captures the effect of cherry alternation:
+    a zig (or zag) network operating on one cherry partition shifts the distance
+    threshold by one level.
+
+    Specifically: elements at tree-distance ≥ `r` after the network are bounded by
+    elements at tree-distance ≥ `r+1` before, plus `ε` times elements at `r-2`.
+
+    This is strictly stronger than `HasBoundedTreeDamage` (which has `r` instead of
+    `r+1` in the leading term). The `r+1` shift is the mechanism that makes zigzag
+    achieve geometric decrease in wrongness. -/
+def HasCherryShiftDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
+  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
+    ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
+
+/-- `HasCherryShiftDamage` implies `HasBoundedTreeDamage` via anti-monotonicity:
+    `|E(v, J, r+1)| ≤ |E(v, J, r)|`, so the cherry-shift bound is stronger. -/
+lemma cherry_shift_implies_bounded_tree {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
+    (hε_nn : 0 ≤ ε) (h : HasCherryShiftDamage net ε t) :
+    HasBoundedTreeDamage net ε t := by
+  intro v J r
+  have hanti : ((elementsAtTreeDist n t v J (r + 1)).card : ℝ) ≤
+      (elementsAtTreeDist n t v J r).card :=
+    Nat.cast_le.mpr (Finset.card_le_card (elementsAtTreeDist_anti v J r))
+  calc ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ)
+      ≤ (elementsAtTreeDist n t v J (r + 1)).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := h v J r
+    _ ≤ (elementsAtTreeDist n t v J r).card +
+          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := by
+        linarith
+
+/-- Helper: nested if-distance simplification.
+    `(if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+     (if r ≥ 4 then r - 4 else 0)` -/
+private lemma nested_if_dist_eq (r : ℕ) :
+    (if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+    (if r ≥ 4 then r - 4 else 0) := by
+  split_ifs <;> omega
+
 /-- V2: Combined zigzag bounded-damage with `r → r+1` distance shift.
 
     The composition of zig-then-zag achieves an `r → r+1` distance shift:
@@ -1170,8 +1211,8 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     This is the KEY structural property of even/odd cherry alternation
     (AKS Section 6). It does NOT follow from composing two `HasBoundedTreeDamage`
-    properties alone — it requires that zig and zag operate on complementary
-    cherry partitions (even-level and odd-level apexes).
+    properties alone — it requires that zig has `HasCherryShiftDamage` (the `r+1`
+    shift from operating on one cherry partition).
 
     The `r+1` in the first term is the geometric decrease mechanism:
     after each zigzag cycle, wrongness at distance `r` is controlled
@@ -1179,11 +1220,9 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
 
     Error term coefficients:
     - `2ε` on `r-2`: zig exceptions (`ε·|E(v,r-2)|`) plus zag exceptions on
-      original input (`ε·|E(v,r-2)|`, since zag's exceptions at distance `r-2`
-      in `v'` are bounded by `|E(v,r-2)| + ε·|E(v,r-4)|`, giving `ε·|E(v,r-2)|`
-      as the dominant term)
-    - `ε` on `r-4`: cross-term from zag exceptions applied to zig exceptions
-      (`ε²·|E(v,r-4)|`, simplified using `ε ≤ 1`) -/
+      zig output (`ε·|E(v',r-2)|`), where `|E(v',r-2)|` is bounded by
+      `|E(v,r-2)| + ε·|E(v,r-4)|` from cherry shift at `r-2`
+    - `ε` on `r-4`: cross-term `ε²·|E(v,r-4)|`, simplified using `ε ≤ 1` -/
 def HasBoundedZigzagDamage {n : ℕ}
     (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
   ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
@@ -1193,23 +1232,72 @@ def HasBoundedZigzagDamage {n : ℕ}
         2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
 
-/-- Composing zig (even-level cherries) and zag (odd-level cherries) gives
+/-- Composing zig (`HasCherryShiftDamage`) and zag (`HasBoundedTreeDamage`) gives
     combined zigzag damage with the `r → r+1` improvement.
-    The `r+1` shift comes from cherry alternation: zig and zag process
-    complementary cherry partitions, so the same interval `J` benefits
-    from one tree level of geometric improvement.
 
-    Proof requires analyzing how zig exceptions interact with zag exceptions
-    across complementary cherry partitions. The even/odd structure ensures
-    that elements displaced by zig into an interval are then processed by
-    zag at the adjacent tree level, giving the `r+1` shift. -/
-lemma bounded_tree_damage_gives_zigzag
+    **Proof:**
+    1. From zag (BoundedTreeDamage) at `r` with input `v' = zig.exec v`:
+       `|E(v'',J,r)| ≤ |E(v',J,r)| + ε·|E(v',J,s)|`  where s = if r≥2 then r-2 else 0
+    2. From zig (CherryShiftDamage) at `r`:
+       `|E(v',J,r)| ≤ |E(v,J,r+1)| + ε·|E(v,J,s)|`
+    3. From zig (as BoundedTreeDamage, implied by cherry shift) at `s`:
+       `|E(v',J,s)| ≤ |E(v,J,s)| + ε·|E(v,J,s')|`  where s' = if r≥4 then r-4 else 0
+    4. Combine: `|E(v'',J,r)| ≤ |E(v,J,r+1)| + 2ε·|E(v,J,s)| + ε²·|E(v,J,s')|`
+    5. Since `ε ≤ 1`: `ε² ≤ ε`, giving the exact `HasBoundedZigzagDamage` bound. -/
+lemma cherry_shift_damage_gives_zigzag
     {n : ℕ} (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
     (hε_nn : 0 ≤ ε) (hε_le : ε ≤ 1)
-    (hzig : HasBoundedTreeDamage zig_net ε t)
+    (hzig : HasCherryShiftDamage zig_net ε t)
     (hzag : HasBoundedTreeDamage zag_net ε t) :
     HasBoundedZigzagDamage zig_net zag_net ε t := by
-  sorry
+  intro v J r
+  set v' := zig_net.exec v
+  set v'' := zag_net.exec v'
+  set s := if r ≥ 2 then r - 2 else 0 with hs_def
+  set s' := if r ≥ 4 then r - 4 else 0 with hs'_def
+  -- Step 1: zag bound (HasBoundedTreeDamage at r, input v')
+  have h_zag := hzag v' J r
+  -- Step 2: zig bound (HasCherryShiftDamage at r, input v)
+  have h_zig_r := hzig v J r
+  -- Step 3: zig bound at s (via cherry_shift_implies_bounded_tree)
+  have h_zig_btd := cherry_shift_implies_bounded_tree zig_net ε t hε_nn hzig
+  have h_zig_s := h_zig_btd v J s
+  -- Step 4: Combine. Need nested_if_dist_eq to simplify the s-of-s term.
+  rw [nested_if_dist_eq] at h_zig_s
+  -- Step 5: ε² ≤ ε
+  have hε_sq : ε * ε ≤ ε := by nlinarith [sq_nonneg (1 - ε)]
+  -- Chain the inequalities
+  -- Step 1: zag at r gives |E(v'',r)| ≤ |E(v',r)| + ε·|E(v',s)|
+  have h1 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      (elementsAtTreeDist n t v' J r).card +
+        ε * (elementsAtTreeDist n t v' J s).card := h_zag
+  -- Step 2: zig at r gives |E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,s)|
+  -- (h_zig_r already has this)
+  -- Step 3: zig at s gives |E(v',s)| ≤ |E(v,s)| + ε·|E(v,s')|
+  -- (h_zig_s already has this, with nested_if_dist_eq applied)
+  -- Combine: substitute into h1
+  have h2 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
+      ((elementsAtTreeDist n t v J (r + 1)).card +
+        ε * (elementsAtTreeDist n t v J s).card) +
+      ε * ((elementsAtTreeDist n t v J s).card +
+        ε * (elementsAtTreeDist n t v J s').card) := by
+    calc ((elementsAtTreeDist n t v'' J r).card : ℝ)
+        ≤ (elementsAtTreeDist n t v' J r).card +
+            ε * (elementsAtTreeDist n t v' J s).card := h1
+      _ ≤ ((elementsAtTreeDist n t v J (r + 1)).card +
+              ε * (elementsAtTreeDist n t v J s).card) +
+            ε * ((elementsAtTreeDist n t v J s).card +
+              ε * (elementsAtTreeDist n t v J s').card) := by
+          -- Multiply h_zig_s by ε to linearize
+          have h_eps_s : ε * ((elementsAtTreeDist n t v' J s).card : ℝ) ≤
+              ε * ((elementsAtTreeDist n t v J s).card +
+                ε * (elementsAtTreeDist n t v J s').card) :=
+            mul_le_mul_of_nonneg_left h_zig_s hε_nn
+          linarith [h_zig_r, h_eps_s]
+  -- Expand and simplify: ε² ≤ ε (so ε²·x ≤ ε·x)
+  have hs'_nn : (0 : ℝ) ≤ ((elementsAtTreeDist n t v J s').card : ℝ) :=
+    Nat.cast_nonneg _
+  nlinarith [hε_sq, hs'_nn]
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -2676,6 +2764,7 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 
   The key interfaces are:
   - `HasBoundedTreeDamage` (V2): tree-distance-based damage bound from ε-nearsort
+  - `HasCherryShiftDamage` (V2): like HasBoundedTreeDamage but r→r+1 in leading term
   - `HasBoundedZigzagDamage` (V2): combined zig+zag damage with r→r+1 improvement
 
   Proof chain (V2 — tree-distance-based):
@@ -2688,14 +2777,14 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
   5. ✅ cherry_wrongness_after_nearsort_v2 (PROVED — direct from HasBoundedTreeDamage)
   6. ✅ zig_step_bounded_increase_v2 (PROVED — scales by 8A ≥ 1)
   7. ✅ zigzag_decreases_wrongness_v2 (PROVED — from HasBoundedZigzagDamage)
-     - ⚠️ `bounded_tree_damage_gives_zigzag`: HasBoundedTreeDamage → HasBoundedZigzagDamage
+     - ✅ `cherry_shift_damage_gives_zigzag`: CherryShift + BoundedTree → Zigzag (PROVED)
+     - ✅ `cherry_shift_implies_bounded_tree`: CherryShift → BoundedTree (PROVED)
   8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
   9. ⚠️ aks_tree_sorting (top-level assembly)
 
-  Remaining gaps (3):
+  Remaining gaps (2):
   - `recursive_nearsort_bounded_tree_damage`: induction on recursion depth
-  - `bounded_tree_damage_gives_zigzag`: cherry alternation analysis
-  - `aks_tree_sorting`: assembly of all lemmas
+  - `aks_tree_sorting`: assembly (needs HasCherryShiftDamage for zig network)
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
