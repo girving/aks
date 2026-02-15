@@ -1,7 +1,7 @@
 # TreeSorting.lean Audit — Statement Correctness and Proof Path
 
 **Date:** 2026-02-14
-**Sorry count:** 6 (2 V1 sorry'd kept for reference, 4 V2 sorry'd; 5 V2 lemmas proved or correctly stated)
+**Sorry count:** 5 (2 V1 sorry'd kept for reference, 3 V2 sorry'd; 6 V2 lemmas proved)
 
 ## Summary
 
@@ -71,7 +71,7 @@ This matches the `AKSNetwork.lean` call site which needs the same network for al
 
 | Lemma | Status | Notes |
 |---|---|---|
-| `positionTreeDist_succ_le` | sorry | Helper: tree dist increases ≤ 2 when refining t → t+1. Correct, tight. |
+| `positionTreeDist_succ_le` | **PROVED** | Tree dist increases ≤ 2 when refining t → t+1. Uses `sectionIndex_succ_div_two` + `indexAtLevel` agreement. |
 | `halvers_give_bounded_nearsort` | sorry | Bridge: ε₁-halver → `HasBoundedTreeDamage` at any tree level `t` |
 | `zigzag_decreases_wrongness_v2` | sorry | Divide `HasBoundedZigzagDamage` by `J.size`, consolidate error terms |
 | `aks_tree_sorting` | sorry | Main assembly: induction on cycles, composing Lemmas 1-4 |
@@ -82,7 +82,7 @@ This matches the `AKSNetwork.lean` call site which needs the same network for al
 aks_tree_sorting (iteration-count formulation)
 ├── halvers_give_bounded_nearsort ← sorry (V2: HasBoundedTreeDamage)
 ├── register_reassignment_increases_wrongness_v2 ← PROVED ✅
-│   └── positionTreeDist_succ_le ← sorry (helper, correct)
+│   └── positionTreeDist_succ_le ← PROVED ✅
 ├── zigzag_decreases_wrongness_v2 ← correctly stated, sorry (algebraic)
 │   └── HasBoundedZigzagDamage ← definition (captures r → r+1 shift)
 ├── zig_step_bounded_increase_v2 ← PROVED ✅
@@ -102,6 +102,8 @@ aks_tree_sorting (iteration-count formulation)
 | `zig_step_bounded_increase` (V1) | PROVED |
 | `zig_step_bounded_increase_v2` | PROVED |
 | `register_reassignment_increases_wrongness_v2` | PROVED |
+| `positionTreeDist_succ_le` | PROVED |
+| `sectionIndex_succ_div_two` | PROVED |
 | `displacement_from_wrongness` (V1) | PROVED |
 | `treeWrongnessV2_le_one`, `_nonneg`, `_monotone` | PROVED |
 | All tree distance lemmas | PROVED |
@@ -119,7 +121,7 @@ A full cycle (reassignment + zigzag) gives: wrongness at distance r bounded by
 wrongness at distance (r+1) - 2 = r - 1. Over multiple cycles, geometric decrease.
 
 **Key remaining work:**
-- Fill `positionTreeDist_succ_le` (needs `sectionIndex_succ` helper)
+- ~~Fill `positionTreeDist_succ_le`~~ **DONE** (proved via `sectionIndex_succ_div_two`)
 - Fill `zigzag_decreases_wrongness_v2` algebraic proof (routine)
 - Establish `HasBoundedZigzagDamage` from cherry alternation structure
 - Wire V2 chain into `aks_tree_sorting` proof

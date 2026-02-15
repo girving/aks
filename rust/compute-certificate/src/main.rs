@@ -2,12 +2,12 @@
 //!
 //! Generates a random d-regular graph on n vertices, computes
 //! M = c₁I - c₂B² + c₃J, performs f32 Cholesky factorization in-place,
-//! extracts the unit upper-triangular certificate Z via BLAS triangular
-//! inversion, scales to i32, and outputs a Lean source file.
+//! extracts the unit upper-triangular certificate Z via triangular inverse
+//! of L, scales to i32, and outputs binary data files.
 
 use faer::linalg::cholesky::llt;
 use faer::linalg::cholesky::llt::factor::LltRegularization;
-use faer::linalg::triangular_solve;
+use faer::linalg::triangular_inverse;
 use faer::prelude::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
@@ -247,65 +247,58 @@ fn compute_m_inplace(
     m
 }
 
-/// Blocked TRSM + direct packing: compute Z_unit columns via L^{-T} and pack to i32.
+/// Compute L^{-1} via triangular inverse, then pack Z_unit to i32.
 ///
-/// Processes columns in blocks of `block_size`. Blocks are independent (each reads
-/// shared L and writes to disjoint packed regions), so they run in parallel via rayon.
+/// Uses faer's `invert_lower_triangular` which is O(n³/6) (exploits triangular
+/// structure on both input and output), vs O(n³/2) for blocked TRSM.
 ///
-/// Peak scratch: n × block_size × num_threads × 4 bytes.
-fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
+/// Z_unit[i,j] = L^{-T}[i,j] * L[j,j] = L^{-1}[j,i] * L[j,j] for i <= j.
+/// Takes ownership of m (Cholesky factor L) to free it after extracting diagonal.
+fn compute_and_pack_z(m: Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
     use rayon::prelude::*;
 
     let s = scale as f32;
     let total = n * (n + 1) / 2;
-    let mut packed = vec![0i32; total];
-    let block_size = 256.min(n);
-    let lt = m.as_ref().transpose(); // zero-cost view of L^T (upper triangular)
 
-    // Safety: each block writes to disjoint regions of packed (columns don't overlap).
-    // We use a raw pointer to allow parallel mutable access.
+    // Compute L^{-1} (lower triangular) via blocked recursive inverse.
+    let par = par_for_n(n);
+    let mut l_inv: Mat<f32> = Mat::zeros(n, n);
+    triangular_inverse::invert_lower_triangular(l_inv.as_mut(), m.as_ref(), par);
+
+    // Save diagonal of L, then free the Cholesky factor.
+    let diag: Vec<f32> = (0..n).map(|j| m[(j, j)]).collect();
+    drop(m);
+
+    // Pack: Z_unit[i,j] = L^{-1}[j,i] * L[j,j] for i < j; Z_unit[j,j] = scale.
+    // Columns write to disjoint packed regions, so parallelize via raw pointer.
+    let mut packed = vec![0i32; total];
     let packed_ptr = packed.as_mut_ptr() as usize; // usize is Send+Sync
 
-    let block_starts: Vec<usize> = (0..n).step_by(block_size).collect();
+    let z_max_offdiag: f32 = (0..n)
+        .into_par_iter()
+        .map(|j| {
+            let col_start = j * (j + 1) / 2;
+            let l_jj = diag[j];
+            let mut local_max: f32 = 0.0;
 
-    let z_max_offdiag: f32 = block_starts
-        .par_iter()
-        .map(|&j_start| {
-            let j_end = (j_start + block_size).min(n);
-            let bs = j_end - j_start;
-            let mut local_z_max: f32 = 0.0;
-
-            let mut block: Mat<f32> = Mat::zeros(n, bs);
-            for k in 0..bs {
-                block[(j_start + k, k)] = 1.0;
-            }
-
-            // Blocks run in parallel; use Seq within each to avoid over-subscription.
-            triangular_solve::solve_upper_triangular_in_place(lt, block.as_mut(), Par::Seq);
-
-            for k in 0..bs {
-                let j = j_start + k;
-                let l_jj = m[(j, j)];
-                let col_start = j * (j + 1) / 2;
-
-                for i in 0..j {
-                    let z_val = block[(i, k)] * l_jj;
-                    let abs_z = z_val.abs();
-                    if abs_z > local_z_max {
-                        local_z_max = abs_z;
-                    }
-                    // SAFETY: Each column j writes to packed[col_start+i] for i < j.
-                    // Column ranges are non-overlapping, and blocks cover disjoint columns.
-                    unsafe {
-                        *(packed_ptr as *mut i32).add(col_start + i) = (z_val * s).round() as i32;
-                    }
+            for i in 0..j {
+                let z_val = l_inv[(j, i)] * l_jj;
+                let abs_z = z_val.abs();
+                if abs_z > local_max {
+                    local_max = abs_z;
                 }
+                // SAFETY: Each column j writes to packed[col_start+i] for i < j.
+                // Column ranges are non-overlapping.
                 unsafe {
-                    *(packed_ptr as *mut i32).add(col_start + j) = scale;
+                    *(packed_ptr as *mut i32).add(col_start + i) = (z_val * s).round() as i32;
                 }
             }
+            // Diagonal entry
+            unsafe {
+                *(packed_ptr as *mut i32).add(col_start + j) = scale;
+            }
 
-            local_z_max
+            local_max
         })
         .reduce(|| 0.0f32, |a, b| a.max(b));
 
@@ -313,11 +306,12 @@ fn compute_and_pack_z(m: &Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
 }
 
 /// Post-process Z_int to reduce upper-triangular errors in P = M · Z_int.
-/// For each column j, computes P[:,j] exactly via rotation map (i64 arithmetic),
-/// then adjusts Z_int[i,j] by integer rounding to minimize |P[i,j]| for i < j.
+/// For each column j, computes P[i,j] for i < j exactly via rotation map
+/// (i64 arithmetic), then adjusts Z_int[i,j] by integer rounding to minimize
+/// |P[i,j]|.
 ///
-/// Columns are independent (each accesses a disjoint slice of packed), so we
-/// split packed into non-overlapping column slices and process in parallel.
+/// Uses scatter-based Bz (O(j·d) per column instead of O(n·d)) and only
+/// computes B²z for rows < j. Columns are independent, processed in parallel.
 fn refine_certificate(
     packed: &mut [i32],
     neighbors: &[usize],
@@ -346,42 +340,37 @@ fn refine_certificate(
     cols.into_par_iter().enumerate().for_each_init(
         || {
             (
-                vec![0i64; n],                      // z_col
-                vec![0i64; n],                      // bz
-                vec![0i64; n],                      // p_col
-                vec![0i32; n],                      // b2_col
-                Vec::<usize>::with_capacity(d * d), // touched
+                vec![0i64; n], // bz
+                vec![0i64; n], // p_col
             )
         },
-        |(z_col, bz, p_col, b2_col, touched), (j, col)| {
-            // Zero z_col (entries from previous column on this thread may be dirty)
-            for k in 0..n {
-                z_col[k] = 0;
-            }
+        |(bz, p_col), (j, col)| {
+            // Scatter-based Bz: only iterate over the j+1 nonzero entries of z_col.
+            bz[..n].fill(0);
             for k in 0..=j {
-                z_col[k] = col[k] as i64;
+                let val = col[k] as i64;
+                let base = k * d;
+                for p in 0..d {
+                    bz[neighbors[base + p]] += val;
+                }
             }
 
-            // P[:,j] = c₁·z - c₂·B²z + c₃·colsum
-            for v in 0..n {
-                let mut acc: i64 = 0;
-                let base = v * d;
-                for p in 0..d {
-                    acc += z_col[neighbors[base + p]];
-                }
-                bz[v] = acc;
-            }
-            let col_sum: i64 = z_col[..=j].iter().sum();
-            for v in 0..n {
+            // Compute P[v,j] only for v < j (upper triangle is all we correct).
+            let col_sum: i64 = col.iter().map(|&x| x as i64).sum();
+            for v in 0..j {
                 let mut b2z_v: i64 = 0;
                 let base = v * d;
                 for p in 0..d {
                     b2z_v += bz[neighbors[base + p]];
                 }
-                p_col[v] = c1 as i64 * z_col[v] - c2 as i64 * b2z_v + c3 as i64 * col_sum;
+                p_col[v] =
+                    c1 as i64 * col[v] as i64 - c2 as i64 * b2z_v + c3 as i64 * col_sum;
             }
 
-            // Greedy correction with B² cross-talk tracking.
+            // Greedy correction: adjust Z[i,j] to minimize |P[i,j]|.
+            // Cross-talk through c₃·J is tracked via running_delta_sum.
+            // Cross-talk through B² is NOT tracked within a pass — the next pass
+            // recomputes P from scratch to account for it.
             let mut running_delta_sum: i64 = 0;
 
             for i in 0..j {
@@ -393,33 +382,8 @@ fn refine_certificate(
                 if delta == 0 {
                     continue;
                 }
-                let d64 = delta as i64;
                 col[i] += delta;
-                running_delta_sum += d64;
-
-                // Compute B²[v,i] for all v via 2-hop neighbors of i
-                touched.clear();
-                let base_i = i * d;
-                for p in 0..d {
-                    let w = neighbors[base_i + p];
-                    let base_w = w * d;
-                    for q in 0..d {
-                        let v = neighbors[base_w + q];
-                        if b2_col[v] == 0 {
-                            touched.push(v);
-                        }
-                        b2_col[v] += 1;
-                    }
-                }
-
-                p_col[i] += (c1 as i64 - c2 as i64 * d as i64) * d64;
-
-                for &v in touched.iter() {
-                    if v != i {
-                        p_col[v] += -c2 as i64 * b2_col[v] as i64 * d64;
-                    }
-                    b2_col[v] = 0;
-                }
+                running_delta_sum += delta as i64;
             }
         },
     );
@@ -442,26 +406,23 @@ fn verify_certificate(
     let (min_diag, eps_max) = (0..n)
         .into_par_iter()
         .map_init(
-            || (vec![0i64; n], vec![0i64; n], vec![0i64; n]),
-            |(z_col, bz, b2z), j| {
+            || (vec![0i64; n], vec![0i64; n]),
+            |(bz, b2z), j| {
                 let col_start = j * (j + 1) / 2;
-                for k in 0..n {
-                    z_col[k] = 0;
-                }
+                let z_col = &z_packed[col_start..col_start + j + 1];
+
+                // Scatter-based Bz from the j+1 nonzero entries.
+                bz[..n].fill(0);
                 for k in 0..=j {
-                    z_col[k] = z_packed[col_start + k] as i64;
-                }
-
-                for v in 0..n {
-                    let mut acc: i64 = 0;
-                    let base = v * d;
+                    let val = z_col[k] as i64;
+                    let base = k * d;
                     for p in 0..d {
-                        acc += z_col[neighbors[base + p]];
+                        bz[neighbors[base + p]] += val;
                     }
-                    bz[v] = acc;
                 }
 
-                for v in 0..n {
+                // B²z only for v <= j (upper triangle + diagonal).
+                for v in 0..=j {
                     let mut acc: i64 = 0;
                     let base = v * d;
                     for p in 0..d {
@@ -470,22 +431,22 @@ fn verify_certificate(
                     b2z[v] = acc;
                 }
 
-                let col_sum: i64 = z_col[..=j].iter().sum();
+                let col_sum: i64 = z_col.iter().map(|&x| x as i64).sum();
 
                 let mut col_min_diag: i64 = i64::MAX;
                 let mut col_eps_max: i64 = 0;
 
-                // Only compute p_ij for i <= j (skip lower-triangular)
                 for i in 0..j {
-                    let p_ij =
-                        c1 as i64 * z_col[i] - c2 as i64 * b2z[i] + c3 as i64 * col_sum;
+                    let p_ij = c1 as i64 * z_col[i] as i64 - c2 as i64 * b2z[i]
+                        + c3 as i64 * col_sum;
                     let abs_p = p_ij.abs();
                     if abs_p > col_eps_max {
                         col_eps_max = abs_p;
                     }
                 }
                 // Diagonal
-                let p_jj = c1 as i64 * z_col[j] - c2 as i64 * b2z[j] + c3 as i64 * col_sum;
+                let p_jj = c1 as i64 * z_col[j] as i64 - c2 as i64 * b2z[j]
+                    + c3 as i64 * col_sum;
                 col_min_diag = col_min_diag.min(p_jj);
 
                 (col_min_diag, col_eps_max)
@@ -610,13 +571,12 @@ fn main() {
     // Blocked TRSM + pack: compute Z_unit columns in blocks and pack to i32.
     // Only allocates n × block_size f32 scratch (~20 MB), not a full n×n matrix.
     eprintln!(
-        "Blocked TRSM + pack ({} packed i32)...",
+        "Triangular inverse + pack ({} packed i32)...",
         fmt_bytes(n as u64 * (n as u64 + 1) / 2 * 4)
     );
     let t0 = Instant::now();
-    let (mut z_packed, z_max) = compute_and_pack_z(&m, n, scale);
+    let (mut z_packed, z_max) = compute_and_pack_z(m, n, scale);
     let trsm_time = t0.elapsed();
-    drop(m); // Free L
     eprintln!("  Z max off-diagonal: {z_max:.6}");
     eprintln!(
         "  Max |Z_int| ≈ {:.0}, i32 limit: {}",
@@ -635,9 +595,10 @@ fn main() {
 
     // Post-process: greedy Gershgorin correction (two passes for c₃ cross-talk convergence)
     let t0 = Instant::now();
-    eprintln!("Refining certificate (pass 1)...");
+    // Two refinement passes: each recomputes P[:,j] from scratch and applies
+    // greedy corrections. Pass 2 accounts for B² cross-talk missed by pass 1.
+    eprintln!("Refining certificate (2 passes)...");
     refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
-    eprintln!("Refining certificate (pass 2)...");
     refine_certificate(&mut z_packed, &neighbors, n, d, c1, c2, c3);
     eprintln!("  Refinement done [{}]", fmt_duration(t0.elapsed()));
 
