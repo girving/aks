@@ -2,12 +2,13 @@
 //!
 //! Generates a random d-regular graph on n vertices, computes
 //! M = c₁I - c₂B² + c₃J, performs f32 Cholesky factorization in-place,
-//! extracts the unit upper-triangular certificate Z via triangular inverse
-//! of L, scales to i32, and outputs binary data files.
+//! extracts the unit upper-triangular certificate Z via blocked triangular
+//! solve of L (avoiding full L⁻¹ allocation), scales to i32, and outputs
+//! binary data files.
 
 use faer::linalg::cholesky::llt;
 use faer::linalg::cholesky::llt::factor::LltRegularization;
-use faer::linalg::triangular_inverse;
+use faer::linalg::triangular_solve;
 use faer::prelude::*;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
@@ -247,60 +248,81 @@ fn compute_m_inplace(
     m
 }
 
-/// Compute L^{-1} via triangular inverse, then pack Z_unit to i32.
+/// Compute L^{-1} via blocked triangular solve, then pack Z_unit to i32.
 ///
-/// Uses faer's `invert_lower_triangular` which is O(n³/6) (exploits triangular
-/// structure on both input and output), vs O(n³/2) for blocked TRSM.
+/// Instead of allocating a full n×n L⁻¹ matrix (~1.72 GB at n=20736), solves
+/// L·X = I in blocks of BLOCK columns and packs each block's results directly
+/// into z_packed. Peak memory: M + z_packed + one block ≈ 2.6 GB (vs 3.4 GB).
 ///
 /// Z_unit[i,j] = L^{-T}[i,j] * L[j,j] = L^{-1}[j,i] * L[j,j] for i <= j.
-/// Takes ownership of m (Cholesky factor L) to free it after extracting diagonal.
+/// Takes ownership of m (Cholesky factor L) to free it after processing.
 fn compute_and_pack_z(m: Mat<f32>, n: usize, scale: i32) -> (Vec<i32>, f32) {
     use rayon::prelude::*;
 
     let s = scale as f32;
     let total = n * (n + 1) / 2;
-
-    // Compute L^{-1} (lower triangular) via blocked recursive inverse.
     let par = par_for_n(n);
-    let mut l_inv: Mat<f32> = Mat::zeros(n, n);
-    triangular_inverse::invert_lower_triangular(l_inv.as_mut(), m.as_ref(), par);
 
-    // Save diagonal of L, then free the Cholesky factor.
+    // Save diagonal of L.
     let diag: Vec<f32> = (0..n).map(|j| m[(j, j)]).collect();
-    drop(m);
 
-    // Pack: Z_unit[i,j] = L^{-1}[j,i] * L[j,j] for i < j; Z_unit[j,j] = scale.
-    // Columns write to disjoint packed regions, so parallelize via raw pointer.
+    // Allocate packed output.
     let mut packed = vec![0i32; total];
     let packed_ptr = packed.as_mut_ptr() as usize; // usize is Send+Sync
 
-    let z_max_offdiag: f32 = (0..n)
-        .into_par_iter()
-        .map(|j| {
-            let col_start = j * (j + 1) / 2;
-            let l_jj = diag[j];
-            let mut local_max: f32 = 0.0;
+    // Block size for TRSM. 256 columns ≈ n×256×4 bytes (~21 MB at n=20736).
+    const BLOCK: usize = 256;
 
-            for i in 0..j {
-                let z_val = l_inv[(j, i)] * l_jj;
-                let abs_z = z_val.abs();
-                if abs_z > local_max {
-                    local_max = abs_z;
+    let mut z_max_offdiag: f32 = 0.0;
+
+    for b_start in (0..n).step_by(BLOCK) {
+        let b_end = (b_start + BLOCK).min(n);
+        let b_cols = b_end - b_start;
+
+        // Create identity block: n × b_cols with 1s at row (b_start+k), col k.
+        let mut block: Mat<f32> = Mat::zeros(n, b_cols);
+        for k in 0..b_cols {
+            block[(b_start + k, k)] = 1.0;
+        }
+
+        // Solve L · X = I_block in place. Column k now holds column (b_start+k) of L⁻¹.
+        triangular_solve::solve_lower_triangular_in_place(m.as_ref(), block.as_mut(), par);
+
+        // Scatter results into z_packed. Each column i writes to packed[j*(j+1)/2 + i]
+        // for j > i (plus diagonal). Different i values → disjoint packed indices.
+        let block_max: f32 = (0..b_cols)
+            .into_par_iter()
+            .map(|k| {
+                let i = b_start + k;
+                let mut local_max: f32 = 0.0;
+
+                for j in (i + 1)..n {
+                    // block[(j, k)] = L⁻¹[j, i]
+                    let z_val = block[(j, k)] * diag[j];
+                    let abs_z = z_val.abs();
+                    if abs_z > local_max {
+                        local_max = abs_z;
+                    }
+                    // SAFETY: Each column i writes to packed[j*(j+1)/2 + i].
+                    // Different columns have different i, so indices are disjoint.
+                    unsafe {
+                        *(packed_ptr as *mut i32).add(j * (j + 1) / 2 + i) =
+                            (z_val * s).round() as i32;
+                    }
                 }
-                // SAFETY: Each column j writes to packed[col_start+i] for i < j.
-                // Column ranges are non-overlapping.
+                // Diagonal entry
                 unsafe {
-                    *(packed_ptr as *mut i32).add(col_start + i) = (z_val * s).round() as i32;
+                    *(packed_ptr as *mut i32).add(i * (i + 1) / 2 + i) = scale;
                 }
-            }
-            // Diagonal entry
-            unsafe {
-                *(packed_ptr as *mut i32).add(col_start + j) = scale;
-            }
 
-            local_max
-        })
-        .reduce(|| 0.0f32, |a, b| a.max(b));
+                local_max
+            })
+            .reduce(|| 0.0f32, |a, b| a.max(b));
+
+        z_max_offdiag = z_max_offdiag.max(block_max);
+    }
+
+    drop(m);
 
     (packed, z_max_offdiag)
 }
