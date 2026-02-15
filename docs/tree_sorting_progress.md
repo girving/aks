@@ -132,7 +132,7 @@ Starting from 55 sorry's, reduced to 49 (6 more eliminated):
 
 ## Executive Summary
 
-We successfully implemented the complete proof architecture for the full AKS (1983) tree-based sorting network in Lean 4. The architecture includes all data structures, wrongness measures, and the four key lemmas needed to prove O(n log n) sorting.
+We successfully implemented the complete proof architecture for the full AKS (1983) tree-based sorting network in Lean. The architecture includes all data structures, wrongness measures, and the four key lemmas needed to prove O(n log n) sorting.
 
 **Key Achievement:** Proved that flat iteration approach doesn't work (via counterexample analysis), then implemented the correct full tree structure approach from the original paper.
 
@@ -463,7 +463,7 @@ Current architecture is complete and demonstrates feasibility. Document for futu
 
 ## Conclusion
 
-We have successfully built the complete architectural framework for formalizing the full AKS (1983) tree-based sorting proof in Lean 4. The structure is sound, the types check, and the proof strategy is clear from the paper.
+We have successfully built the complete architectural framework for formalizing the full AKS (1983) tree-based sorting proof in Lean. The structure is sound, the types check, and the proof strategy is clear from the paper.
 
 **Key insight:** The tree structure with Δᵣ wrongness measure is essential - flat iteration doesn't work. We proved this via careful analysis before committing to substantial implementation.
 

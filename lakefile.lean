@@ -11,3 +11,37 @@ require "leanprover-community" / "mathlib" @ git "v4.27.0"
 
 @[default_target]
 lean_lib «AKS» where
+
+lean_exe «cert-bench» where
+  root := `AKS.CertificateBench
+
+lean_exe «cert-test» where
+  root := `AKS.CertificateTest
+
+lean_exe «cert-profile» where
+  root := `AKS.CertificateProfile
+
+/-- Generate certificate data for all graph sizes.
+    Usage: `lake run gen-cert` -/
+script «gen-cert» _args do
+  let sizes : List (Nat × Nat) := [(16, 4), (1728, 12)]
+  for (n, d) in sizes do
+    let dir := s!"data/{n}"
+    let certFile := s!"{dir}/cert_z.bin"
+    if ← System.FilePath.pathExists certFile then
+      IO.println s!"data/{n}/ already exists, skipping"
+      continue
+    IO.println s!"Generating certificate data for n={n}, d={d}..."
+    let child ← IO.Process.spawn {
+      cmd := "cargo"
+      args := #["run", "--release",
+                "--manifest-path", "rust/compute-certificate/Cargo.toml",
+                "--", s!"{n}", s!"{d}", "42", "30", dir]
+      stdout := .inherit
+      stderr := .inherit
+    }
+    let exitCode ← child.wait
+    if exitCode != 0 then
+      IO.eprintln s!"Failed to generate data for n={n} (exit code {exitCode})"
+      return 1
+  return 0

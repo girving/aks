@@ -1,7 +1,7 @@
 /-
   # Regular Graphs and Spectral Theory
 
-  Lean 4 formalization of `d`-regular graphs via rotation maps,
+  Lean formalization of `d`-regular graphs via rotation maps,
   their normalized adjacency matrices, and spectral gap (operator norm).
 
   Graph squaring is in `Square.lean`; the complete graph is in
