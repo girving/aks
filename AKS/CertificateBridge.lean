@@ -6,33 +6,94 @@
 
   **Layer 1** (`SpectralMatrix.lean`): M PSD → walk bound (provable)
   **Layer 2** (`DiagDominant.lean`): K diag-dominant + Z invertible → M PSD (provable)
-  **Layer 3** (this file, sorry'd): `checkCertificate = true` → spectral matrix PSD
+  **Layer 3** (this file): `checkCertificate = true` → spectral matrix PSD
 
   The bridge then chains:
-  1. `checker_implies_spectralMatrix_psd` (Layer 3, sorry'd): certificate → M PSD
+  1. `checker_implies_spectralMatrix_psd` (Layer 3): certificate → M PSD
   2. `spectralMatrix_posSemidef_implies_walk_bound` (Layer 1): M PSD → walk bound
   3. `spectralGap_le_of_walk_bound` (in `WalkBound.lean`): walk bound → spectral gap
   4. `sqrt_coeff_le_frac` (in `WalkBound.lean`): coefficient arithmetic
+
+  Layer 3 is decomposed into a structural proof (congruence, invertibility,
+  Hermiticity, PSD assembly — all proved) and two narrow arithmetic sorry's
+  (`certMatrix_posdiag`, `congruence_diagDominant`).
 -/
 
 import AKS.Certificate
 import AKS.WalkBound
 import AKS.SpectralMatrix
 import AKS.DiagDominant
+import Mathlib.LinearAlgebra.Matrix.Block
+
+open Matrix BigOperators Finset
 
 
-/-! **Layer 3: Certificate → spectral matrix PSD (sorry'd)** -/
+/-! **Certificate matrix definition** -/
+
+/-- The certificate matrix `Z`, decoded from base-85 encoded bytes.
+    Upper triangular: `Z[i,j] = 0` for `i > j`.
+    Column `j` has entries at byte positions `j*(j+1)/2 + k` for `k = 0..j`. -/
+noncomputable def certMatrixReal (certBytes : ByteArray) (n : ℕ) :
+    Matrix (Fin n) (Fin n) ℝ :=
+  Matrix.of fun i j ↦
+    if i.val ≤ j.val then
+      (decodeBase85Int certBytes (j.val * (j.val + 1) / 2 + i.val) : ℝ)
+    else 0
+
+
+/-! **Sorry'd arithmetic lemmas** -/
+
+/-- The certificate matrix has positive diagonal entries when the PSD checker passes.
+
+    True because the checker verifies `minDiag > 0` (via the Gershgorin threshold),
+    and each diagonal entry `P[j,j]` includes the term `c₁ * Z[j,j]`.
+    Future: augment the checker to explicitly verify `Z[j,j] > 0`. -/
+theorem certMatrix_posdiag (n : ℕ) (certBytes rotBytes : ByteArray)
+    (d : ℕ) (c₁ c₂ c₃ : ℤ)
+    (hcert : checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ = true) :
+    ∀ j : Fin n, 0 < certMatrixReal certBytes n j j := by
+  sorry
+
+/-- `K = Z* · M · Z` is strictly row-diag-dominant when the certificate checker passes.
+
+    The proof chain would be:
+    1. `mulAdj` correctly computes unnormalized adjacency (via `hmatch`)
+    2. The checker's `P[:,j]` matches `(spectralMatrix * Z)[:,j]`
+    3. Upper triangle `|P[k,j]| ≤ epsMax`, diagonal `P[j,j] ≥ minDiag` (from checker)
+    4. `K[i,j]` bounded via upper-triangle trick on `Z`
+    5. Per-row Gershgorin from checker's `minDiag > epsMax * n*(n+1)/2`
+
+    Future: augment checker with per-row Gershgorin check. -/
+theorem congruence_diagDominant
+    (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
+    (G : RegularGraph n d)
+    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
+    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
+    (hmatch : ∀ vp : Fin n × Fin d,
+      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
+                    Nat.mod_lt _ hn⟩,
+                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
+                    Nat.mod_lt _ hd⟩)) :
+    let Z := certMatrixReal certStr.toUTF8 n
+    let M := spectralMatrix G (↑c₁) (↑c₂) (↑c₃)
+    ∀ i : Fin n,
+      ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
+      (star Z * M * Z) i i := by
+  sorry
+
+
+/-! **Layer 3: Certificate → spectral matrix PSD** -/
 
 /-- If `checkCertificate` passes and the rotation map matches `G.rot`,
     then the spectral matrix `c₁I - c₂B² + c₃J` is positive semidefinite.
 
-    This is the only sorry in the certificate pipeline. It encapsulates:
-    - Interpreting Z from the base-85 certificate string
-    - Showing `checkPSDCertificate` → K = ZᵀMZ is diag-dominant
-    - Z lower-triangular with positive diagonal → Z invertible
-    - Congruence: K PSD → M PSD
-
-    This is purely integer arithmetic — no CLMs, norms, or real analysis. -/
+    **Proof structure:**
+    1. Define `Z` = certificate matrix (upper triangular, from base-85 bytes)
+    2. `Z` upper triangular → `det Z = ∏ Z[i,i]` → positive → `IsUnit Z`
+    3. `K = Z* · M · Z` is Hermitian (from `M` Hermitian)
+    4. `K` is strictly row-diag-dominant (sorry'd: `congruence_diagDominant`)
+    5. `K` is PSD (from Hermitian + diag-dominant)
+    6. `M` is PSD (from `K` PSD + `Z` invertible, via congruence) -/
 theorem checker_implies_spectralMatrix_psd
     (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     (G : RegularGraph n d)
@@ -44,7 +105,38 @@ theorem checker_implies_spectralMatrix_psd
                   ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
                     Nat.mod_lt _ hd⟩)) :
     Matrix.PosSemidef (spectralMatrix G (↑c₁) (↑c₂) (↑c₃)) := by
-  sorry
+  -- Extract PSD check from combined check
+  have hpsd : checkPSDCertificate rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
+    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.2
+  -- Define Z and M
+  set Z := certMatrixReal certStr.toUTF8 n with hZ_def
+  set M := spectralMatrix G (↑c₁ : ℝ) (↑c₂) (↑c₃) with hM_def
+  -- Step 1: Z is upper triangular
+  have hZ_tri : Z.BlockTriangular id := by
+    intro i j (hij : j < i)
+    show certMatrixReal certStr.toUTF8 n i j = 0
+    simp only [certMatrixReal, of_apply]
+    exact if_neg (by omega)
+  -- Step 2: Z has positive diagonal (sorry'd)
+  have hZ_pos : ∀ j : Fin n, 0 < Z j j :=
+    certMatrix_posdiag n certStr.toUTF8 rotStr.toUTF8 d c₁ c₂ c₃ hpsd
+  -- Step 3: Z is invertible (det = ∏ diag > 0 → IsUnit)
+  have hZ_det : Z.det = ∏ i : Fin n, Z i i := det_of_upperTriangular hZ_tri
+  have hZ_det_pos : 0 < Z.det := hZ_det ▸ Finset.prod_pos (fun i _ ↦ hZ_pos i)
+  have hZ_unit : IsUnit Z := by
+    rw [isUnit_iff_isUnit_det]; exact IsUnit.mk0 _ (ne_of_gt hZ_det_pos)
+  -- Step 4: K = star Z * M * Z is Hermitian
+  have hK_herm : (star Z * M * Z).IsHermitian :=
+    isHermitian_conjTranspose_mul_mul Z (spectralMatrix_isHermitian G ↑c₁ ↑c₂ ↑c₃)
+  -- Step 5: K is strictly diag-dominant (sorry'd)
+  have hK_dom : ∀ i : Fin n,
+      ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
+      (star Z * M * Z) i i :=
+    congruence_diagDominant n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hmatch
+  -- Step 6: K is PSD (Hermitian + diag-dominant → PSD)
+  have hK_psd : (star Z * M * Z).PosSemidef := diagDominant_posSemidef hK_herm hK_dom
+  -- Step 7: M is PSD via congruence (K PSD + Z invertible → M PSD)
+  exact hZ_unit.posSemidef_star_left_conjugate_iff.mp hK_psd
 
 
 /-! **Certificate → walk bound (proved from Layers 1 + 3)** -/
