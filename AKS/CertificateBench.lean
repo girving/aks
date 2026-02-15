@@ -13,6 +13,9 @@ import AKS.CertificateParallel
 import AKS.CertificateV7
 import AKS.NpyReader
 
+#eval ensureCertificateData 16 4
+#eval ensureCertificateData 1728 12
+
 /-- Format nanoseconds as human-readable string. -/
 def fmtNs (ns : Nat) : String :=
   if ns < 1000 then s!"{ns} ns"
