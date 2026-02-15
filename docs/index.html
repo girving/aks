@@ -384,6 +384,13 @@ const PROOF_DATA = {
     { id: "Random20736.gap", file: "AKS/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
       sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
       desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
+    // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
+    { id: "baseExpander", file: "AKS/Random20736.lean", line: 31, status: "retired", kind: "axiom",
+      sig: "axiom baseExpander : RegularGraph 20736 12",
+      desc: "Retired: replaced by Random20736.graph." },
+    { id: "baseExpander_gap", file: "AKS/Random20736.lean", line: 41, status: "retired", kind: "axiom",
+      sig: "axiom baseExpander_gap : spectralGap baseExpander ≤ 5/9",
+      desc: "Retired: replaced by Random20736.gap." },
 
     // ── ZigZag.lean ──
     { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 30, status: "proved", kind: "theorem",
@@ -630,6 +637,10 @@ const PROOF_DATA = {
     ["RegularGraph", "Random20736.graph"],
     ["certificate_bridge", "Random20736.gap"],
     ["Random20736.graph", "Random20736.gap"],
+    // Retired edges (for historical snapshots)
+    ["RegularGraph", "baseExpander"],
+    ["spectralGap", "baseExpander_gap"],
+    ["baseExpander", "baseExpander_gap"],
 
     // AKSNetwork.lean — helper lemmas
     ["epsHalverMerge", "epsHalverMerge_exec_eq_iterate"],
@@ -746,11 +757,13 @@ const statusColor = {
   proved: "#3fb950",
   sorry: "#d29922",
   axiom: "#f85149",
-  definition: "#58a6ff"
+  definition: "#58a6ff",
+  retired: "#30363d"  // hidden in live view, visible when scrubbing history
 };
 
 // Difficulty → radius mapping
-function difficultyRadius(d) {
+function difficultyRadius(d, status) {
+  if (status === "retired") return 0;
   if (!d) return 4;
   if (d === "days") return 6;
   if (d === "1-2 weeks" || d === "weeks") return 8;
@@ -800,7 +813,7 @@ const maxDepth = Math.max(...PROOF_DATA.nodes.map(n => depth.get(n.id)));
 // ── Assign radius and initial positions ──
 PROOF_DATA.nodes.forEach(n => {
   n.depth = depth.get(n.id);
-  n.radius = difficultyRadius(n.difficulty);
+  n.radius = difficultyRadius(n.difficulty, n.status);
 });
 
 // Group nodes by file for group rectangles
@@ -879,7 +892,7 @@ function resetZoom(instant) {
 let labelsVisible = true;
 function toggleLabels() {
   labelsVisible = !labelsVisible;
-  g.selectAll(".node-label").attr("opacity", labelsVisible ? 1 : 0);
+  g.selectAll(".node-label").attr("opacity", d => (d.status !== "retired" && labelsVisible) ? 1 : 0);
 }
 
 // ── Build links ──
@@ -950,8 +963,15 @@ simulation.on("end", () => {
 });
 
 function isNodeVisible(id) {
-  if (currentSnapshotIndex === null || !HISTORY_DATA) return true;
-  if (currentSnapshotIndex >= HISTORY_DATA.snapshots.length) return true;
+  if (currentSnapshotIndex === null || !HISTORY_DATA) {
+    // Live view: hide retired nodes
+    const node = nodeMap.get(id);
+    return node && node.status !== "retired";
+  }
+  if (currentSnapshotIndex >= HISTORY_DATA.snapshots.length) {
+    const node = nodeMap.get(id);
+    return node && node.status !== "retired";
+  }
   return !!HISTORY_DATA.snapshots[currentSnapshotIndex].nodes[id];
 }
 
@@ -978,7 +998,10 @@ const linkSel = g.append("g")
   .attr("class", "link")
   .attr("stroke", edgeStroke)
   .attr("stroke-width", 1.2)
-  .attr("opacity", 0.35)
+  .attr("opacity", l => {
+    if (l.source.status === "retired" || l.target.status === "retired") return 0;
+    return 0.35;
+  })
   .attr("marker-end", edgeMarker);
 
 // ── Draw nodes ──
@@ -990,6 +1013,7 @@ const nodeSel = g.append("g")
   .attr("r", d => d.radius)
   .attr("fill", d => statusColor[d.status])
   .attr("stroke", d => d3.color(statusColor[d.status]).darker(0.5).formatHex())
+  .attr("opacity", d => d.status === "retired" ? 0 : 1)
   .call(d3.drag()
     .on("start", (e, d) => { if (!e.active) simulation.alphaTarget(0.15).restart(); d.fx = d.x; d.fy = d.y; })
     .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
@@ -1002,6 +1026,7 @@ const labelSel = g.append("g")
   .data(PROOF_DATA.nodes)
   .join("text")
   .attr("class", "node-label")
+  .attr("opacity", d => d.status === "retired" ? 0 : 1)
   .text(d => {
     let name = d.id;
     name = name.replace("RegularGraph.", "").replace("CLM", "");
@@ -1110,9 +1135,12 @@ nodeSel.on("mouseover.highlight", (e, d) => {
   if (HISTORY_DATA && slider && parseInt(slider.value) < HISTORY_DATA.snapshots.length) {
     applySnapshot(parseInt(slider.value), false);
   } else {
-    nodeSel.attr("opacity", 1);
-    labelSel.attr("opacity", labelsVisible ? 1 : 0);
-    linkSel.attr("opacity", 0.35).attr("stroke", edgeStroke).attr("marker-end", edgeMarker);
+    nodeSel.attr("opacity", d => d.status === "retired" ? 0 : 1);
+    labelSel.attr("opacity", d => (d.status !== "retired" && labelsVisible) ? 1 : 0);
+    linkSel.attr("opacity", l => {
+      if (l.source.status === "retired" || l.target.status === "retired") return 0;
+      return 0.35;
+    }).attr("stroke", edgeStroke).attr("marker-end", edgeMarker);
   }
 });
 
@@ -1178,7 +1206,7 @@ function applySnapshot(index, animated) {
   // Nodes: position, color, size, opacity
   tw(nodeSel)
     .attr("cx", d => d.x).attr("cy", d => d.y)
-    .attr("r", d => vis.get(d.id) ? d.radius : 0)
+    .attr("r", d => vis.get(d.id) ? (d.radius || 4) : 0)
     .attr("fill", d => {
       const st = isLive ? d.status : (snapshot.nodes[d.id] || null);
       return statusColor[st] || statusColor[d.status];
