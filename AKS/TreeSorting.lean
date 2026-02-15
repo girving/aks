@@ -1359,68 +1359,32 @@ lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
     (by simp [elementsToLower])
     (by simp [elementsToUpper]))
 
-/-- Build the recursive ε-nearsort network: iterate the halver `Nat.log 2 n + 1` times.
-    Each iteration applies the halver to sub-intervals at the next subdivision level.
-    After `log₂(n) + 1` iterations, all sub-intervals have been processed.
+/-- **Halver → Cherry Shift Damage** (AKS Section 8)
 
-    This is the computational core of AKS Section 4: apply ε₁-halver to the whole
-    range, then top/bottom halves, then quarters, etc. -/
-def buildRecursiveNearsort {n : ℕ} (halver : ComparatorNetwork n) : ComparatorNetwork n :=
-  epsHalverMerge n 0 (Nat.log 2 n + 1) halver
+    An ε-halver satisfies `HasCherryShiftDamage` at any tree level `t`.
+    This is the bridge from the aggregate balance property (`IsEpsilonHalver`:
+    `onesInTop ≤ totalOnes/2 + ε·(n/2)`) to the local tree-distance damage
+    property used in the sorting proof.
 
-/-- The recursive nearsort uses `(log₂ n + 1)` copies of the halver. -/
-lemma buildRecursiveNearsort_size {n : ℕ} (halver : ComparatorNetwork n) :
-    (buildRecursiveNearsort halver).comparators.length =
-      (Nat.log 2 n + 1) * halver.comparators.length := by
-  simp only [buildRecursiveNearsort, epsHalverMerge, ComparatorNetwork.size,
-    List.length_flatten, List.map_replicate, List.sum_replicate, smul_eq_mul]
+    The cherry-shift property says: after applying the halver, elements at
+    tree-distance ≥ r are bounded by elements at tree-distance ≥ r+1 before,
+    plus ε times elements at tree-distance ≥ r-2 before.
 
-/-- The recursive nearsort has bounded size. -/
-lemma buildRecursiveNearsort_size_le {n : ℕ} (halver : ComparatorNetwork n) :
-    (buildRecursiveNearsort halver).comparators.length ≤
-      halver.comparators.length * (Nat.log 2 n + 1) := by
-  rw [buildRecursiveNearsort_size, mul_comm]
+    The r+1 shift (vs r for `HasBoundedTreeDamage`) captures that the halver
+    operates on complementary cherries — it processes top/bottom halves, which
+    correspond to alternating tree nodes. This structural alignment means the
+    halver "sees" one level of the tree hierarchy per application.
 
-/-- The recursive ε-nearsort satisfies bounded tree-distance damage.
-    This is the mathematical core: from an ε₁-halver with ε₁ small enough,
-    the iterated construction produces a network with `HasBoundedTreeDamage ε t`.
-
-    Proof sketch (by induction on recursion depth):
-    - Each level l adds halvers on sub-intervals of size n/2^l
-    - Within each sub-interval, all positions share the same section at level l
-    - New displacements from the halver are bounded by ε₁ · |sub-interval|
-    - Tree-distance shift within a section is bounded
-    - Summing over all levels: total damage ≤ (Nat.log 2 n + 1) · ε₁ ≤ ε -/
-lemma recursive_nearsort_bounded_tree_damage
-    {n : ℕ} (ε ε₁ : ℝ) (t : ℕ) (hε : 0 < ε) (hε₁ : 0 < ε₁)
-    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
-    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁) :
-    HasBoundedTreeDamage (buildRecursiveNearsort halver) ε t := by
+    Mathematical argument: The halver's ε-balance guarantee controls how many
+    elements can cross the midpoint. Elements already at high tree-distance
+    either stay in place or move to the correct side, reducing their distance.
+    New exceptions arise only from the ε-fraction imbalance, and these are
+    concentrated at distance ≤ 2 from the threshold within the relevant
+    cherry partition. -/
+lemma halver_has_cherry_shift_damage {n : ℕ} (halver : ComparatorNetwork n) (ε : ℝ)
+    (hε : 0 < ε) (hhalver : IsEpsilonHalver halver ε) (t : ℕ) :
+    HasCherryShiftDamage halver ε t := by
   sorry
-
-/-- From an ε₁-halver, construct a composite network with bounded tree-damage.
-    This encapsulates the recursive ε-nearsort construction (AKS Section 4):
-    apply ε₁-halver to the whole range, then top/bottom halves, then quarters,
-    etc., until pieces have size < ε·m. The composite satisfies the V2
-    bounded-damage property (`HasBoundedTreeDamage`) at tree level `t`.
-
-    The damage bound holds at every tree level `t` — this is essential for the
-    register reassignment argument (Lemma 1), which refines `t → t+1`.
-
-    The size bound says the composite uses O(log n) copies of the halver.
-
-    Proved by composing `buildRecursiveNearsort` (construction) with
-    `recursive_nearsort_bounded_tree_damage` (property) and
-    `buildRecursiveNearsort_size_le` (size bound). -/
-lemma halvers_give_bounded_nearsort
-    {n : ℕ} (ε ε₁ : ℝ) (t : ℕ) (hε : 0 < ε) (hε₁ : 0 < ε₁)
-    (hε₁_small : ε₁ ≤ ε / (2 * (Nat.log 2 n + 1)))
-    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε₁) :
-    ∃ (net : ComparatorNetwork n), HasBoundedTreeDamage net ε t ∧
-      net.comparators.length ≤ halver.comparators.length * (Nat.log 2 n + 1) :=
-  ⟨buildRecursiveNearsort halver,
-   recursive_nearsort_bounded_tree_damage ε ε₁ t hε hε₁ hε₁_small halver hhalver,
-   buildRecursiveNearsort_size_le halver⟩
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
 
@@ -2075,7 +2039,7 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (ht : t ≥ 1) (v : Fin n →
 
     **STUB:** Current implementation just iterates the halver on the full range.
     The correct AKS construction recursively applies to sub-ranges (top/bottom halves).
-    See `halvers_give_bounded_nearsort` for the correct existential statement. -/
+    See `halver_has_cherry_shift_damage` for the bridge from halver to damage bound. -/
 noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
     (depth : ℕ) : ComparatorNetwork m :=
   if h : depth = 0 ∨ m < 2 then
@@ -2093,10 +2057,8 @@ noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : Comparato
 
 -- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
 -- is a stub (just iterates the halver, doesn't do recursive sub-range application).
--- The correct bridge is `halvers_give_bounded_nearsort`, which is an existential that
--- produces `HasBoundedTreeDamage` (V2) at any tree level `t`. When `epsilonNearsort`
--- is properly implemented (recursive application to top/bottom halves), a correctness
--- lemma can be re-added.
+-- The correct bridge is `halver_has_cherry_shift_damage`, which proves a single halver
+-- satisfies `HasCherryShiftDamage` — the key property for the sorting proof.
 
 /-- The length of `epsilonNearsort` is `depth * |halver|`. -/
 private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
@@ -2771,20 +2733,19 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
   1. ✅ halver_preserves_monotone (PROVED)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
-  4. ✅ halvers_give_bounded_nearsort (PROVED — composition of construction + property)
-     - `buildRecursiveNearsort`: iterates halver log(n)+1 times
-     - ⚠️ `recursive_nearsort_bounded_tree_damage`: construction → HasBoundedTreeDamage
+  4. ⚠️ halver_has_cherry_shift_damage (sorry — halver → HasCherryShiftDamage)
+     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
   5. ✅ cherry_wrongness_after_nearsort_v2 (PROVED — direct from HasBoundedTreeDamage)
   6. ✅ zig_step_bounded_increase_v2 (PROVED — scales by 8A ≥ 1)
   7. ✅ zigzag_decreases_wrongness_v2 (PROVED — from HasBoundedZigzagDamage)
-     - ✅ `cherry_shift_damage_gives_zigzag`: CherryShift + BoundedTree → Zigzag (PROVED)
-     - ✅ `cherry_shift_implies_bounded_tree`: CherryShift → BoundedTree (PROVED)
+     - ✅ cherry_shift_damage_gives_zigzag: CherryShift + BoundedTree → Zigzag (PROVED)
+     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
   8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
   9. ⚠️ aks_tree_sorting (top-level assembly)
 
   Remaining gaps (2):
-  - `recursive_nearsort_bounded_tree_damage`: induction on recursion depth
-  - `aks_tree_sorting`: assembly (needs HasCherryShiftDamage for zig network)
+  - `halver_has_cherry_shift_damage`: IsEpsilonHalver → HasCherryShiftDamage
+  - `aks_tree_sorting`: assembly using halver_has_cherry_shift_damage + proved lemmas
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
