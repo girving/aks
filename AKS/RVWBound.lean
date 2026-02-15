@@ -795,12 +795,12 @@ private lemma rvw_quadratic_ineq
   have hab2 : (0 : ℝ) < a ^ 2 * b ^ 2 := by positivity
   suffices h : a ^ 2 * b ^ 2 * X ^ 2 ≤
       (b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2 by
-    have h1 : X ^ 2 ≤ ((b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2) / (a ^ 2 * b ^ 2) :=
-      (le_div_iff₀ hab2).mpr h
+    have h1 : X ^ 2 ≤ ((b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2) / (a ^ 2 * b ^ 2) := by
+      rw [le_div_iff₀ hab2]; nlinarith
     calc X ^ 2
         ≤ ((b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2) / (a ^ 2 * b ^ 2) := h1
       _ = (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |X| + (c / b) ^ 2 := by
-            rw [div_pow]; field_simp; ring
+            rw [div_pow]; field_simp
   -- Cleared goal: a²b²X² ≤ (b²-c²)|p||X| + a²c²
   -- Since |p|·|X| ≥ 0 and (b²-c²) ≥ 0, RHS ≥ a²c². Use |X|² = X².
   -- Strategy: case split on signs, reduce to polynomial inequality,
@@ -834,13 +834,10 @@ private lemma rvw_quadratic_ineq
   --   (since -(b²-c²)pX ≥ (b²-c²)pX when pX < 0).
   -- So it suffices to prove: a²c² + (b²-c²)pX - a²b²X² ≥ 0 always!
   suffices h_main : a ^ 2 * c ^ 2 + (b ^ 2 - c ^ 2) * p * X - a ^ 2 * b ^ 2 * X ^ 2 ≥ 0 by
-    have : (b ^ 2 - c ^ 2) * |p| * |X| ≥ (b ^ 2 - c ^ 2) * p * X := by
-      have hbc : 0 ≤ b ^ 2 - c ^ 2 := by linarith
-      nlinarith [abs_nonneg p, abs_nonneg X, le_abs_self p, le_abs_self X,
-                 neg_abs_le p, neg_abs_le X,
-                 mul_le_mul_of_nonneg_left (le_abs_self X) (mul_nonneg hbc (abs_nonneg p)),
-                 mul_self_nonneg (|p| * |X| - p * X)]
-    linarith
+    have hbc : 0 ≤ b ^ 2 - c ^ 2 := by linarith
+    have hpX : p * X ≤ |p| * |X| := by rw [← abs_mul]; exact le_abs_self _
+    have := mul_le_mul_of_nonneg_left hpX hbc
+    nlinarith
   -- Now prove: a²c² + (b²-c²)pX - a²b²X² ≥ 0 where X = p+2q+r.
   -- This is G = AC + (B-C)pX - ABX² with A=a², B=b², C=c².
   -- G is concave in X (coeff -AB < 0). Its discriminant is (B-C)²p² + 4A²B²C ≥ 0.
