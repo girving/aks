@@ -74,6 +74,19 @@ def mulAdj (rotBytes : ByteArray) (z : Array ℤ) (n d : ℕ) : Array ℤ :=
     return result
 
 
+/-! **Diagonal positivity check** -/
+
+/-- Check that all diagonal entries `Z[j,j]` in the packed certificate are positive.
+    Column `j` of the upper-triangular matrix `Z` is stored at byte positions
+    `j*(j+1)/2 + k` for `k = 0..j`, so `Z[j,j]` is at index `j*(j+1)/2 + j`. -/
+def allDiagPositive (certBytes : ByteArray) (n : ℕ) : Bool :=
+  match n with
+  | 0 => true
+  | k + 1 =>
+    allDiagPositive certBytes k &&
+    decide (0 < decodeBase85Int certBytes (k * (k + 1) / 2 + k))
+
+
 /-! **PSD Certificate Check** -/
 
 /-- Check the PSD certificate for `M = c₁I − c₂B² + c₃J`.
@@ -84,11 +97,12 @@ def mulAdj (rotBytes : ByteArray) (z : Array ℤ) (n d : ℕ) : Array ℤ :=
     - Track `ε_max` (max upper-triangle `|P[i,j]|` for `i < j`)
     - Track `min_diag` (min diagonal `P[i,i]`)
 
-    Then verify: `min_diag > ε_max · n · (n+1) / 2` (Gershgorin condition). -/
+    Then verify: `min_diag > ε_max · n · (n+1) / 2` (Gershgorin condition)
+    AND all diagonal entries `Z[j,j] > 0`. -/
 def checkPSDCertificate (rotBytes certBytes : ByteArray)
     (n d : ℕ) (c₁ c₂ c₃ : ℤ) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
-  else Id.run do
+  else allDiagPositive certBytes n && Id.run do
     let mut epsMax : ℤ := 0
     let mut minDiag : ℤ := 0
     let mut first := true

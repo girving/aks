@@ -347,13 +347,22 @@ const PROOF_DATA = {
       desc: "Layer 2: Hermitian + strict diagonal dominance implies PSD. Direct quadratic form bound via AM-GM regrouping." },
 
     // ── CertificateBridge.lean ──
-    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 36, status: "sorry", kind: "theorem",
+    { id: "certMatrixReal", file: "AKS/CertificateBridge.lean", line: 36, status: "definition", kind: "def",
+      sig: "certMatrixReal (certBytes : ByteArray) (n : ℕ) : Matrix (Fin n) (Fin n) ℝ",
+      desc: "Certificate matrix Z decoded from base-85 bytes. Upper triangular: Z[i,j] = 0 for i > j." },
+    { id: "certMatrix_posdiag", file: "AKS/CertificateBridge.lean", line: 61, status: "proved", kind: "theorem",
+      sig: "certMatrix_posdiag :\n  checkPSDCertificate = true → ∀ j, 0 < Z j j",
+      desc: "Certificate matrix has positive diagonal when PSD checker passes. Proved by extracting allDiagPositive check from the augmented checker via induction." },
+    { id: "congruence_diagDominant", file: "AKS/CertificateBridge.lean", line: 88, status: "sorry", kind: "theorem",
+      sig: "congruence_diagDominant :\n  checkCertificate = true → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
+      desc: "K = Z*MZ is strictly row-diag-dominant when certificate checker passes. Core arithmetic bridge: connects checker's epsMax/minDiag to formal Gershgorin condition." },
+    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 118, status: "proved", kind: "theorem",
       sig: "checker_implies_spectralMatrix_psd :\n  checkCertificate = true → (spectralMatrix G c₁ c₂ c₃).PosSemidef",
-      desc: "Layer 3 (sorry'd): certificate checker passes → spectral matrix PSD. Purely integer arithmetic: Z from certificate, K=ZᵀMZ diag-dominant, congruence.", difficulty: "weeks" },
-    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 56, status: "proved", kind: "theorem",
+      desc: "Layer 3: certificate checker passes → spectral matrix PSD. Proof: Z upper-tri + pos-diag → invertible; K=Z*MZ Hermitian + diag-dominant → PSD; congruence → M PSD." },
+    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 169, status: "proved", kind: "theorem",
       sig: "certificate_implies_walk_bound :\n  checkCertificate = true → c₂·d²·‖Wf‖² ≤ c₁·‖f‖²",
       desc: "Certificate → walk bound. Chains Layer 3 (certificate → PSD) with Layer 1 (PSD → walk bound)." },
-    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 86, status: "proved", kind: "theorem",
+    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 199, status: "proved", kind: "theorem",
       sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
@@ -704,6 +713,11 @@ const PROOF_DATA = {
     // DiagDominant (standalone, no AKS imports)
 
     // CertificateBridge
+    ["certMatrixReal", "certMatrix_posdiag"],
+    ["certMatrixReal", "congruence_diagDominant"],
+    ["certMatrix_posdiag", "checker_implies_spectralMatrix_psd"],
+    ["congruence_diagDominant", "checker_implies_spectralMatrix_psd"],
+    ["diagDominant_posSemidef", "checker_implies_spectralMatrix_psd"],
     ["spectralMatrix", "checker_implies_spectralMatrix_psd"],
     ["checker_implies_spectralMatrix_psd", "certificate_implies_walk_bound"],
     ["spectralMatrix_posSemidef_implies_walk_bound", "certificate_implies_walk_bound"],

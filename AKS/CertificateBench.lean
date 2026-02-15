@@ -9,11 +9,8 @@
 
 import AKS.Certificate
 import AKS.CertificateV2
-import AKS.CertificateV3
-import AKS.CertificateV4
-import AKS.CertificateV5
-import AKS.CertificateV6
 import AKS.CertificateParallel
+import AKS.CertificateV7
 import AKS.NpyReader
 
 /-- Format nanoseconds as human-readable string. -/
@@ -103,24 +100,9 @@ def benchBaseline (label : String) (rotStr certStr : String)
   timed "V2 full          " fun () =>
     s!"ok={checkCertificateV2 rotStr certStr n d c₁ c₂ c₃}"
 
-  -- V3: Int64 arithmetic
-  let c₁i : Int64 := c₁.toNat.toInt64
-  let c₂i : Int64 := c₂.toNat.toInt64
-  let c₃i : Int64 := c₃.toNat.toInt64
-  timed "V3 Int64         " fun () =>
-    s!"ok={checkCertificateV3 rotStr certStr n d c₁i c₂i c₃i}"
-
-  -- V4: fused B²z
-  timed "V4 fused B²z     " fun () =>
-    s!"ok={checkCertificateV4 rotStr certStr n d c₁ c₂ c₃}"
-
-  -- V5: combined (pre-decoded + Int64 + fused)
-  timed "V5 combined      " fun () =>
-    s!"ok={checkCertificateV5 rotStr certStr n d c₁i c₂i c₃i}"
-
-  -- V6: raw ByteArray decode
-  timed "V6 raw ByteArray " fun () =>
-    s!"ok={checkCertificateV6 rotStr certStr n d c₁ c₂ c₃}"
+  -- V7: buffer reuse + truncated loop + sparse mulAdj + inlined B²z
+  timed "V7 buf+trunc+spr " fun () =>
+    s!"ok={checkCertificateV7 rotStr certStr n d c₁ c₂ c₃}"
 
   -- Parallel: task-parallel PSD check (various chunk counts)
   for numChunks in [2, 4, 8] do
