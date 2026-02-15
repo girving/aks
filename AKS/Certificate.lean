@@ -199,6 +199,53 @@ def rotFun (rotStr : String) (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
    ⟨decodeBase85Nat rotBytes (2 * k + 1) % d, Nat.mod_lt _ hd⟩)
 
 
+/-! **Pure functional definitions for bridge proofs** -/
+
+/-- Sum `f(0) + f(1) + ... + f(n-1)`. -/
+def sumTo (f : ℕ → ℤ) : ℕ → ℤ
+  | 0 => 0
+  | n + 1 => sumTo f n + f n
+
+/-- Certificate matrix entry `Z[i,j]` as integer. Zero when `i > j`. -/
+def certEntryInt (certBytes : ByteArray) (i j : ℕ) : ℤ :=
+  if i ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + i) else 0
+
+/-- Unnormalized adjacency-vector product: `(B·z)[v] = ∑_{p<d} z[neighbor(v,p) % n]`. -/
+def adjMulPure (rotBytes : ByteArray) (z : ℕ → ℤ) (n d v : ℕ) : ℤ :=
+  sumTo (fun p ↦ z (decodeBase85Nat rotBytes (2 * (v * d + p)) % n)) d
+
+/-- `P = M · Z` entry at `(k, j)` in integers. -/
+def pEntryPure (rotBytes certBytes : ByteArray) (n d : ℕ) (c₁ c₂ c₃ : ℤ)
+    (k j : ℕ) : ℤ :=
+  let zj : ℕ → ℤ := fun i ↦ certEntryInt certBytes i j
+  let b2zj_k := adjMulPure rotBytes (fun v ↦ adjMulPure rotBytes zj n d v) n d k
+  let colSum := sumTo (fun l ↦ certEntryInt certBytes l j) n
+  c₁ * certEntryInt certBytes k j - c₂ * b2zj_k + c₃ * colSum
+
+/-- `K = Zᵀ · M · Z` entry at `(i, j)` in integers. -/
+def kEntryPure (rotBytes certBytes : ByteArray) (n d : ℕ) (c₁ c₂ c₃ : ℤ)
+    (i j : ℕ) : ℤ :=
+  sumTo (fun k ↦ certEntryInt certBytes k i *
+    pEntryPure rotBytes certBytes n d c₁ c₂ c₃ k j) n
+
+/-- Check diagonal dominance for row `i` (pure functional). -/
+def checkRowDomPure (rotBytes certBytes : ByteArray) (n d : ℕ) (c₁ c₂ c₃ : ℤ)
+    (i : ℕ) : Bool :=
+  let diag := kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i i
+  let offDiag := sumTo (fun j ↦
+    if j == i then 0
+    else let v := kEntryPure rotBytes certBytes n d c₁ c₂ c₃ i j
+         if v ≥ 0 then v else -v) n
+  decide (offDiag < diag)
+
+/-- Check diagonal dominance for all rows `0..m-1` (pure functional). -/
+def checkAllRowsDomPure (rotBytes certBytes : ByteArray) (n d : ℕ)
+    (c₁ c₂ c₃ : ℤ) : ℕ → Bool
+  | 0 => true
+  | m + 1 => checkAllRowsDomPure rotBytes certBytes n d c₁ c₂ c₃ m &&
+              checkRowDomPure rotBytes certBytes n d c₁ c₂ c₃ m
+
+
 /-! **Combined check** -/
 
 /-- Full certificate check: involution + PSD + K diagonal dominance.
@@ -209,4 +256,5 @@ def checkCertificate (rotStr certStr : String)
   let certBytes := certStr.toUTF8
   checkInvolution rotBytes n d &&
   checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ &&
-  checkKRowDominant rotBytes certBytes n d c₁ c₂ c₃
+  checkKRowDominant rotBytes certBytes n d c₁ c₂ c₃ &&
+  checkAllRowsDomPure rotBytes certBytes n d c₁ c₂ c₃ n

@@ -13,7 +13,7 @@
   ```
   M PSD on 1⊥  →  walk bound  (this file)
   K diag-dominant + Z invertible  →  M PSD  (DiagDominant.lean)
-  checkCertificate = true  →  K diag-dominant  (sorry'd in CertificateBridge.lean)
+  checkCertificate = true  →  K diag-dominant  (proved in CertificateBridge.lean)
   ```
 -/
 
@@ -81,7 +81,7 @@ private theorem sum_card_mul_eq {n d : ℕ} (G : RegularGraph n d)
 
 /-- The unnormalized adjacency matrix times a vector gives the neighbor sum:
     `(d • adjMatrix G *ᵥ x)(v) = ∑ i, x (G.neighbor v i)`. -/
-private theorem unnorm_adj_mulVec {n d : ℕ} (G : RegularGraph n d)
+theorem unnorm_adj_mulVec {n d : ℕ} (G : RegularGraph n d)
     (x : Fin n → ℝ) (v : Fin n) :
     (((d : ℝ) • adjMatrix G) *ᵥ x) v = ∑ i : Fin d, x (G.neighbor v i) := by
   rw [smul_mulVec]
