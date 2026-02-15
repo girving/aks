@@ -41,18 +41,39 @@ noncomputable def certMatrixReal (certBytes : ByteArray) (n : ℕ) :
     else 0
 
 
-/-! **Sorry'd arithmetic lemmas** -/
+/-! **Diagonal positivity extraction** -/
+
+/-- `allDiagPositive certBytes n = true` implies each diagonal entry is positive (as `ℤ`). -/
+private theorem allDiagPositive_spec (certBytes : ByteArray) (n : ℕ)
+    (h : allDiagPositive certBytes n = true) (j : ℕ) (hj : j < n) :
+    0 < decodeBase85Int certBytes (j * (j + 1) / 2 + j) := by
+  induction n with
+  | zero => omega
+  | succ k ih =>
+    simp only [allDiagPositive, Bool.and_eq_true] at h
+    by_cases hjk : j < k
+    · exact ih h.1 hjk
+    · have : j = k := by omega
+      subst this; exact of_decide_eq_true h.2
 
 /-- The certificate matrix has positive diagonal entries when the PSD checker passes.
-
-    True because the checker verifies `minDiag > 0` (via the Gershgorin threshold),
-    and each diagonal entry `P[j,j]` includes the term `c₁ * Z[j,j]`.
-    Future: augment the checker to explicitly verify `Z[j,j] > 0`. -/
+    Proved by extracting `allDiagPositive` from the checker. -/
 theorem certMatrix_posdiag (n : ℕ) (certBytes rotBytes : ByteArray)
     (d : ℕ) (c₁ c₂ c₃ : ℤ)
     (hcert : checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ = true) :
     ∀ j : Fin n, 0 < certMatrixReal certBytes n j j := by
-  sorry
+  -- Extract allDiagPositive from checkPSDCertificate
+  have h_diag : allDiagPositive certBytes n = true := by
+    unfold checkPSDCertificate at hcert
+    split at hcert
+    · simp at hcert
+    · simp only [Bool.and_eq_true] at hcert; exact hcert.1
+  intro j
+  -- Get integer positivity from allDiagPositive
+  have hj_pos := allDiagPositive_spec certBytes n h_diag j.val j.isLt
+  -- Simplify certMatrixReal on the diagonal
+  simp only [certMatrixReal, of_apply, le_refl, ite_true]
+  exact Int.cast_pos.mpr hj_pos
 
 /-- `K = Z* · M · Z` is strictly row-diag-dominant when the certificate checker passes.
 
