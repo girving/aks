@@ -48,6 +48,13 @@ tree-distance at level `t`.
   - Split Lemma 2 into 2a (`parity_nearsort_has_bounded_tree_damage`, sorry) and
     2b (`parity_nearsort_has_improved_bound`, sorry, captures cherry-parity structure)
   - Net: 3 sorry → 3 sorry + 1 PROVED. The FALSE statement becomes fully proved.
+**Phase 3g (DONE):** Fix FALSE `expander_gives_halver` definition:
+  - **Root cause**: 0-1 position-based `IsEpsilonHalver` definition was wrong — same-valued
+    elements are indistinguishable, making segment-wise counting impossible
+  - **Fix**: Changed to permutation-based definition using `Equiv.Perm (Fin n)` and `rank`.
+    Added `rank`, `EpsilonInitialHalved`, `EpsilonFinalHalved`, `EpsilonHalved`.
+  - `expander_gives_halver` stays sorry (now correct statement)
+  - All downstream references (TreeSorting.lean, AKSNetwork.lean) updated and verified
 
 ## The fundamental issue: time-independent distance
 
@@ -76,9 +83,11 @@ is **never used in the body**. This means:
 ### 1. `expander_gives_halver` — sorry (Halver.lean)
 
 **History:** Previously proved using the mixing lemma, which gives the one-sided midpoint bound.
-The definition of `IsEpsilonHalver` was strengthened (Phase 3e) to the AKS Section 3 segment-wise
-bound. The segment-wise bound requires **vertex expansion** (spectral gap → expansion via
-Alon-Chung or similar), not just the mixing lemma.
+The definition of `IsEpsilonHalver` was changed from a 0-1 position-based segment-wise definition
+to a **permutation-based** definition (Phase 3g). The old 0-1 definition was FALSE for
+`expander_gives_halver` because same-valued elements are indistinguishable, making segment-wise
+counting impossible. The new definition tracks labeled elements via `Equiv.Perm (Fin n)` and uses
+`rank` to define segment membership.
 
 **Statement:** `∃ net : ComparatorNetwork (2*m), IsEpsilonHalver net β ∧ net.size ≤ m * d`
 

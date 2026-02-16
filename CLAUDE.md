@@ -112,7 +112,7 @@ The Ajtai–Komlós–Szemerédi construction and analysis:
 ### `AKS/Halver.lean` — ε-Halver Theory
 ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
 1. **Sorted version** — `countOnes`, `sortedVersion`, `sortedVersion_monotone`
-2. **ε-halvers** — `IsEpsilonHalver` (segment-wise, AKS Section 3), `expander_gives_halver` (sorry — needs vertex expansion), `epsHalverMerge`
+2. **ε-halvers** — `rank`, `EpsilonInitialHalved`, `EpsilonHalved`, `IsEpsilonHalver` (permutation-based, AKS Section 3), `expander_gives_halver` (sorry — needs vertex expansion), `epsHalverMerge`
 3. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
 Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here.
 
@@ -230,6 +230,8 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 **Work autonomously on low-risk tasks once the path is clear.** When reduced to well-understood engineering (Mathlib interfacing, type bridging, assembling existing components), continue autonomously. Check in when hitting unexpected obstacles, discovering the approach won't work, or completing major milestones. Progress over permission when risk is low.
 
+**Review subtle definitions interactively before building downstream infrastructure.** Definitions that involve distinguishability (e.g., 0-1 values vs labeled elements) or quantifier structure (∀ permutations vs ∀ Boolean sequences) can be subtly wrong in ways that only surface when attempting proofs. When a definition is the foundation for multiple sorry'd lemmas, validate it with the user before committing to downstream work.
+
 ## Proof Tactics
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here (not in auto memory). This file is the single source of truth for accumulated lessons, so they persist across machines.
@@ -337,7 +339,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `IsEpsilonHalver` uses segment-wise bounds (AKS Section 3): excess elements in initial/end segments bounded by `ε·k`. `expander_gives_halver` is sorry'd (needs vertex expansion for segment-wise bound; was previously proved for weaker one-sided midpoint definition). `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is sorry'd (needs vertex expansion). `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 

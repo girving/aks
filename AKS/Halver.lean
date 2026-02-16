@@ -5,7 +5,8 @@
 
   Key results:
   • `countOnes`, `sortedVersion`: Boolean sequence sorting infrastructure
-  • `IsEpsilonHalver`: segment-wise ε-halver definition (AKS Section 3)
+  • `rank`, `EpsilonInitialHalved`, `EpsilonHalved`: permutation-based halver definitions
+  • `IsEpsilonHalver`: permutation-based ε-halver definition (AKS Section 3)
   • `expander_gives_halver`: expanders yield ε-halvers (sorry — needs vertex expansion)
   • `IsEpsilonSorted`, `Monotone.bool_pattern`: sortedness infrastructure
 
@@ -52,27 +53,44 @@ lemma sortedVersion_monotone {n : ℕ} (v : Fin n → Bool) : Monotone (sortedVe
     exact Bool.false_le _
 
 
-/-! **ε-Halvers** -/
+/-! **ε-Halvers (Permutation-Based Definition)** -/
 
-/-- A comparator network is an ε-halver if for every 0-1 input, the output
-    has segment-wise bounded displacement from sorted.
+/-- The rank of an element: the number of strictly smaller elements.
+    For `Fin n`, this equals the element's value. -/
+def rank {α : Type*} [Fintype α] [LinearOrder α] (a : α) : ℕ :=
+  (Finset.univ.filter (· < a)).card
 
-    (AKS Section 3) For any initial segment `{0,...,k-1}` with `k ≤ n/2`:
-    the excess true values (positions where output is true but sorted is false)
-    is at most `ε · k`. For any end segment `{k,...,n-1}` with `k > n/2`:
-    the excess false values is at most `ε · (n - k)`. -/
+/-- Initial-segment halver property (AKS Section 3, permutation-based):
+    for each initial segment `{0,...,k-1}` with `k ≤ n/2`, the number of
+    positions from the bottom half (`rank pos ≥ n/2`) whose output element
+    has rank < k is at most `ε · k`. -/
+def EpsilonInitialHalved {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) (ε : ℝ) : Prop :=
+  let n := Fintype.card α
+  ∀ k : ℕ, k ≤ n / 2 →
+    ((Finset.univ.filter (fun pos : α ↦
+        n / 2 ≤ rank pos ∧ rank (w pos) < k)).card : ℝ) ≤ ε * k
+
+/-- End-segment halver property: dual of `EpsilonInitialHalved` via order reversal. -/
+def EpsilonFinalHalved {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) (ε : ℝ) : Prop :=
+  EpsilonInitialHalved (α := αᵒᵈ) w ε
+
+/-- A function is ε-halved if it satisfies both initial and final segment bounds. -/
+def EpsilonHalved {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) (ε : ℝ) : Prop :=
+  EpsilonInitialHalved w ε ∧ EpsilonFinalHalved w ε
+
+/-- A comparator network is an ε-halver if for every permutation input,
+    the output is ε-halved.
+
+    (AKS Section 3) This tracks labeled elements via permutations rather than
+    0-1 values, which is essential for the segment-wise bounds — in the 0-1 case,
+    same-valued elements are indistinguishable, making segment-wise counting
+    impossible. -/
 def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
-  ∀ (v : Fin n → Bool),
-    let w := net.exec v
-    let sv := sortedVersion w
-    -- (i) Initial segments: excess true (w true where sv false) bounded
-    (∀ k : ℕ, k ≤ n / 2 →
-      ((Finset.univ.filter (fun i : Fin n ↦
-          (i : ℕ) < k ∧ w i = true ∧ sv i = false)).card : ℝ) ≤ ε * k) ∧
-    -- (ii) End segments: excess false (w false where sv true) bounded
-    (∀ k : ℕ, n / 2 < k → k ≤ n →
-      ((Finset.univ.filter (fun i : Fin n ↦
-          k ≤ (i : ℕ) ∧ w i = false ∧ sv i = true)).card : ℝ) ≤ ε * (n - k))
+  ∀ (v : Equiv.Perm (Fin n)),
+    EpsilonHalved (net.exec v) ε
 
 /-- The bipartite comparator list: for each vertex v and port p of G,
     compare wire v (top) with wire m + G.neighbor v p (bottom). -/
@@ -287,10 +305,9 @@ theorem expander_gives_halver (m d : ℕ) (G : RegularGraph m d)
     (β : ℝ) (hβ : spectralGap G ≤ β) :
     ∃ (net : ComparatorNetwork (2 * m)),
       IsEpsilonHalver net β ∧ net.size ≤ m * d := by
-  -- The segment-wise halver bound requires vertex expansion (spectral gap → expansion
-  -- via Alon-Chung or similar), not just the mixing lemma which only gives the midpoint
-  -- bound. The construction (bipartite comparators from expander) is unchanged; only the
-  -- proof technique changes.
+  -- The permutation-based halver definition tracks labeled elements, requiring vertex
+  -- expansion (spectral gap → expansion via Alon-Chung or similar). The construction
+  -- (bipartite comparators from expander) is unchanged; only the proof technique changes.
   sorry
 
 /-- Merge two sorted halves using iterated ε-halvers.

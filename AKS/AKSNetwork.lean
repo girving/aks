@@ -144,13 +144,11 @@ theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β 
       IsEpsilonHalver net β ∧ net.size ≤ m * d := by
     intro m
     rcases Nat.eq_zero_or_pos m with rfl | hm
-    · -- m = 0: empty network on 0 wires
-      refine ⟨{ comparators := [] }, fun v => ⟨fun k hk => ?_, fun k hk1 hk2 => ?_⟩,
+    · -- m = 0: empty network on 0 wires, Fin 0 is empty so everything is vacuous
+      exact ⟨{ comparators := [] },
+        fun v => ⟨fun k hk => by simp at hk; subst hk; simp,
+                  fun k hk => by simp at hk; subst hk; simp⟩,
         by simp [ComparatorNetwork.size]⟩
-      · -- Initial segment: k ≤ 0/2 = 0, so k = 0, filter is empty
-        simp at hk; subst hk; simp
-      · -- End segment: 0/2 < k impossible since k ≤ 0
-        omega
     · obtain ⟨G, hG⟩ := hfamily m hm
       exact expander_gives_halver m d G β hG
   set halvers := fun m ↦ (halver_exists m).choose
