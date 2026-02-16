@@ -8,6 +8,14 @@ Lean formalization of the Ajtai–Komlós–Szemerédi (1983) O(n log n) sorting
 
 Most theorems have `sorry` placeholders — this is intentional. The codebase is a structural skeleton demonstrating the complete proof architecture.
 
+### Primary Sources
+
+The two key papers are checked into the repo:
+- **`docs/aks.pdf`** — Ajtai, Komlós, Szemerédi (1983): the sorting network construction
+- **`docs/rvw.pdf`** — Reingold, Vadhan, Wigderson (2002): the zig-zag product and spectral analysis
+
+**Always consult these PDFs first** when checking theorem statements, proof strategies, or definitions. Read the relevant section of the paper before doing web searches — the papers are the ground truth and web sources frequently get details wrong.
+
 ## Build Commands
 
 ```bash
@@ -108,6 +116,13 @@ The Ajtai–Komlós–Szemerédi construction and analysis:
 1. **AKS construction** — recursive build: split → recurse → merge with halvers
 2. **Size analysis** — `AKS.size_nlogn` (O(n log n) comparators)
 3. **Correctness** — `AKS.sorts` (network correctly sorts all inputs)
+4. **Main theorem** — `aks_tree_sorting` (sorry — assembly), `zigzag_implies_aks_network`
+
+### `AKS/TreeDamageStability.lean` — Lemma 2a (Parallel Work Target)
+`parity_nearsort_has_bounded_tree_damage` (sorry): parity-restricted nearsort → `HasBoundedTreeDamage`. Stability property. Imports only `TreeSorting.lean`.
+
+### `AKS/TreeDamageImprovement.lean` — Lemma 2b (Parallel Work Target)
+`parity_nearsort_has_improved_bound` (sorry): even-level nearsort → `HasImprovedBound`. Cherry-parity improvement property. Imports only `TreeSorting.lean`.
 
 ### `AKS/Halver.lean` — ε-Halver Theory
 ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
@@ -352,7 +367,7 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_quadratic_ineq` — the sole remaining `sorry` in `rvw_operator_norm_bound`. See **RVW Quadratic Inequality** section below for detailed analysis. `rayleigh_quotient_bound` is also sorry'd but currently unused.
 
-**Substantial (months):** Halver.lean sorry (1): `expander_gives_halver` (sorry — needs vertex expansion for segment-wise `IsEpsilonHalver`). TreeSorting.lean sorrys (3). **Proved:** `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry:** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a: parity nearsort → `HasBoundedTreeDamage`), `parity_nearsort_has_improved_bound` (Lemma 2b: even-level nearsort → `HasImprovedBound`), `aks_tree_sorting` (top-level assembly with halver family). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
+**Substantial (months):** Halver.lean sorry (1): `expander_gives_halver` (sorry — needs vertex expansion for segment-wise `IsEpsilonHalver`). **Proved:** `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
 
 **Engineering (weeks, fiddly):** embedding 821 MB PSD certificate for `Random20736.gap` (needs machine with more RAM), reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 

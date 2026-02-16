@@ -14,7 +14,8 @@
 import AKS.ComparatorNetwork
 import AKS.Depth
 import AKS.Halver
-import AKS.TreeSorting
+import AKS.TreeDamageStability
+import AKS.TreeDamageImprovement
 import Mathlib.Analysis.SpecialFunctions.Log.Base
 
 open Finset BigOperators Real
@@ -115,6 +116,38 @@ private theorem aks_size_bound (m d : ℕ) (hm : 0 < m) (s : ℕ) (hs : s ≤ m 
         have hkey : (↑d : ℝ) * ↑m < (↑d + 1) * (2 * ↑m) * Real.log 2 := by nlinarith
         -- Multiply both sides of hkey by 100*log(2m)
         nlinarith [mul_lt_mul_of_pos_right hkey (show (0:ℝ) < 100 * Real.log (2 * ↑m) from by positivity)]
+
+
+/-! **Main Theorem Assembly** -/
+
+/-- **Main Theorem**: Tree-based AKS sorting works (AKS 1983, Section 8).
+
+    Given a family of ε-halvers (one per sub-interval size, from the expander
+    family) with ε < 1/2, the recursive nearsort construction produces a
+    comparator network that sorts all Boolean inputs.
+
+    The construction uses `recursiveNearsortParity` to build zig (even levels)
+    and zag (odd levels), then iterates zigzag cycles for geometric convergence.
+    The size is bounded by `200 * (d + 1) * n * log₂ n`.
+
+    The proof (when completed):
+    1. Build zig = `recursiveNearsortParity n halvers depth 0` (even levels)
+       Build zag = `recursiveNearsortParity n halvers depth 1` (odd levels)
+    2. `parity_nearsort_has_bounded_tree_damage` → `HasBoundedTreeDamage` for both
+    3. `parity_nearsort_has_improved_bound` → `HasImprovedBound` for zig
+    4. `bounded_tree_damage_pair_gives_zigzag` → `HasBoundedZigzagDamage` (PROVED)
+    5. `zigzag_decreases_wrongness_v2` → geometric decay of wrongness (PROVED)
+    6. `displacement_from_wrongness` → displacement → 0 (PROVED)
+    7. When displacement < 1/n: must be sorted (discrete) -/
+theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (d : ℕ)
+    (hε : 0 < ε) (hε1 : ε < 1/2)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
+    (hhalver_size : ∀ m, (halvers m).size ≤ m * d) :
+    ∃ (net : ComparatorNetwork n),
+      (net.size : ℝ) ≤ 200 * (↑d + 1) * ↑n * ↑(Nat.log 2 n) ∧
+      ∀ (v : Fin n → Bool), Monotone (net.exec v) := by
+  sorry
 
 
 /-! **The Parameterized AKS Theorem** -/

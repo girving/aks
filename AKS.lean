@@ -12,6 +12,8 @@ import AKS.Fin
 import AKS.AKSNetwork
 import AKS.Halver
 import AKS.TreeSorting
+import AKS.TreeDamageStability
+import AKS.TreeDamageImprovement
 import AKS.RegularGraph
 import AKS.Square
 import AKS.CompleteGraph
