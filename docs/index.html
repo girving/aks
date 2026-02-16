@@ -377,6 +377,22 @@ const PROOF_DATA = {
       sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
+    // ── Random16.lean ──
+    { id: "Random16.graph", file: "AKS/Random16.lean", line: 23, status: "proved", kind: "def",
+      sig: "def Random16.graph : RegularGraph 16 4",
+      desc: "Concrete 4-regular graph on 16 vertices. Small test graph, rotation map verified by native_decide." },
+    { id: "Random16.gap", file: "AKS/Random16.lean", line: 33, status: "proved", kind: "theorem",
+      sig: "theorem Random16.gap : spectralGap graph ≤ 5/4",
+      desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=16) verified by native_decide." },
+
+    // ── Random1728.lean ──
+    { id: "Random1728.graph", file: "AKS/Random1728.lean", line: 23, status: "proved", kind: "def",
+      sig: "def Random1728.graph : RegularGraph 1728 12",
+      desc: "Concrete 12-regular graph on 1728 = 12³ vertices. Medium test graph, rotation map verified by native_decide." },
+    { id: "Random1728.gap", file: "AKS/Random1728.lean", line: 33, status: "proved", kind: "theorem",
+      sig: "theorem Random1728.gap : spectralGap graph ≤ 10/12",
+      desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
+
     // ── Random20736.lean ──
     { id: "Random20736.graph", file: "AKS/Random20736.lean", line: 31, status: "proved", kind: "def",
       sig: "def Random20736.graph : RegularGraph 20736 12",
@@ -633,7 +649,13 @@ const PROOF_DATA = {
     ["zigzagFamily_gap", "explicit_expanders_exist_zigzag"],
     ["zigzagFamily", "explicit_expanders_exist_zigzag"],
 
-    // Base expander (Random20736)
+    // Base expanders (Random16, Random1728, Random20736)
+    ["RegularGraph", "Random16.graph"],
+    ["certificate_bridge", "Random16.gap"],
+    ["Random16.graph", "Random16.gap"],
+    ["RegularGraph", "Random1728.graph"],
+    ["certificate_bridge", "Random1728.gap"],
+    ["Random1728.graph", "Random1728.gap"],
     ["RegularGraph", "Random20736.graph"],
     ["certificate_bridge", "Random20736.gap"],
     ["Random20736.graph", "Random20736.gap"],
@@ -746,6 +768,8 @@ const PROOF_DATA = {
     { id: "AKS/SpectralMatrix.lean", label: "SpectralMatrix.lean", color: "#1a1e24" },
     { id: "AKS/DiagDominant.lean", label: "DiagDominant.lean", color: "#1a1e24" },
     { id: "AKS/CertificateBridge.lean", label: "CertificateBridge.lean", color: "#1a1e24" },
+    { id: "AKS/Random16.lean", label: "Random16.lean", color: "#1a1e24" },
+    { id: "AKS/Random1728.lean", label: "Random1728.lean", color: "#1a1e24" },
     { id: "AKS/Random20736.lean", label: "Random20736.lean", color: "#1a1e24" },
     { id: "AKS/TreeSorting.lean", label: "TreeSorting.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
