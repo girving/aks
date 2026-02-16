@@ -1,7 +1,7 @@
 # TreeSorting.lean Audit — Statement Correctness and Proof Path
 
-**Date:** 2026-02-15
-**Sorry count:** 3 (1 in Halver.lean, 2 in TreeSorting.lean)
+**Date:** 2026-02-16
+**Sorry count:** 4 (1 in Halver.lean, 3 in TreeSorting.lean)
 
 ## Summary
 
@@ -36,6 +36,18 @@ tree-distance at level `t`.
     `bounded_tree_damage_pair_gives_zigzag` (Lemma 3)
   - Updated `zigzag_implies_aks_network` to build halver family from expander family
     (eliminated even/odd case split and its sorry)
+**Phase 3f (DONE):** Fix FALSE `bounded_tree_damage_pair_gives_zigzag`:
+  - **Found counterexample**: zig=zag=identity, ε=0.01, n=8, t=2 — identity satisfies
+    `HasBoundedTreeDamage` (stability) but not `HasBoundedZigzagDamage` (improvement)
+  - **Root cause**: `HasBoundedTreeDamage` is a stability condition (doesn't make things worse),
+    but the `r→r+1` shift needs an improvement property (cherry-parity structure)
+  - **Fix**: Added `HasImprovedBound` predicate (same as `HasBoundedTreeDamage` but with `r+1`
+    shift on RHS). Corrected Lemma 3 takes `HasImprovedBound zig` + `HasBoundedTreeDamage zig`
+    + `HasBoundedTreeDamage zag` and is **ALGEBRAICALLY PROVED** (no sorry)
+  - Added `recursiveNearsortParity` (zig=even levels, zag=odd levels)
+  - Split Lemma 2 into 2a (`parity_nearsort_has_bounded_tree_damage`, sorry) and
+    2b (`parity_nearsort_has_improved_bound`, sorry, captures cherry-parity structure)
+  - Net: 3 sorry → 3 sorry + 1 PROVED. The FALSE statement becomes fully proved.
 
 ## The fundamental issue: time-independent distance
 
@@ -75,20 +87,29 @@ from expander) is unchanged; only the proof technique changes.
 
 **Path to re-proving:** Formalize spectral gap → vertex expansion (Alon-Chung lemma).
 
-### 2. `nearsort_has_bounded_tree_damage` — sorry (TreeSorting.lean)
+### 2a. `parity_nearsort_has_bounded_tree_damage` — sorry (TreeSorting.lean)
 
-**Statement:** `(∀ m, IsEpsilonHalver (halvers m) ε) → HasBoundedTreeDamage (recursiveNearsort n halvers (log₂ n)) ε t`
+**Statement:** `(∀ m, IsEpsilonHalver (halvers m) ε) → HasBoundedTreeDamage (recursiveNearsortParity n halvers depth parity) ε t`
 
-**Confidence:** 95%. With the strengthened halver (segment-wise bounds), the recursive nearsort
-produces locally near-sorted output at each tree level. The tree-damage bound follows from the
-nearsort property applied recursively.
+**Confidence:** 95%. Each parity component (even or odd levels) of the recursive nearsort has
+bounded tree damage. The segment-wise halver property ensures bounded damage at each level.
 
-### 3. `bounded_tree_damage_pair_gives_zigzag` — sorry (TreeSorting.lean)
+### 2b. `parity_nearsort_has_improved_bound` — sorry (TreeSorting.lean)
 
-**Statement:** `HasBoundedTreeDamage zig ε t → HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t`
+**Statement:** `(∀ m, IsEpsilonHalver (halvers m) ε) → HasImprovedBound (recursiveNearsortParity n halvers depth 0) ε t`
 
-**Confidence:** 90%. Paper's Lemma 3 — the `r→r+1` shift comes from the partition offset
-between zig and zag cherry decompositions (even/odd cherry levels).
+**Confidence:** 85%. This is the KEY cherry-parity lemma: the even-level nearsort satisfies
+`HasImprovedBound` (elements at distance ≥ r after ≤ elements at distance ≥ r+1 before + error).
+The proof requires showing that halvers at each even level push elements at that level one step
+closer. This is the hardest remaining sorry in TreeSorting.lean.
+
+### 3. `bounded_tree_damage_pair_gives_zigzag` — **PROVED** (TreeSorting.lean)
+
+**Statement:** `HasImprovedBound zig ε t → HasBoundedTreeDamage zig ε t → HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t`
+
+**Status:** Algebraically proved. The proof substitutes the three bounds and uses ε² ≤ ε.
+Previously FALSE (Phase 3e) — the old statement only took `HasBoundedTreeDamage` for both,
+which the identity network satisfies trivially.
 
 ### 4. `aks_tree_sorting` — sorry (TreeSorting.lean)
 
@@ -105,16 +126,20 @@ between zig and zag cherry decompositions (even/odd cherry levels).
 |---|---|---|
 | `positionTreeDist_succ_le` | **PROVED** | Tree dist increases ≤ 2 when refining t → t+1. |
 | `zigzag_decreases_wrongness_v2` | **PROVED** | From `HasBoundedZigzagDamage` + anti-monotonicity. |
-| `nearsort_has_bounded_tree_damage` | sorry | Recursive nearsort w/ halver family → BoundedTreeDamage (Lemma 2). |
-| `bounded_tree_damage_pair_gives_zigzag` | sorry | BoundedTreeDamage pair → Zigzag (Lemma 3). |
+| `parity_nearsort_has_bounded_tree_damage` | sorry | Parity nearsort → BoundedTreeDamage (Lemma 2a). |
+| `parity_nearsort_has_improved_bound` | sorry | Even-level nearsort → HasImprovedBound (Lemma 2b). |
+| `bounded_tree_damage_pair_gives_zigzag` | **PROVED** | HasImprovedBound + BoundedTreeDamage → Zigzag (Lemma 3). |
 | `aks_tree_sorting` | sorry | Main assembly: halver family → O(n log n) sorting network. |
 
 ## V2 dependency chain
 
 ```
 aks_tree_sorting (halver family formulation) ← sorry
-├── nearsort_has_bounded_tree_damage ← sorry (Lemma 2)
-├── bounded_tree_damage_pair_gives_zigzag ← sorry (Lemma 3)
+├── parity_nearsort_has_bounded_tree_damage ← sorry (Lemma 2a)
+├── parity_nearsort_has_improved_bound ← sorry (Lemma 2b)
+├── bounded_tree_damage_pair_gives_zigzag ← PROVED (Lemma 3)
+│   ├── HasImprovedBound ← definition (NEW)
+│   ├── HasBoundedTreeDamage ← definition
 │   └── HasBoundedZigzagDamage ← definition
 ├── register_reassignment_increases_wrongness_v2 ← PROVED
 │   └── positionTreeDist_succ_le ← PROVED
@@ -159,9 +184,11 @@ and match the AKS paper.
 
 1. **`expander_gives_halver`** (Halver.lean): Formalize spectral gap → vertex expansion
    (Alon-Chung). Independent of TreeSorting work.
-2. **`nearsort_has_bounded_tree_damage`**: Show recursive nearsort with segment-wise halvers
-   bounds tree-distance displacement. Induction on tree depth.
-3. **`bounded_tree_damage_pair_gives_zigzag`**: Show two BoundedTreeDamage steps (zig/zag on
-   complementary cherry partitions) give BoundedZigzagDamage. Key: partition offset yields `r→r+1`.
-4. **`aks_tree_sorting`**: Assembly — compose above with proved wrongness decrease + displacement
-   bound. Induction over zigzag cycles for geometric decay.
+2. **`parity_nearsort_has_bounded_tree_damage`** (Lemma 2a): Show parity-restricted nearsort
+   with segment-wise halvers bounds tree-distance displacement. Stability property.
+3. **`parity_nearsort_has_improved_bound`** (Lemma 2b): Show even-level nearsort satisfies
+   `HasImprovedBound`. This is the KEY cherry-parity lemma. The proof must show that halvers
+   at each even level push elements one step closer to sorted positions.
+4. **`aks_tree_sorting`**: Assembly — compose Lemmas 2a, 2b, 3 (proved) with proved wrongness
+   decrease + displacement bound. Build zig = `recursiveNearsortParity ... 0`, zag = `... 1`.
+   Iterate zigzag cycles for geometric decay.
