@@ -180,10 +180,9 @@ theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β 
     · -- m = 0: empty network on 0 wires, Fin 0 is empty so everything is vacuous
       exact ⟨{ comparators := [] },
         fun v => ⟨fun k hk => by
-                    have : k = 0 := by omega
-                    subst this; simp,
+                    simp at hk; subst hk; simp,
                   fun k hk => by
-                    intro hk'; omega⟩,
+                    simp at hk; subst hk; simp⟩,
         by simp [ComparatorNetwork.size]⟩
     · obtain ⟨G, hG⟩ := hfamily m hm
       exact expander_gives_halver m d G β hG
