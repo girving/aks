@@ -4,7 +4,7 @@
   Defines ε-nearsortedness and the `Nearsort` predicate for comparator networks.
 
   Key definitions:
-  • `EpsilonInitialNearsorted`, `EpsilonFinalNearsorted`, `EpsilonNearsorted`:
+  • `InitialNearsorted`, `FinalNearsorted`, `Nearsorted`:
     permutation-based nearsortedness (AKS Section 4, equation (i))
   • `Nearsort`: a comparator network is an ε-nearsort if for every permutation
     input, the output is ε-nearsorted
@@ -29,7 +29,7 @@ open Finset BigOperators
     This is the permutation-based definition, working on the full sequence
     rather than half. Uses `⌊εn⌋₊` (natural floor) for the blow-up radius,
     matching the paper. -/
-def EpsilonInitialNearsorted {α : Type*} [Fintype α] [LinearOrder α]
+def InitialNearsorted {α : Type*} [Fintype α] [LinearOrder α]
     (w : α → α) (ε : ℝ) : Prop :=
   let n := Fintype.card α
   ∀ k, k ≤ n →
@@ -37,18 +37,18 @@ def EpsilonInitialNearsorted {α : Type*} [Fintype α] [LinearOrder α]
     let Sε := Finset.univ.filter (fun a : α ↦ rank a < k + ⌊ε * ↑n⌋₊)
     ((S \ Sε.image w).card : ℝ) ≤ ε * ↑k
 
-/-- End-segment nearsortedness: dual of `EpsilonInitialNearsorted` via order reversal.
+/-- End-segment nearsortedness: dual of `InitialNearsorted` via order reversal.
     Captures the AKS condition (i) for end segments S = {k,...,m}. -/
-def EpsilonFinalNearsorted {α : Type*} [Fintype α] [LinearOrder α]
+def FinalNearsorted {α : Type*} [Fintype α] [LinearOrder α]
     (w : α → α) (ε : ℝ) : Prop :=
-  EpsilonInitialNearsorted (α := αᵒᵈ) w ε
+  InitialNearsorted (α := αᵒᵈ) w ε
 
 /-- A function is ε-nearsorted if both initial and end segment bounds hold.
     (AKS Section 4, equation (i)): for all initial segments S = {1,...,k}
     and end segments S = {k,...,m}, |S \ πS^ε| ≤ ε|S|. -/
-def EpsilonNearsorted {α : Type*} [Fintype α] [LinearOrder α]
+def Nearsorted {α : Type*} [Fintype α] [LinearOrder α]
     (w : α → α) (ε : ℝ) : Prop :=
-  EpsilonInitialNearsorted w ε ∧ EpsilonFinalNearsorted w ε
+  InitialNearsorted w ε ∧ FinalNearsorted w ε
 
 
 /-! **Network Predicate** -/
@@ -62,4 +62,4 @@ def EpsilonNearsorted {α : Type*} [Fintype α] [LinearOrder α]
     impossible. -/
 def Nearsort {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
   ∀ (v : Equiv.Perm (Fin n)),
-    EpsilonNearsorted (net.exec v) ε
+    Nearsorted (net.exec v) ε
