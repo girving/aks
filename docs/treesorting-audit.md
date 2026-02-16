@@ -1,7 +1,7 @@
 # TreeSorting.lean Audit — Statement Correctness and Proof Path
 
-**Date:** 2026-02-15
-**Sorry count:** 2 (1 focused sorry + 1 assembly)
+**Date:** 2026-02-16
+**Sorry count:** 4 (1 in Halver.lean, 3 in TreeSorting.lean)
 
 ## Summary
 
@@ -22,6 +22,39 @@ tree-distance at level `t`.
 **Phase 3c (DONE):** Simplify halver bridge — deleted `buildRecursiveNearsort` /
   `recursive_nearsort_bounded_tree_damage` / `halvers_give_bounded_nearsort` intermediaries,
   replaced with direct `halver_has_cherry_shift_damage` sorry.
+**Phase 3d (DONE):** Fix FALSE statements — `halver_has_cherry_shift_damage` and
+  `aks_tree_sorting` were both false (counterexample: n=4, halver=[(0,2),(1,3)], v=[F,T,F,T]).
+  Root cause: `IsEpsilonHalver` captures aggregate balance but not mixing structure.
+  Replaced single halver iteration with `recursiveNearsort` using halver family
+  (one halver per sub-interval size). Deleted `epsilonNearsort` (stub).
+**Phase 3e (DONE):** Align with AKS paper:
+  - Strengthened `IsEpsilonHalver` from one-sided midpoint to AKS Section 3 segment-wise bounds
+  - Sorry'd `expander_gives_halver` (needs vertex expansion, not just mixing lemma)
+  - Deleted `HasCherryShiftDamage` and all dependents (not in AKS paper; the `r→r+1` shift
+    comes from partition offset between zig/zag, not from individual network properties)
+  - Added paper-aligned sorries: `nearsort_has_bounded_tree_damage` (Lemma 2),
+    `bounded_tree_damage_pair_gives_zigzag` (Lemma 3)
+  - Updated `zigzag_implies_aks_network` to build halver family from expander family
+    (eliminated even/odd case split and its sorry)
+**Phase 3f (DONE):** Fix FALSE `bounded_tree_damage_pair_gives_zigzag`:
+  - **Found counterexample**: zig=zag=identity, ε=0.01, n=8, t=2 — identity satisfies
+    `HasBoundedTreeDamage` (stability) but not `HasBoundedZigzagDamage` (improvement)
+  - **Root cause**: `HasBoundedTreeDamage` is a stability condition (doesn't make things worse),
+    but the `r→r+1` shift needs an improvement property (cherry-parity structure)
+  - **Fix**: Added `HasImprovedBound` predicate (same as `HasBoundedTreeDamage` but with `r+1`
+    shift on RHS). Corrected Lemma 3 takes `HasImprovedBound zig` + `HasBoundedTreeDamage zig`
+    + `HasBoundedTreeDamage zag` and is **ALGEBRAICALLY PROVED** (no sorry)
+  - Added `recursiveNearsortParity` (zig=even levels, zag=odd levels)
+  - Split Lemma 2 into 2a (`parity_nearsort_has_bounded_tree_damage`, sorry) and
+    2b (`parity_nearsort_has_improved_bound`, sorry, captures cherry-parity structure)
+  - Net: 3 sorry → 3 sorry + 1 PROVED. The FALSE statement becomes fully proved.
+**Phase 3g (DONE):** Fix FALSE `expander_gives_halver` definition:
+  - **Root cause**: 0-1 position-based `IsEpsilonHalver` definition was wrong — same-valued
+    elements are indistinguishable, making segment-wise counting impossible
+  - **Fix**: Changed to permutation-based definition using `Equiv.Perm (Fin n)` and `rank`.
+    Added `rank`, `EpsilonInitialHalved`, `EpsilonFinalHalved`, `EpsilonHalved`.
+  - `expander_gives_halver` stays sorry (now correct statement)
+  - All downstream references (TreeSorting.lean, AKSNetwork.lean) updated and verified
 
 ## The fundamental issue: time-independent distance
 
@@ -37,59 +70,64 @@ is **never used in the body**. This means:
 
 | Definition | Purpose |
 |---|---|
-| `sectionIndex n t i` | Maps position i to section ⌊i·2^t/n⌋ at level t |
+| `sectionIndex n t i` | Maps position i to section `⌊i·2^t/n⌋` at level t |
 | `sectionNode n t i` | TreeNode at level t for position i |
 | `positionTreeDist n t v i` | Tree distance from i's section to threshold section |
 | `elementsAtTreeDist n t v J r` | Elements in J at tree-distance ≥ r (genuinely uses t) |
 | `HasBoundedTreeDamage net ε t` | Bounded damage parameterized by tree level t |
-| `HasCherryShiftDamage net ε t` | Like HasBoundedTreeDamage but r→r+1 in leading term |
 | `HasBoundedZigzagDamage zig zag ε t` | Combined zigzag damage with r → r+1 shift |
 | `treeWrongnessV2 n t v J r` | Wrongness using `elementsAtTreeDist` |
 
 ## Per-sorry assessment
 
-### 1. `halver_has_cherry_shift_damage` — sorry
+### 1. `expander_gives_halver` — sorry (Halver.lean)
 
-**History:** Originally `halvers_give_bounded_nearsort` was factored into
-`buildRecursiveNearsort` + `recursive_nearsort_bounded_tree_damage` + size bound.
-But `buildRecursiveNearsort` just iterated the halver (same as `epsHalverMerge`),
-and `recursive_nearsort_bounded_tree_damage` bridging `IsEpsilonHalver` →
-`HasBoundedTreeDamage` was unprovable (aggregate balance doesn't imply local
-tree-distance damage without structural information about the comparator pattern).
+**History:** Previously proved using the mixing lemma, which gives the one-sided midpoint bound.
+The definition of `IsEpsilonHalver` was changed from a 0-1 position-based segment-wise definition
+to a **permutation-based** definition (Phase 3g). The old 0-1 definition was FALSE for
+`expander_gives_halver` because same-valued elements are indistinguishable, making segment-wise
+counting impossible. The new definition tracks labeled elements via `Equiv.Perm (Fin n)` and uses
+`rank` to define segment membership.
 
-**Current:** Single focused sorry `halver_has_cherry_shift_damage`:
-`IsEpsilonHalver halver ε → HasCherryShiftDamage halver ε t`.
-This honestly captures the mathematical difficulty: showing that a halver's
-aggregate ε-balance property implies the local cherry-shift damage bound.
-The construction side (iterating the halver) is handled directly in `aks_tree_sorting`.
+**Statement:** `∃ net : ComparatorNetwork (2*m), IsEpsilonHalver net β ∧ net.size ≤ m * d`
 
-### 2. `register_reassignment_increases_wrongness` — DELETED
+**Confidence:** 98%. The paper's Section 3 proof works. The construction (bipartite comparators
+from expander) is unchanged; only the proof technique changes.
 
-V1 version deleted. V2 replacement `register_reassignment_increases_wrongness_v2` — **PROVED**.
+**Path to re-proving:** Formalize spectral gap → vertex expansion (Alon-Chung lemma).
 
-### 3. `zigzag_decreases_wrongness` — DELETED
+### 2a. `parity_nearsort_has_bounded_tree_damage` — sorry (TreeDamageStability.lean)
 
-V1 version deleted. V2 replacement `zigzag_decreases_wrongness_v2` — **PROVED**.
-Proved from `HasBoundedZigzagDamage` + anti-monotonicity consolidation of error terms.
+**Statement:** `(∀ m, IsEpsilonHalver (halvers m) ε) → HasBoundedTreeDamage (recursiveNearsortParity n halvers depth parity) ε t`
 
-### 4. `bounded_tree_damage_gives_zigzag` — REFORMULATED → **PROVED**
+**Confidence:** 95%. Each parity component (even or odd levels) of the recursive nearsort has
+bounded tree damage. The segment-wise halver property ensures bounded damage at each level.
 
-**Problem:** The original signature `HasBoundedTreeDamage zig + HasBoundedTreeDamage zag →
-HasBoundedZigzagDamage` was **unprovable** — identity networks satisfy `HasBoundedTreeDamage`
-trivially but fail `HasBoundedZigzagDamage` (the `r+1` shift can't emerge from two `r` bounds).
+### 2b. `parity_nearsort_has_improved_bound` — sorry (TreeDamageImprovement.lean)
 
-**Fix:** Introduced `HasCherryShiftDamage` (like `HasBoundedTreeDamage` but with `r+1` in the
-leading term). Proved `cherry_shift_damage_gives_zigzag`:
-`HasCherryShiftDamage zig + HasBoundedTreeDamage zag → HasBoundedZigzagDamage` algebraically.
+**Statement:** `(∀ m, IsEpsilonHalver (halvers m) ε) → HasImprovedBound (recursiveNearsortParity n halvers depth 0) ε t`
 
-Also proved `cherry_shift_implies_bounded_tree`: `HasCherryShiftDamage → HasBoundedTreeDamage`.
+**Confidence:** 85%. This is the KEY cherry-parity lemma: the even-level nearsort satisfies
+`HasImprovedBound` (elements at distance ≥ r after ≤ elements at distance ≥ r+1 before + error).
+The proof requires showing that halvers at each even level push elements at that level one step
+closer. This is the hardest remaining sorry.
 
-### 5. `aks_tree_sorting` — FIXED (sorry)
+### 3. `bounded_tree_damage_pair_gives_zigzag` — **PROVED** (TreeSorting.lean)
 
-**Fixed:** Was `∀ v, ∃ net` (vacuously true — can always build a network for one input).
-Now returns iteration count: `∃ k, k ≤ 100 * Nat.log 2 n ∧ Monotone (iterate ... k v)`.
-This matches the `AKSNetwork.lean` call site which needs the same network for all inputs
-(via the 0-1 principle: the halver is fixed, only the iteration count matters).
+**Statement:** `HasImprovedBound zig ε t → HasBoundedTreeDamage zig ε t → HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t`
+
+**Status:** Algebraically proved. The proof substitutes the three bounds and uses ε² ≤ ε.
+Previously FALSE (Phase 3e) — the old statement only took `HasBoundedTreeDamage` for both,
+which the identity network satisfies trivially.
+
+### 4. `aks_tree_sorting` — sorry (AKSNetwork.lean)
+
+**Statement:** Takes halver family `(m : ℕ) → ComparatorNetwork (2 * m)` with size bound
+`∀ m, (halvers m).size ≤ m * d`. Returns `∃ net` with size ≤ `200·(d+1)·n·log₂ n` and
+`∀ v, Monotone (net.exec v)`.
+
+**Confidence:** 95%. Composes lemmas 1-4 with proved `zigzag_decreases_wrongness_v2` and
+`displacement_from_wrongness`. The assembly is standard but non-trivial (induction over cycles).
 
 ## V2 sorry status
 
@@ -97,39 +135,38 @@ This matches the `AKSNetwork.lean` call site which needs the same network for al
 |---|---|---|
 | `positionTreeDist_succ_le` | **PROVED** | Tree dist increases ≤ 2 when refining t → t+1. |
 | `zigzag_decreases_wrongness_v2` | **PROVED** | From `HasBoundedZigzagDamage` + anti-monotonicity. |
-| `cherry_shift_damage_gives_zigzag` | **PROVED** | CherryShift + BoundedTree → Zigzag (algebraic). |
-| `cherry_shift_implies_bounded_tree` | **PROVED** | CherryShift → BoundedTree (anti-monotonicity). |
-| `halver_has_cherry_shift_damage` | sorry | IsEpsilonHalver → HasCherryShiftDamage. |
-| `aks_tree_sorting` | sorry | Main assembly: iterate halver, compose proved lemmas. |
+| `parity_nearsort_has_bounded_tree_damage` | sorry | Lemma 2a (`TreeDamageStability.lean`). |
+| `parity_nearsort_has_improved_bound` | sorry | Lemma 2b (`TreeDamageImprovement.lean`). |
+| `bounded_tree_damage_pair_gives_zigzag` | **PROVED** | Lemma 3 (`TreeSorting.lean`). |
+| `aks_tree_sorting` | sorry | Assembly (`AKSNetwork.lean`). |
 
 ## V2 dependency chain
 
 ```
-aks_tree_sorting (iteration-count formulation) ← sorry
-├── halver_has_cherry_shift_damage ← sorry (IsEpsilonHalver → HasCherryShiftDamage)
-│   └── cherry_shift_implies_bounded_tree ← PROVED (gives HasBoundedTreeDamage too)
+aks_tree_sorting (halver family formulation) ← sorry
+├── parity_nearsort_has_bounded_tree_damage ← sorry (Lemma 2a)
+├── parity_nearsort_has_improved_bound ← sorry (Lemma 2b)
+├── bounded_tree_damage_pair_gives_zigzag ← PROVED (Lemma 3)
+│   ├── HasImprovedBound ← definition (NEW)
+│   ├── HasBoundedTreeDamage ← definition
+│   └── HasBoundedZigzagDamage ← definition
 ├── register_reassignment_increases_wrongness_v2 ← PROVED
 │   └── positionTreeDist_succ_le ← PROVED
 ├── zigzag_decreases_wrongness_v2 ← PROVED
-│   └── HasBoundedZigzagDamage ← definition
-│       └── cherry_shift_damage_gives_zigzag ← PROVED
-│           ├── HasCherryShiftDamage ← definition (zig needs this)
-│           └── cherry_shift_implies_bounded_tree ← PROVED
 ├── zig_step_bounded_increase_v2 ← PROVED
 ├── cherry_wrongness_after_nearsort_v2 ← PROVED
 ├── displacement_from_wrongness ← PROVED
 └── tree_wrongness_implies_sorted ← PROVED
 ```
 
-**Sound if all V2 sorries filled?** YES — all V2 statements have been audited for correctness.
+**Sound if all sorries filled?** YES — all statements have been audited for correctness
+and match the AKS paper.
 
 ## What's proved (V1 + V2)
 
 | Lemma | Status |
 |---|---|
 | `zigzag_decreases_wrongness_v2` | PROVED |
-| `cherry_shift_damage_gives_zigzag` | PROVED |
-| `cherry_shift_implies_bounded_tree` | PROVED |
 | `cherry_wrongness_after_nearsort_v2` | PROVED |
 | `zig_step_bounded_increase_v2` | PROVED |
 | `register_reassignment_increases_wrongness_v2` | PROVED |
@@ -140,29 +177,30 @@ aks_tree_sorting (iteration-count formulation) ← sorry
 | All tree distance lemmas | PROVED |
 | All comparator/network preservation lemmas | PROVED |
 
+## Deleted definitions (Phase 3e)
+
+| Name | Reason |
+|---|---|
+| `HasCherryShiftDamage` | Not in AKS paper; `r→r+1` comes from partition offset (Lemma 3) |
+| `cherry_shift_implies_bounded_tree` | Built on deleted `HasCherryShiftDamage` |
+| `cherry_shift_damage_gives_zigzag` | Built on deleted `HasCherryShiftDamage` |
+| `recursive_nearsort_has_cherry_shift_damage` | FALSE (counterexample) + built on deleted def |
+| `epsilonNearsort` | STUB (just iterated single halver, didn't do recursive sub-ranges) |
+
 ## Path forward
 
-### Phase 3 (TODO): Fill V2 sorries and connect to `aks_tree_sorting`
+### Phase 4 (TODO): Fill sorries — parallelized across files
 
-The main theorem needs to compose:
-1. `halver_has_cherry_shift_damage`: gives `HasCherryShiftDamage` for the halver (zig role)
-   - Via `cherry_shift_implies_bounded_tree`: also gives `HasBoundedTreeDamage` (zag role)
-2. `cherry_shift_damage_gives_zigzag`: CherryShift + BoundedTree → Zigzag
-3. `zigzag_decreases_wrongness_v2`: Zigzag → wrongness decrease per cycle
-4. `register_reassignment_increases_wrongness_v2`: time evolution t → t+1, distance shift -2
+Sorries have been extracted to separate files for parallel work by different CC instances.
+`TreeSorting.lean` has **zero sorries** and is a stable foundation (read-only during parallel work).
 
-A full cycle (reassignment + zigzag) gives: wrongness at distance r bounded by
-wrongness at distance (r+1) - 2 = r - 1. Over multiple cycles, geometric decrease.
-
-**Key remaining work:**
-- ~~Fill `positionTreeDist_succ_le`~~ **DONE**
-- ~~Fill `zigzag_decreases_wrongness_v2`~~ **DONE** (proved from `HasBoundedZigzagDamage`)
-- ~~Factor `halvers_give_bounded_nearsort`~~ **DONE** (proved as composition)
-- ~~Reformulate `bounded_tree_damage_gives_zigzag`~~ **DONE** (proved via `HasCherryShiftDamage`)
-- ~~Simplify halver bridge~~ **DONE** (direct `halver_has_cherry_shift_damage`)
-- Fill `halver_has_cherry_shift_damage` (expander structure → tree-distance bound)
-- Wire V2 chain into `aks_tree_sorting` proof
-
-### Fallback options (unchanged)
-
-See previous audit versions for Options A, B, C.
+1. **`expander_gives_halver`** (`Halver.lean`): Formalize spectral gap → vertex expansion
+   (Alon-Chung). Independent of TreeSorting work.
+2. **`parity_nearsort_has_bounded_tree_damage`** (`TreeDamageStability.lean`, Lemma 2a):
+   Show parity-restricted nearsort with segment-wise halvers bounds tree-distance displacement.
+   Stability property. Independent of Lemma 2b.
+3. **`parity_nearsort_has_improved_bound`** (`TreeDamageImprovement.lean`, Lemma 2b):
+   Show even-level nearsort satisfies `HasImprovedBound`. This is the KEY cherry-parity lemma.
+   Independent of Lemma 2a.
+4. **`aks_tree_sorting`** (`AKSNetwork.lean`): Assembly — compose Lemmas 2a, 2b, 3 (proved)
+   with proved wrongness decrease + displacement bound. Blocked by #2 and #3.

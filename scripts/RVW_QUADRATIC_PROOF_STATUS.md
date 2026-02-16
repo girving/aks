@@ -4,101 +4,117 @@
 
 Prove `rvw_quadratic_ineq` in `AKS/RVWBound.lean` — the core inequality for the RVW operator norm bound.
 
-**Goal** (after clearing denominators):
-```
-G := AC + (B-C)pX - ABX² ≥ 0
-```
-where A = a², B = b² = 1-A, C = c², with constraints from Cauchy-Schwarz (V1, V2) and variable bounds.
-
-**Lean signature** (`rvw_quad_same_sign`, line 752):
+**Lean signature** (line ~784):
 ```lean
-X ^ 2 * (a ^ 2 * b ^ 2) ≤ (b ^ 2 - c ^ 2) * p * X + a ^ 2 * c ^ 2
+(p + 2 * q + r) ^ 2 ≤
+  (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |p + 2 * q + r| + (c / b) ^ 2
 ```
 
-## Current Errors (7 total in RVWBound.lean)
+**After clearing denominators** (proved equivalent in the `suffices` block):
+```
+a²b²X² ≤ (b²-c²)|p||X| + a²c²
+```
 
-1. **Line 747**: `linarith` failed in `X_le_sum_sq`
-2. **Line 752**: `nlinarith` timeout in `rvw_quad_same_sign` (3.2M heartbeats exhausted)
-3. **Line 822**: `linarith` failed in `rvw_quad_neg_neg`
-4. **Line 864**: `linarith` failed in `rvw_quad_opp_sign`
-5. **Lines 929, 931**: Type mismatch in `rvw_quadratic_ineq` neg-neg case
+**After reducing to polynomial form** (proved: `(b²-c²)|p||X| ≥ (b²-c²)pX`):
+```
+G := a²c² + (b²-c²)pX - a²b²X² ≥ 0
+```
+where X = p+2q+r, a²+b²=1, |p|≤a², |r|≤c², c≤b, q²≤V₁=(a²+p)(c²+r), q²≤V₂=(a²-p)(c²-r).
 
-The three `sorry`s in the file are at lines 336 (rayleigh_quotient_bound, unrelated), 731 (concave_quad_nonneg), and 749 (X_le_sum_sq).
+## Current State of `RVWBound.lean`
+
+**Only 2 sorries**: line ~331 (`rayleigh_quotient_bound`, unrelated) and the target `rvw_quadratic_ineq` (line ~805).
+
+**Proved helper lemmas** (all compile):
+- `rvw_X_le_sum_sq` (line ~722): `|p+2q+r| ≤ a²+c²` — AM-GM on V₁,V₂
+- `rvw_q_sq_le` (line ~762): `q² ≤ a²c²+pr` — averaging V₁+V₂
+- `rvw_weighted` (line ~769): `a²q² ≤ c²(a⁴-p²)` — weighted V₁+V₂
+
+**Scaffolding** (compiles through to sorry):
+- Fraction clearing via `suffices` + `le_div_iff₀` + `field_simp; ring`
+- Reduction from `|p||X|` to `pX` via `(b²-c²)|p||X| ≥ (b²-c²)pX`
 
 ## What Has Been Proven Impossible
 
-### Scalar multiplier nlinarith (LP infeasibility — PROVEN TWICE)
+### Scalar multiplier nlinarith at degree ≤ 4 (LP infeasibility — PROVEN MULTIPLE TIMES)
 
-**Attempt 1** (previous session): LP with 7 variables (a,b,c,p,q,r,X), products of 9 constraints up to degree 4. Result: INFEASIBLE.
+1. **G ≥ 0 directly** (5 variables A,C,p,q,r): LP with 202 certificate terms. **INFEASIBLE.**
+2. **G ≥ 0 with extended quadratic forms**: LP with additional degree-2 squares. **INFEASIBLE.**
+3. **K ≥ 0** (4 variables A,C,p,r, the q-free part after substituting q²≤V₂): LP with 717 terms including triple products and constraint×square combinations. **INFEASIBLE.**
+4. **Previous session results**: Two independent LP runs confirmed infeasibility with different variable sets.
 
-**Attempt 2** (this session): LP with 5 variables (A,C,p,r,X) after eliminating q via `h_Xpr` and substituting B=1-A. Used 827 nonneg basis terms (all products of constraints up to degree 4, including V1' and V2'). Matrix rank = 126 = full monomial count. Result: **INFEASIBLE** (HiGHS solver).
+**Root cause**: G has cross terms (pq, qr) with sign-varying coefficients that depend on parameters A, C. The constraint q²≤V has no linear-in-q terms. At degree 4, there is no way to generate the right parameter-dependent pq/qr coefficients from non-negative combinations of constraint products and squares. This is a structural impossibility, not a search failure.
 
-**Conclusion**: No set of `nlinarith` hints using products of the available hypotheses can close the goal. The current massive hint lists in `rvw_quad_same_sign` (lines 769-803), `rvw_quad_neg_neg` (822-848), and `rvw_quad_opp_sign` (864-868) are fundamentally unable to work.
+**Implication**: No `nlinarith` proof exists for G ≥ 0 regardless of what product hints are provided, as long as all hints have total degree ≤ 4 in the variables. The same applies to K ≥ 0.
 
-### SDP numerical certificate approach
+### AM-GM relaxation
 
-- SCS solver found a numerical Positivstellensatz certificate (SOS polynomial multipliers) with 2e-3 reconstruction error
-- CLARABEL solver failed with NumericalError (ill-conditioned SDP)
-- Rationalization of SCS solution: error grew to 2e-2
-- LP for exact rational weights on rounded terms: INFEASIBLE (rank 52 vs 126 needed)
+K ≥ |β₀|·(A-p+C-r) fails numerically (min ≈ -0.23). The tight bound K²≥β²V₂ cannot be relaxed to degree < 8 via AM-GM.
 
-**Conclusion**: Numerical SOS certificates don't have enough precision to extract exact rational proofs.
+### Discriminant/completing-the-square
+
+Completing the square of G in X yields Z²≤RHS where Z=2a²b²X-(b²-c²)p, which is algebraically equivalent to G ≥ 0. Circular — no simplification.
+
+### SDP/SOS numerical certificates (previous sessions)
+
+Numerical SOS certificates found but too imprecise to extract exact rational proofs.
 
 ## What IS Known (Mathematical Analysis)
 
 ### The inequality is true and tight (minimum = 0)
 
-Numerical optimization confirms G ≥ 0 everywhere on the constraint set, with G = 0 achieved at:
-
-1. **A = 1/2, any C, p=0, r=0, q=±√(AC)**: Here G = AC(2A-1)² = 0.
-2. **C = B (i.e., C = 1-A)**: Here B-C = 0, so G = AC - ABX². With X ≤ A+C = 1 and AB·1 = A(1-A) = AC when C = 1-A, G = 0.
+Numerical optimization confirms G ≥ 0 with G = 0 at:
+1. A = 1/2, C arbitrary, p=0, r=0, q=±√(AC): G = AC(2A-1)² = 0.
+2. C = B = 1-A: G = 0 along a curve.
 
 ### Key structural insights
 
-1. **G is concave in X** (coefficient of X² is -AB ≤ 0), so on any interval [0,T], G ≥ 0 if G(0) ≥ 0 and G(T) ≥ 0.
+1. **G is concave in q** (coefficient -4AB < 0). So for q ∈ [-√V₂, √V₂], G is minimized at the boundary q = ±√V₂.
+2. **G ≥ K + βq** where K = γ-4ABV₂ (substituting q²→V₂), β = 2[(B-C-2AB)p - 2ABr]. K ≥ 0 when V₂ ≤ V₁ (confirmed numerically). K² ≥ β²V₂ (confirmed numerically).
+3. **|X| ≤ a²+c² ≤ 1** (proved in Lean), so X² ≤ |X| ≤ 1.
+4. **WLOG V₂ ≤ V₁** by symmetry (p,r)→(-p,-r).
+5. **(b²-c²)|p||X| ≥ (b²-c²)pX** always (since `|p||X| = |pX| ≥ pX`), so proving G ≥ 0 suffices.
 
-2. **G(0) = AC ≥ 0** trivially.
+### The K+βq decomposition (degree 8 bottleneck)
 
-3. **X ≤ A+C** from V2 + AM-GM (the `X_le_sum_sq` lemma, almost proved).
+The proof chain is:
+1. G ≥ K + βq (linear bound from q²≤V₂, valid since coeff of q² is negative)
+2. K ≥ 0 (degree 4 in A,C,p,r — LP-infeasible at deg 4, needs higher degree or mathematical argument)
+3. K² ≥ β²V₂ (degree 8 in A,C,p,r — only feasible at high degree)
+4. K ≥ 0 and K² ≥ (βq)² imply K ≥ |βq|, so K+βq ≥ 0
+5. Therefore G ≥ 0.
 
-4. **G(A+C) is NOT always ≥ 0** from the (B-C)pX term alone when A > C and p is small. So simple concavity with T = A+C doesn't work.
+Steps 2 and 3 are the hard parts. Both require degree > 4 Positivstellensatz.
 
-5. **At p=0, r=0**: G = AC - 4ABq² and with q² ≤ AC (from V1∩V2 Cauchy-Schwarz), G = AC(1 - 4AB) = AC(2A-1)² ≥ 0.
+## Viable Proof Paths (for future sessions)
 
-6. **The `h_weighted` hypothesis** (A·q² ≤ C·(A²-p²)) is a derived constraint from (A-p)·V1 + (A+p)·V2. It provides a p-dependent tightening of the q-bound.
+### Path A: Quadratic-in-r elimination
 
-### Proof approach that should work (not yet implemented)
+K is quadratic in r with negative leading coefficient -AB (concave in r). So K ≥ 0 on the feasible r interval [max(-C, -pC/A), C]. Check K at the endpoints:
+- K(r=C): V₂=(A-p)·0=0 ⇒ q=0, simplifies to degree 2 in (A,C,p)
+- K(r=-pC/A): V₁=V₂ intersection, simplifies via parametrization
 
-The proof requires **polynomial SOS multipliers** (full Positivstellensatz), not scalar multipliers. Two viable paths:
+If K at both endpoints can be shown ≥ 0 by nlinarith (each is degree ≤ 4 in 3 variables), the concavity gives K ≥ 0 for all feasible r.
 
-**Path A: Mathematical proof via variable elimination and case analysis**
-- Eliminate q via h_Xpr, substitute B = 1-A
-- Case split on relationship between A and C
-- For A ≤ C: X ≤ A+C is achievable, G(A+C) ≥ 0 can be shown
-- For A > C: V1 constraint limits X below A+C; use V1∩V2 intersection analysis (r = -pC/A) and parametrize on unit circle
-- At V1∩V2 intersection with parametrization s = p/A, u = √(1-s²): G becomes a quadratic form on s²+u²=1 whose minimum is exactly 0 via the identity (a-c)² + b² = (2AC+a+c)²
+### Path B: Lean proof via completing the square + sqrt bounds
 
-**Path B: Decompose into smaller lemmas that nlinarith CAN handle individually**
-- Factor G into terms where each term's nonnegativity IS provable by nlinarith with simpler hint sets
-- Use the concavity lemma for sub-cases where it applies
-- Handle the tight cases (A ≈ 1/2, C ≈ 1/2) separately
+Instead of polynomial certificates, use Lean's real analysis:
+1. Complete the square: G = -AB(X-X₀)² + D where D = AC + (B-C)²p²/(4AB) ≥ 0
+2. Need |X-X₀| ≤ √(D/AB). This involves √ but might be provable using existing `Real.sqrt_le_sqrt` etc.
+3. Bound |X-X₀| using the constraints on q.
+
+### Path C: Direct vector-level proof in the operator theory
+
+Instead of proving the scalar inequality, prove the operator norm bound directly in Lean using inner product manipulations (avoiding the Rayleigh quotient reduction entirely). This would bypass the polynomial arithmetic bottleneck but requires significant restructuring.
+
+### Path D: SOS at degree 6+ with rational arithmetic
+
+Use an SDP solver with high-precision rational arithmetic (e.g., DSOS/SDSOS which reduce to LP/SOCP) to find exact rational certificates at degree 6 or 8. Then translate to Lean as explicit `have` statements.
 
 ## File Locations
 
-- Main Lean file: `AKS/RVWBound.lean` (lines 722-934 for the relevant section)
-- LP feasibility script: `/tmp/rvw_lp.py` (confirms scalar multiplier infeasibility)
-- Numerical minimization: `/tmp/min_G.py` (confirms G ≥ 0 with min = 0)
-- SDP scripts (from previous sessions): `/tmp/rvw_clarabel.py`, `/tmp/rvw_full_psatz.py`, `/tmp/rvw_psatz4.py`, `/tmp/rvw_psatz5.py`, `/tmp/rvw_extract_cert.py`
-
-## Recommended Next Steps
-
-1. **Abandon the current nlinarith approach entirely.** The hint lists cannot work (LP-proven).
-
-2. **Implement Path A**: Restructure `rvw_quad_same_sign` and siblings as a series of small helper lemmas:
-   - `X_le_sum_sq` (fix the existing almost-done proof)
-   - `G_at_zero_nonneg` (trivial: AC ≥ 0)
-   - `G_nonneg_at_p_zero` (use q² ≤ AC to get G = AC(2A-1)² ≥ 0)
-   - Handle general p via monotonicity or interpolation from p=0 case
-   - The V1∩V2 intersection analysis for the A > C case
-
-3. **Key mathematical insight to formalize**: At the V1∩V2 intersection, with r = -pC/A and q² = C(A²-p²)/A, the function G evaluated at these values simplifies to an expression that is manifestly ≥ 0. The hardest part is connecting the constrained minimum of G to this evaluation point.
+- Main Lean file: `AKS/RVWBound.lean`
+- This status doc: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
+- LP feasibility scripts: `/tmp/rvw_lp.py`, `/tmp/rvw_k_lp.py`
+- Numerical verification: `/tmp/rvw_g.py` (G≥0), `/tmp/rvw_decomp.py`
+- Previous SDP attempts: `/tmp/rvw_clarabel.py`, `/tmp/rvw_full_psatz.py`

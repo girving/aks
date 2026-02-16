@@ -1,11 +1,13 @@
 /-
   # ε-Halver Theory
 
-  Defines ε-halvers and proves the expander → halver bridge.
+  Defines ε-halvers and the expander → halver bridge.
 
   Key results:
-  • `IsEpsilonHalver`: ε-halver definition
-  • `expander_gives_halver`: expanders yield ε-halvers (proved)
+  • `countOnes`, `sortedVersion`: Boolean sequence sorting infrastructure
+  • `rank`, `EpsilonInitialHalved`, `EpsilonHalved`: permutation-based halver definitions
+  • `IsEpsilonHalver`: permutation-based ε-halver definition (AKS Section 3)
+  • `expander_gives_halver`: expanders yield ε-halvers (sorry — needs vertex expansion)
   • `IsEpsilonSorted`, `Monotone.bool_pattern`: sortedness infrastructure
 
   The actual AKS correctness proof (geometric decrease of unsortedness)
@@ -20,23 +22,75 @@ import AKS.Mixing
 open Finset BigOperators
 
 
-/-! **ε-Halvers** -/
+/-! **Sorted Version and Counting** -/
 
-/-- A comparator network is an ε-halver if, for every 0-1 input,
-    after applying the network, the excess of 1s in the top half
-    (beyond fair share) is at most `ε · (n / 2)`.
+/-- Count the number of `true` values in a Boolean sequence. -/
+def countOnes {n : ℕ} (v : Fin n → Bool) : ℕ :=
+  (Finset.univ.filter (fun i => v i = true)).card
 
-    Concretely: `onesInTop ≤ totalOnes / 2 + ε · (n / 2)`.
+/-- Count ones is bounded by `n`. -/
+lemma countOnes_le {n : ℕ} (v : Fin n → Bool) : countOnes v ≤ n := by
+  unfold countOnes
+  trans (Finset.univ : Finset (Fin n)).card
+  · exact Finset.card_filter_le _ _
+  · exact le_of_eq (Finset.card_fin n)
 
-    Intuitively: it balances 1s between the two halves, up to
-    an ε-fraction error. -/
+/-- The globally sorted version of a Boolean sequence: all 0s then all 1s.
+    The threshold is `n - countOnes v`, so positions `[0, threshold)` are false
+    and positions `[threshold, n)` are true. -/
+def sortedVersion {n : ℕ} (v : Fin n → Bool) : Fin n → Bool :=
+  fun i => decide (n - countOnes v ≤ i.val)
+
+/-- The sorted version is monotone. -/
+lemma sortedVersion_monotone {n : ℕ} (v : Fin n → Bool) : Monotone (sortedVersion v) := by
+  intro i j hij
+  unfold sortedVersion
+  by_cases h : n - countOnes v ≤ i.val
+  · have hj : n - countOnes v ≤ j.val := le_trans h hij
+    rw [decide_eq_true_eq.mpr h, decide_eq_true_eq.mpr hj]
+  · push_neg at h
+    rw [show decide (n - countOnes v ≤ i.val) = false from by simp; omega]
+    exact Bool.false_le _
+
+
+/-! **ε-Halvers (Permutation-Based Definition)** -/
+
+/-- The rank of an element: the number of strictly smaller elements.
+    For `Fin n`, this equals the element's value. -/
+def rank {α : Type*} [Fintype α] [LinearOrder α] (a : α) : ℕ :=
+  (Finset.univ.filter (· < a)).card
+
+/-- Initial-segment halver property (AKS Section 3, permutation-based):
+    for each initial segment `{0,...,k-1}` with `k ≤ n/2`, the number of
+    positions from the bottom half (`rank pos ≥ n/2`) whose output element
+    has rank < k is at most `ε · k`. -/
+def EpsilonInitialHalved {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) (ε : ℝ) : Prop :=
+  let n := Fintype.card α
+  ∀ k : ℕ, k ≤ n / 2 →
+    ((Finset.univ.filter (fun pos : α ↦
+        n / 2 ≤ rank pos ∧ rank (w pos) < k)).card : ℝ) ≤ ε * k
+
+/-- End-segment halver property: dual of `EpsilonInitialHalved` via order reversal. -/
+def EpsilonFinalHalved {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) (ε : ℝ) : Prop :=
+  EpsilonInitialHalved (α := αᵒᵈ) w ε
+
+/-- A function is ε-halved if it satisfies both initial and final segment bounds. -/
+def EpsilonHalved {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) (ε : ℝ) : Prop :=
+  EpsilonInitialHalved w ε ∧ EpsilonFinalHalved w ε
+
+/-- A comparator network is an ε-halver if for every permutation input,
+    the output is ε-halved.
+
+    (AKS Section 3) This tracks labeled elements via permutations rather than
+    0-1 values, which is essential for the segment-wise bounds — in the 0-1 case,
+    same-valued elements are indistinguishable, making segment-wise counting
+    impossible. -/
 def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
-  ∀ (v : Fin n → Bool),
-    let w := net.exec v
-    let topHalf := Finset.univ.filter (fun i : Fin n ↦ (i : ℕ) < n / 2)
-    let onesInTop := (topHalf.filter (fun i ↦ w i = true)).card
-    let totalOnes := (Finset.univ.filter (fun i : Fin n ↦ w i = true)).card
-    (onesInTop : ℝ) ≤ totalOnes / 2 + ε * (n / 2)
+  ∀ (v : Equiv.Perm (Fin n)),
+    EpsilonHalved (net.exec v) ε
 
 /-- The bipartite comparator list: for each vertex v and port p of G,
     compare wire v (top) with wire m + G.neighbor v p (bottom). -/
@@ -251,114 +305,10 @@ theorem expander_gives_halver (m d : ℕ) (G : RegularGraph m d)
     (β : ℝ) (hβ : spectralGap G ≤ β) :
     ∃ (net : ComparatorNetwork (2 * m)),
       IsEpsilonHalver net β ∧ net.size ≤ m * d := by
-  -- Construct the network
-  refine ⟨⟨bipartiteComparators G⟩, ?_, ?_⟩
-  · -- Halver property: bipartite comparator network is a β-halver
-    intro inp w topHalf onesInTop totalOnes
-    -- w := exec inp, topHalf := filter(< 2*m/2), onesInTop := card, totalOnes := card
-    -- Goal: (onesInTop : ℝ) ≤ totalOnes / 2 + β * (↑(2 * m) / 2)
-    -- Handle m = 0
-    rcases Nat.eq_zero_or_pos m with rfl | hm
-    · simp
-    · -- Simplify ↑(2 * m) / 2 to ↑m in the goal
-      have h2m_real : (↑(2 * m) : ℝ) / 2 = ↑m := by push_cast; ring
-      rw [h2m_real]
-      -- Bridge: topHalf uses 2*m/2, which equals m
-      have h2m_div : 2 * m / 2 = m := by omega
-      have h_topHalf : topHalf = Finset.univ.filter (fun i : Fin (2 * m) ↦ (i : ℕ) < m) := by
-        show Finset.univ.filter (fun i : Fin (2 * m) ↦ (i : ℕ) < 2 * m / 2) = _
-        ext i; simp only [Finset.mem_filter, Finset.mem_univ, true_and]; omega
-      -- S = top 1s, T' = bottom 0s (in G's vertex space Fin m)
-      set S := Finset.univ.filter (fun v : Fin m ↦ w ⟨v.val, by omega⟩ = true)
-      set T' := Finset.univ.filter (fun u : Fin m ↦ w ⟨m + u.val, by omega⟩ = false)
-      -- (1) onesInTop = S.card
-      have h_onesInTop : onesInTop = S.card := by
-        show (topHalf.filter (fun i ↦ w i = true)).card = S.card
-        rw [h_topHalf]
-        exact card_filter_top_half (fun i ↦ w i = true)
-      -- (2) totalOnes = S.card + onesInBot
-      set onesInBot := (Finset.univ.filter
-        (fun u : Fin m ↦ w ⟨m + u.val, by omega⟩ = true)).card
-      have h_totalOnes : totalOnes = S.card + onesInBot := by
-        show (Finset.univ.filter (fun i : Fin (2 * m) ↦ w i = true)).card = S.card + onesInBot
-        exact card_filter_fin_double (fun i ↦ w i = true)
-      -- (3) onesInBot + T'.card = m (partition of Fin m)
-      have h_bot_part : onesInBot + T'.card = m := by
-        have h := Finset.card_filter_add_card_filter_not
-          (fun u : Fin m ↦ w ⟨m + u.val, by omega⟩ = true)
-          (s := (Finset.univ : Finset (Fin m)))
-        simp only [Finset.card_univ, Fintype.card_fin] at h
-        -- h : #{true} + #{¬true} = m, need: onesInBot + T'.card = m
-        -- T' uses (=false), complement uses ¬(=true); bridge via Bool.not_eq_true'
-        suffices hsuff : T' = Finset.univ.filter
-            (fun u : Fin m ↦ ¬(w ⟨m + u.val, by omega⟩ = true)) by
-          rw [hsuff]; exact h
-        show Finset.univ.filter (fun u : Fin m ↦ w ⟨m + u.val, by omega⟩ = false) =
-          Finset.univ.filter (fun u : Fin m ↦ ¬(w ⟨m + u.val, by omega⟩ = true))
-        ext1 u; simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-        cases w ⟨m + u.val, by omega⟩ <;> decide
-      -- Finset cardinality bounds for S and onesInBot
-      have h_onesInBot_le : onesInBot ≤ m := by
-        calc onesInBot ≤ (Finset.univ : Finset (Fin m)).card := Finset.card_filter_le _ _
-          _ = m := by simp
-      have h_S_le : S.card ≤ m := by
-        calc S.card ≤ (Finset.univ : Finset (Fin m)).card := Finset.card_filter_le _ _
-          _ = m := by simp
-      -- (4) No edges from S to T'
-      have h_no_edge : ∀ v ∈ S, ∀ p : Fin d, G.neighbor v p ∉ T' := by
-        intro v hv p hmem
-        simp only [S, T', Finset.mem_filter, Finset.mem_univ, true_and] at hv hmem
-        -- hv : w ⟨v.val, _⟩ = true, hmem : w ⟨m + (G.nbr v p).val, _⟩ = false
-        -- exec_bipartite_edge_mono gives w[v] ≤ w[m + nbr] (definitionally via exec)
-        have h_le : w ⟨v.val, by omega⟩ ≤ w ⟨m + (G.neighbor v p).val, by omega⟩ :=
-          exec_bipartite_edge_mono G inp v p
-        rw [hv, hmem] at h_le
-        exact absurd h_le (by decide)
-      -- (5) Edge sum = 0
-      have h_edge_zero : ∑ v ∈ S, (Finset.univ.filter
-          (fun i : Fin d ↦ G.neighbor v i ∈ T')).card = 0 := by
-        apply Finset.sum_eq_zero; intro v hv
-        rw [Finset.card_eq_zero, Finset.filter_eq_empty_iff]
-        intro p _; exact h_no_edge v hv p
-      -- (6) Mixing lemma → product bound
-      have h_prod_bound : (↑S.card : ℝ) * ↑T'.card ≤ β ^ 2 * ↑m ^ 2 := by
-        have h_mix := expander_mixing_lemma G S T'
-        simp only [h_edge_zero, Nat.cast_zero, zero_div, zero_sub, abs_neg] at h_mix
-        rw [abs_of_nonneg (div_nonneg (mul_nonneg (Nat.cast_nonneg _) (Nat.cast_nonneg _))
-          (Nat.cast_nonneg _))] at h_mix
-        have h_β_nonneg : (0 : ℝ) ≤ β := le_trans (spectralGap_nonneg G) hβ
-        exact div_sqrt_to_sq_bound
-          (mul_nonneg (Nat.cast_nonneg _) (Nat.cast_nonneg _))
-          (by positivity : (0 : ℝ) < ↑m) h_β_nonneg
-          (h_mix.trans (mul_le_mul_of_nonneg_right hβ (Real.sqrt_nonneg _)))
-      -- (7) Apply quadratic halver bound
-      rw [h_onesInTop, h_totalOnes]
-      -- Goal: (↑#S : ℝ) ≤ (↑#S + ↑onesInBot) / 2 + β * ↑m
-      have h_β_nonneg : (0 : ℝ) ≤ β := le_trans (spectralGap_nonneg G) hβ
-      have h_T'_eq : (↑T'.card : ℝ) = ↑m - ↑onesInBot := by
-        have : (↑onesInBot : ℝ) + ↑T'.card = ↑m := by exact_mod_cast h_bot_part
-        linarith
-      apply quadratic_halver_bound
-        (Nat.cast_nonneg S.card) (Nat.cast_nonneg m)
-        (Nat.cast_nonneg (S.card + onesInBot))
-        (by simp only [Nat.cast_add]
-            have : (↑onesInBot : ℝ) ≤ ↑m := by exact_mod_cast h_onesInBot_le
-            linarith)
-        (by simp only [Nat.cast_add]
-            have : (↑S.card : ℝ) ≤ ↑m := by exact_mod_cast h_S_le
-            have : (↑onesInBot : ℝ) ≤ ↑m := by exact_mod_cast h_onesInBot_le
-            linarith)
-        h_β_nonneg
-      -- hbound: ↑S.card * (↑m + ↑S.card - ↑(S.card + onesInBot)) ≤ β² * ↑m²
-      -- Expand ↑(S.card + onesInBot) to ↑S.card + ↑onesInBot
-      push_cast
-      -- Now: ↑S.card * (↑m + ↑S.card - (↑S.card + ↑onesInBot)) ≤ β² * ↑m²
-      have : (↑m : ℝ) + ↑S.card - (↑S.card + ↑onesInBot) = ↑T'.card := by linarith [h_T'_eq]
-      rw [this]
-      exact h_prod_bound
-  · -- Size bound
-    simp only [ComparatorNetwork.size]
-    exact le_of_eq (bipartiteComparators_length G)
+  -- The permutation-based halver definition tracks labeled elements, requiring vertex
+  -- expansion (spectral gap → expansion via Alon-Chung or similar). The construction
+  -- (bipartite comparators from expander) is unchanged; only the proof technique changes.
+  sorry
 
 /-- Merge two sorted halves using iterated ε-halvers.
     After k rounds of ε-halving, the "unsortedness" decreases

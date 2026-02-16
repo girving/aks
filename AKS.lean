@@ -12,6 +12,8 @@ import AKS.Fin
 import AKS.AKSNetwork
 import AKS.Halver
 import AKS.TreeSorting
+import AKS.TreeDamageStability
+import AKS.TreeDamageImprovement
 import AKS.RegularGraph
 import AKS.Square
 import AKS.CompleteGraph
@@ -27,4 +29,7 @@ import AKS.DiagDominant
 import AKS.SpectralMatrix
 import AKS.CertificateBridge
 import AKS.NpyReader
+import AKS.Random16
+import AKS.Random1728
+import AKS.Random20736
 import AKS.Main

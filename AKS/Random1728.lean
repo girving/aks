@@ -17,9 +17,14 @@ namespace Random1728
 def rotData : String := bin_base85% "data/1728/rot_map.bin"
 def certData : String := bin_base85% "data/1728/cert_z.bin"
 
+theorem involution_check : checkInvolutionSpec (rotData.toUTF8) 1728 12 = true := by
+  native_decide
+
 def graph : RegularGraph 1728 12 where
   rot := rotFun rotData 1728 12 (by decide) (by decide)
-  rot_involution := by native_decide
+  rot_involution :=
+    checkInvolutionSpec_implies_rotFun_involution rotData 1728 12 (by decide) (by decide)
+      involution_check
 
 theorem certificate_passes :
     checkCertificate rotData certData 1728 12 792 9 2 = true := by

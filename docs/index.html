@@ -108,9 +108,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <div class="item"><div class="dot size-dot" style="width:22px;height:22px;"></div> months</div>
   </div>
   <div class="section">
-    <div class="item" style="color:#484f58;">
-      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#484f58" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#484f58"/></svg>
-      depends on
+    <div class="section-title">Edges</div>
+    <div class="item">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#3fb950" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#3fb950"/></svg>
+      all proved below
+    </div>
+    <div class="item">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#d29922" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#d29922"/></svg>
+      sorry/axiom below
     </div>
   </div>
 </div>
@@ -209,13 +214,13 @@ const PROOF_DATA = {
       sig: "zero_one_principle : (∀ v : Fin n → Bool, Monotone (net.exec v)) → IsSortingNetwork net",
       desc: "The 0-1 principle: if a comparator network sorts all Boolean inputs, it sorts everything." },
     // ── AKS/AKSNetwork.lean — iterated halver helpers ──
-    { id: "epsHalverMerge_exec_eq_iterate", file: "AKS/AKSNetwork.lean", line: 26, status: "proved", kind: "theorem",
+    { id: "epsHalverMerge_exec_eq_iterate", file: "AKS/AKSNetwork.lean", line: 27, status: "proved", kind: "theorem",
       sig: "epsHalverMerge_exec_eq_iterate : (epsHalverMerge n ε k halver).exec v = Nat.iterate (fun w ↦ halver.exec w) k v",
       desc: "Executing epsHalverMerge is iterating the halver's exec." },
-    { id: "epsHalverMerge_size", file: "AKS/AKSNetwork.lean", line: 39, status: "proved", kind: "theorem",
+    { id: "epsHalverMerge_size", file: "AKS/AKSNetwork.lean", line: 40, status: "proved", kind: "theorem",
       sig: "epsHalverMerge_size : (epsHalverMerge n ε k halver).size = k * halver.size",
       desc: "Size of epsHalverMerge is k times the halver size." },
-    { id: "mono_of_iterate_mono", file: "AKS/AKSNetwork.lean", line: 47, status: "proved", kind: "theorem",
+    { id: "mono_of_iterate_mono", file: "AKS/AKSNetwork.lean", line: 48, status: "proved", kind: "theorem",
       sig: "mono_of_iterate_mono : k₁ ≤ k₂ → Monotone (iterate f k₁ v) → Monotone (iterate f k₂ v)",
       desc: "If iterating k₁ times produces a monotone result, so does iterating k₂ ≥ k₁ times." },
     { id: "aks_size_bound", file: "AKS/AKSNetwork.lean", line: 82, status: "proved", kind: "theorem",
@@ -223,19 +228,19 @@ const PROOF_DATA = {
       desc: "Size arithmetic for the AKS construction using Nat.log ≤ logb and log 2 > 1/2." },
 
     // ── Halver.lean ──
-    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 33, status: "definition", kind: "def",
+    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 91, status: "definition", kind: "def",
       sig: "IsEpsilonHalver (net : ComparatorNetwork n) (ε : ℝ) : Prop",
-      desc: "ε-halver: ones in top half ≤ totalOnes/2 + ε·(n/2)." },
-    { id: "expander_gives_halver", file: "AKS/Halver.lean", line: 250, status: "proved", kind: "theorem",
+      desc: "ε-halver (AKS Section 3, permutation-based): for every permutation input, output is ε-halved — segment-wise bounds on displaced elements using rank." },
+    { id: "expander_gives_halver", file: "AKS/Halver.lean", line: 304, status: "sorry", kind: "theorem",
       sig: "expander_gives_halver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d",
-      desc: "An expander with spectral gap ≤ β yields a β-halver. Bridge from spectral to combinatorial. Proved via bipartite comparator construction + expander mixing lemma." },
-    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 366, status: "definition", kind: "def",
+      desc: "An expander with spectral gap ≤ β yields a β-halver (permutation-based). Needs vertex expansion (Alon-Chung).", difficulty: "weeks" },
+    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 316, status: "definition", kind: "def",
       sig: "epsHalverMerge (n ε : ℝ) (k : ℕ) (halver : ComparatorNetwork n) : ComparatorNetwork n",
       desc: "Iterated halver merge: apply halver k times for geometric convergence." },
-    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 418, status: "definition", kind: "def",
+    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 368, status: "definition", kind: "def",
       sig: "IsEpsilonSorted (v : Fin n → Bool) (ε : ℝ) : Prop",
       desc: "ε-sortedness: at most ε·n elements are out of place." },
-    { id: "Monotone.bool_pattern", file: "AKS/Halver.lean", line: 432, status: "proved", kind: "lemma",
+    { id: "Monotone.bool_pattern", file: "AKS/Halver.lean", line: 382, status: "proved", kind: "lemma",
       sig: "Monotone.bool_pattern (w : Fin n → Bool) (hw : Monotone w) :\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w ⟨i, ·⟩ = false) ∧ (∀ i, k ≤ i → w ⟨i, ·⟩ = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: a prefix of falses followed by trues. Threshold found via Nat.find." },
     // NOTE: wrongness, halver_decreases_wrongness, halver_composition, halver_convergence
@@ -309,13 +314,13 @@ const PROOF_DATA = {
     { id: "rvwBound_mono_right", file: "AKS/RVWBound.lean", line: 206, status: "proved", kind: "theorem",
       sig: "rvwBound_mono_right : b₁ ≤ b₂ → rvwBound a b₁ ≤ rvwBound a b₂",
       desc: "RVW bound is monotone in the second argument." },
-    { id: "rvw_quadratic_ineq", file: "AKS/RVWBound.lean", line: 725, status: "sorry", kind: "lemma",
+    { id: "rvw_quadratic_ineq", file: "AKS/RVWBound.lean", line: 784, status: "sorry", kind: "lemma",
       sig: "rvw_quadratic_ineq : (p+2q+r)² ≤ (1-μ₂²)μ₁|p+2q+r| + μ₂²",
       desc: "Core quadratic inequality for RVW bound. Needs manual polynomial factoring (nlinarith exceeds heartbeat limit).", difficulty: "days" },
     { id: "rayleigh_quotient_bound", file: "AKS/RVWBound.lean", line: 331, status: "sorry", kind: "lemma",
       sig: "rayleigh_quotient_bound : ‖A‖ = sSup (range (fun x ↦ |⟨Ax, x⟩|))",
       desc: "Rayleigh quotient characterization of self-adjoint operator norm.", difficulty: "weeks" },
-    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1123, status: "proved", kind: "theorem",
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1234, status: "proved", kind: "theorem",
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
       desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Uses hat/tilde decomposition, reflection Rayleigh quotients, and the RVW quadratic inequality." },
 
@@ -347,35 +352,61 @@ const PROOF_DATA = {
       desc: "Layer 2: Hermitian + strict diagonal dominance implies PSD. Direct quadratic form bound via AM-GM regrouping." },
 
     // ── CertificateBridge.lean ──
-    { id: "certMatrixReal", file: "AKS/CertificateBridge.lean", line: 37, status: "definition", kind: "def",
+    { id: "certMatrixReal", file: "AKS/CertificateBridge.lean", line: 36, status: "definition", kind: "def",
       sig: "certMatrixReal (certBytes : ByteArray) (n : ℕ) : Matrix (Fin n) (Fin n) ℝ",
       desc: "Certificate matrix Z decoded from base-85 bytes. Upper triangular: Z[i,j] = 0 for i > j." },
-    { id: "certMatrix_posdiag", file: "AKS/CertificateBridge.lean", line: 62, status: "proved", kind: "theorem",
+    { id: "certMatrix_posdiag", file: "AKS/CertificateBridge.lean", line: 61, status: "proved", kind: "theorem",
       sig: "certMatrix_posdiag :\n  checkPSDCertificate = true → ∀ j, 0 < Z j j",
       desc: "Certificate matrix has positive diagonal when PSD checker passes. Proved by extracting allDiagPositive check from the augmented checker via induction." },
-    { id: "kRowDominant_implies_diagDominant", file: "AKS/CertificateBridge.lean", line: 88, status: "sorry", kind: "theorem",
-      sig: "kRowDominant_implies_diagDominant :\n  checkKRowDominant = true → hmatch → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
-      desc: "Bridge: checkKRowDominant integer computation matches formal star Z * M * Z. Needs connecting mulAdj to adjMatrix via hmatch, then integer diagonal dominance → real." },
-    { id: "congruence_diagDominant", file: "AKS/CertificateBridge.lean", line: 110, status: "proved", kind: "theorem",
+    { id: "kRowDominant_implies_diagDominant", file: "AKS/CertificateBridge.lean", line: 409, status: "proved", kind: "theorem",
+      sig: "kRowDominant_implies_diagDominant :\n  checkAllRowsDomPure = true → hmatch → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
+      desc: "Bridge: pure functional checker matches formal star Z * M * Z. Proved via chain: certEntry↔Z, adjMul↔unnorm_adj, pEntry↔M*Z, kEntry↔Z*M*Z, then integer diag-dominance → real." },
+    { id: "checkColumnNormBound_perRow", file: "AKS/CertificateBridge.lean", line: 322, status: "proved", kind: "theorem",
+      sig: "checkColumnNormBound_perRow :\n  checkColumnNormBound = true → Z[i,i]·(δ+ε) > ε·T_i",
+      desc: "Per-row column-norm inequality. Proved by induction on checkPerRow (pure recursive checker)." },
+    { id: "congruence_diagDominant", file: "AKS/CertificateBridge.lean", line: 509, status: "proved", kind: "theorem",
       sig: "congruence_diagDominant :\n  checkCertificate = true → ∀ i, ∑ j≠i ‖K i j‖ < K i i",
-      desc: "K = Z*MZ is strictly row-diag-dominant. Proved by extracting checkKRowDominant from checkCertificate and applying the bridge lemma." },
-    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 143, status: "proved", kind: "theorem",
+      desc: "K = Z*MZ is strictly row-diag-dominant. Fully proved via checkColumnNormBound_spec + column-norm bounds." },
+    { id: "checker_implies_spectralMatrix_psd", file: "AKS/CertificateBridge.lean", line: 693, status: "proved", kind: "theorem",
       sig: "checker_implies_spectralMatrix_psd :\n  checkCertificate = true → (spectralMatrix G c₁ c₂ c₃).PosSemidef",
       desc: "Layer 3: certificate checker passes → spectral matrix PSD. Proof: Z upper-tri + pos-diag → invertible; K=Z*MZ Hermitian + diag-dominant → PSD; congruence → M PSD." },
-    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 194, status: "proved", kind: "theorem",
+    { id: "certificate_implies_walk_bound", file: "AKS/CertificateBridge.lean", line: 744, status: "proved", kind: "theorem",
       sig: "certificate_implies_walk_bound :\n  checkCertificate = true → c₂·d²·‖Wf‖² ≤ c₁·‖f‖²",
       desc: "Certificate → walk bound. Chains Layer 3 (certificate → PSD) with Layer 1 (PSD → walk bound)." },
-    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 224, status: "proved", kind: "theorem",
+    { id: "certificate_bridge", file: "AKS/CertificateBridge.lean", line: 774, status: "proved", kind: "theorem",
       sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
-    // ── Random.lean ──
-    { id: "baseExpander", file: "AKS/Random.lean", line: 99, status: "axiom", kind: "axiom",
+    // ── Random16.lean ──
+    { id: "Random16.graph", file: "AKS/Random16.lean", line: 23, status: "proved", kind: "def",
+      sig: "def Random16.graph : RegularGraph 16 4",
+      desc: "Concrete 4-regular graph on 16 vertices. Small test graph, rotation map verified by native_decide." },
+    { id: "Random16.gap", file: "AKS/Random16.lean", line: 33, status: "proved", kind: "theorem",
+      sig: "theorem Random16.gap : spectralGap graph ≤ 5/4",
+      desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=16) verified by native_decide." },
+
+    // ── Random1728.lean ──
+    { id: "Random1728.graph", file: "AKS/Random1728.lean", line: 23, status: "proved", kind: "def",
+      sig: "def Random1728.graph : RegularGraph 1728 12",
+      desc: "Concrete 12-regular graph on 1728 = 12³ vertices. Medium test graph, rotation map verified by native_decide." },
+    { id: "Random1728.gap", file: "AKS/Random1728.lean", line: 33, status: "proved", kind: "theorem",
+      sig: "theorem Random1728.gap : spectralGap graph ≤ 10/12",
+      desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
+
+    // ── Random20736.lean ──
+    { id: "Random20736.graph", file: "AKS/Random20736.lean", line: 31, status: "proved", kind: "def",
+      sig: "def Random20736.graph : RegularGraph 20736 12",
+      desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
+    { id: "Random20736.gap", file: "AKS/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
+      sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
+      desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
+    // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
+    { id: "baseExpander", file: "AKS/Random20736.lean", line: 31, status: "retired", kind: "axiom",
       sig: "axiom baseExpander : RegularGraph 20736 12",
-      desc: "Base expander: 12-regular graph on 20736 = 12^4 vertices. Axiomatized (certificate is infeasible)." },
-    { id: "baseExpander_gap", file: "AKS/Random.lean", line: 108, status: "axiom", kind: "axiom",
+      desc: "Retired: replaced by Random20736.graph." },
+    { id: "baseExpander_gap", file: "AKS/Random20736.lean", line: 41, status: "retired", kind: "axiom",
       sig: "axiom baseExpander_gap : spectralGap baseExpander ≤ 5/9",
-      desc: "Base expander has spectral gap ≤ 5/9 ≈ 0.556 (just above Alon-Boppana bound)." },
+      desc: "Retired: replaced by Random20736.gap." },
 
     // ── ZigZag.lean ──
     { id: "zigzag_spectral_bound", file: "AKS/ZigZag.lean", line: 30, status: "proved", kind: "theorem",
@@ -392,9 +423,9 @@ const PROOF_DATA = {
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
     // ── AKS/AKSNetwork.lean — top-level parameterized theorem ──
-    { id: "zigzag_implies_aks_network", file: "AKS/AKSNetwork.lean", line: 134, status: "sorry", kind: "theorem",
+    { id: "zigzag_implies_aks_network", file: "AKS/AKSNetwork.lean", line: 165, status: "proved", kind: "theorem",
       sig: "zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
-      desc: "Parameterized AKS theorem: expander family with gap β < 1/2 → O(n log n) sorting networks. Even case fully proved; odd case sorry'd." },
+      desc: "Parameterized AKS theorem: expander family → O(n log n) sorting networks. Builds halver family via Classical.choice, calls aks_tree_sorting." },
 
     // ── AKS/Main.lean — top-level assembly via iterated squaring ──
     { id: "squareIter", file: "AKS/Main.lean", line: 35, status: "definition", kind: "def",
@@ -417,45 +448,45 @@ const PROOF_DATA = {
     { id: "TreeNode", file: "AKS/TreeSorting.lean", line: 105, status: "definition", kind: "structure",
       sig: "structure TreeNode where\n  level : ℕ\n  index : ℕ",
       desc: "Position (level, index) in binary tree for register assignment." },
-    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 1780, status: "definition", kind: "def",
+    { id: "treeWrongness", file: "AKS/TreeSorting.lean", line: 1685, status: "definition", kind: "def",
       sig: "treeWrongness (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
       desc: "Tree-based wrongness measure Δᵣ(J): proportion of elements at tree-distance ≥ r from their target." },
-    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 2753, status: "proved", kind: "lemma",
+    { id: "halver_preserves_monotone", file: "AKS/TreeSorting.lean", line: 2431, status: "proved", kind: "lemma",
       sig: "halver_preserves_monotone : IsEpsilonHalver net ε → Monotone w → Monotone (net.exec w)",
       desc: "Applying an ε-halver to a monotone sequence preserves monotonicity." },
-    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1649, status: "proved", kind: "lemma",
+    { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1554, status: "proved", kind: "lemma",
       sig: "monotone_bool_zeros_then_ones : Monotone w →\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w i = false) ∧ (∀ i, k ≤ i → w i = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: threshold detected via Nat.find.", difficulty: "days" },
-    { id: "halver_balances_ones", file: "AKS/TreeSorting.lean", line: 2285, status: "proved", kind: "lemma",
-      sig: "halver_balances_ones : IsEpsilonHalver net ε →\n  onesInTop ≤ totalOnes / 2 + ε * (n / 2)",
-      desc: "Direct restatement of IsEpsilonHalver: ones in top half bounded after halving." },
-    { id: "countOnes_le", file: "AKS/TreeSorting.lean", line: 949, status: "proved", kind: "lemma",
+    { id: "countOnes_le", file: "AKS/Halver.lean", line: 32, status: "proved", kind: "lemma",
       sig: "countOnes_le : countOnes v ≤ n",
       desc: "Count of ones bounded by total elements (filter cardinality)." },
-    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1606, status: "proved", kind: "lemma",
+    { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1511, status: "proved", kind: "lemma",
       sig: "countOnes_split : countOnes v =\n  countOnesInRange v 0 (n/2) + countOnesInRange v (n/2) n",
       desc: "Partition count by ranges using Finset.card_union_of_disjoint.", difficulty: "days" },
-    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 2419, status: "proved", kind: "lemma",
+    { id: "comparator_displacement_bound", file: "AKS/TreeSorting.lean", line: 2144, status: "proved", kind: "lemma",
       sig: "comparator_displacement_bound :\n  #{i | c.apply v i ≠ v i} ≤ 2",
       desc: "Comparators change at most 2 positions (subset reasoning).", difficulty: "days" },
-    { id: "halver_bounds_top_excess", file: "AKS/TreeSorting.lean", line: 2329, status: "proved", kind: "lemma",
-      sig: "halver_bounds_top_excess :\n  countOnesInRange (net.exec v) 0 (n/2) ≤ countOnes (net.exec v) / 2 + ε * (n / 2)",
-      desc: "Output top half ones bounded (filter equivalence).", difficulty: "days" },
-    { id: "HasBoundedDamage", file: "AKS/TreeSorting.lean", line: 1018, status: "definition", kind: "def",
+    { id: "HasBoundedDamage", file: "AKS/TreeSorting.lean", line: 988, status: "definition", kind: "def",
       sig: "HasBoundedDamage (net : ComparatorNetwork n) (ε : ℝ) : Prop",
       desc: "Bounded-damage property: network increases elements at distance ≥ r by at most ε · (elements at distance ≥ r-2). Key interface between halver world and tree-sorting world.", difficulty: "done" },
-    { id: "halver_has_cherry_shift_damage", file: "AKS/TreeSorting.lean", line: 1384, status: "sorry", kind: "lemma",
-      sig: "halver_has_cherry_shift_damage :\n  IsEpsilonHalver halver ε → HasCherryShiftDamage halver ε t",
-      desc: "Bridge: ε-halver → cherry-shift damage bound. The halver's aggregate ε-balance implies local tree-distance damage at each level t.", difficulty: "weeks" },
-    { id: "HasCherryShiftDamage", file: "AKS/TreeSorting.lean", line: 1176, status: "definition", kind: "def",
-      sig: "HasCherryShiftDamage (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop",
-      desc: "Cherry-shift bounded-damage: like HasBoundedTreeDamage but r→r+1 in leading term. Captures cherry alternation effect." },
-    { id: "cherry_shift_implies_bounded_tree", file: "AKS/TreeSorting.lean", line: 1184, status: "proved", kind: "lemma",
-      sig: "cherry_shift_implies_bounded_tree :\n  HasCherryShiftDamage net ε t → HasBoundedTreeDamage net ε t",
-      desc: "CherryShift implies BoundedTree via anti-monotonicity: |E(v,r+1)| ≤ |E(v,r)|." },
-    { id: "cherry_shift_damage_gives_zigzag", file: "AKS/TreeSorting.lean", line: 1247, status: "proved", kind: "lemma",
-      sig: "cherry_shift_damage_gives_zigzag :\n  HasCherryShiftDamage zig ε t → HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t",
-      desc: "CherryShift + BoundedTree → Zigzag. Algebraic composition with ε²≤ε simplification." },
+    { id: "recursiveNearsort", file: "AKS/TreeSorting.lean", line: 1962, status: "definition", kind: "def",
+      sig: "recursiveNearsort (n : ℕ)\n  (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (depth : ℕ) : ComparatorNetwork n",
+      desc: "Recursive ε-nearsort from AKS Section 4. Applies halvers at each tree level (coarsest to finest) via applyHalversAtLevel." },
+    { id: "recursiveNearsortParity", file: "AKS/TreeSorting.lean", line: 1976, status: "definition", kind: "def",
+      sig: "recursiveNearsortParity (n : ℕ)\n  (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (depth parity : ℕ) : ComparatorNetwork n",
+      desc: "Parity-restricted recursive nearsort: zig (parity=0, even levels) and zag (parity=1, odd levels). AKS Section 6 decomposition." },
+    { id: "HasImprovedBound", file: "AKS/TreeSorting.lean", line: 1144, status: "definition", kind: "def",
+      sig: "HasImprovedBound (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop",
+      desc: "Like HasBoundedTreeDamage but with r+1 shift: elements at tree-dist ≥ r after ≤ elements at dist ≥ r+1 before + ε·error. The identity does NOT satisfy this — requires actual nearsort improvement." },
+    { id: "parity_nearsort_has_bounded_tree_damage", file: "AKS/TreeDamageStability.lean", line: 31, status: "sorry", kind: "lemma",
+      sig: "parity_nearsort_has_bounded_tree_damage :\n  (∀ m, IsEpsilonHalver (halvers m) ε) →\n  HasBoundedTreeDamage (recursiveNearsortParity n halvers depth parity) ε t",
+      desc: "Lemma 2a (AKS Section 8): parity-restricted nearsort → bounded tree damage (stability). Holds for both even and odd parities.", difficulty: "weeks" },
+    { id: "parity_nearsort_has_improved_bound", file: "AKS/TreeDamageImprovement.lean", line: 38, status: "sorry", kind: "lemma",
+      sig: "parity_nearsort_has_improved_bound :\n  (∀ m, IsEpsilonHalver (halvers m) ε) →\n  HasImprovedBound (recursiveNearsortParity n halvers depth 0) ε t",
+      desc: "Lemma 2b (AKS Section 8): even-level nearsort → HasImprovedBound (cherry-parity improvement). The key construction-specific lemma.", difficulty: "weeks" },
+    { id: "bounded_tree_damage_pair_gives_zigzag", file: "AKS/TreeSorting.lean", line: 1199, status: "proved", kind: "lemma",
+      sig: "bounded_tree_damage_pair_gives_zigzag :\n  HasImprovedBound zig ε t → HasBoundedTreeDamage zig ε t →\n  HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t",
+      desc: "Lemma 3 (AKS Section 8): PROVED. Algebraic — combines zig improvement + zig/zag stability, uses ε²≤ε. Previously FALSE (Phase 3e)." },
 
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/TreeSorting.lean", line: 840, status: "definition", kind: "def",
@@ -464,39 +495,39 @@ const PROOF_DATA = {
     { id: "sectionNode", file: "AKS/TreeSorting.lean", line: 865, status: "definition", kind: "def",
       sig: "sectionNode (n t : ℕ) (i : Fin n) : TreeNode",
       desc: "TreeNode at level t for position i. Maps each position to its section in the binary tree." },
-    { id: "positionTreeDist", file: "AKS/TreeSorting.lean", line: 1050, status: "definition", kind: "def",
+    { id: "positionTreeDist", file: "AKS/TreeSorting.lean", line: 1020, status: "definition", kind: "def",
       sig: "positionTreeDist (n t : ℕ) (v : Fin n → Bool) (i : Fin n) : ℕ",
       desc: "Tree displacement of position i: tree distance from i's section to threshold section at level t." },
-    { id: "elementsAtTreeDist", file: "AKS/TreeSorting.lean", line: 1129, status: "definition", kind: "def",
+    { id: "elementsAtTreeDist", file: "AKS/TreeSorting.lean", line: 1099, status: "definition", kind: "def",
       sig: "elementsAtTreeDist (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : Finset (Fin n)",
       desc: "Elements in J displaced at tree-distance ≥ r. Time-dependent V2 of elementsAtDistance." },
-    { id: "HasBoundedTreeDamage", file: "AKS/TreeSorting.lean", line: 1159, status: "definition", kind: "def",
+    { id: "HasBoundedTreeDamage", file: "AKS/TreeSorting.lean", line: 1129, status: "definition", kind: "def",
       sig: "HasBoundedTreeDamage (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop",
       desc: "V2 bounded-damage using tree distance. Network increases tree-dist count by ≤ ε·count(r-2)." },
-    { id: "treeWrongnessV2", file: "AKS/TreeSorting.lean", line: 1795, status: "definition", kind: "def",
+    { id: "treeWrongnessV2", file: "AKS/TreeSorting.lean", line: 1700, status: "definition", kind: "def",
       sig: "treeWrongnessV2 (n t : ℕ) (v : Fin n → Bool) (J : Interval n) (r : ℕ) : ℝ",
       desc: "V2 tree wrongness using elementsAtTreeDist. Genuinely time-dependent (depends on t via sectionNode)." },
-    { id: "cherry_wrongness_after_nearsort_v2", file: "AKS/TreeSorting.lean", line: 2762, status: "proved", kind: "lemma",
+    { id: "cherry_wrongness_after_nearsort_v2", file: "AKS/TreeSorting.lean", line: 2440, status: "proved", kind: "lemma",
       sig: "cherry_wrongness_after_nearsort_v2 :\n  treeWrongnessV2 (net.exec v) J r ≤ treeWrongnessV2 v J r + ε·treeWrongnessV2 v J (r-2)",
       desc: "V2: Cherry wrongness after nearsort. Same algebraic proof using HasBoundedTreeDamage." },
-    { id: "zig_step_bounded_increase_v2", file: "AKS/TreeSorting.lean", line: 2848, status: "proved", kind: "lemma",
+    { id: "zig_step_bounded_increase_v2", file: "AKS/TreeSorting.lean", line: 2526, status: "proved", kind: "lemma",
       sig: "zig_step_bounded_increase_v2 :\n  treeWrongnessV2 v' J r ≤ 8·A·(treeWrongnessV2 v J r + ε·treeWrongnessV2 v J (r-2))",
       desc: "V2: Zig step bounded increase. Same algebraic proof using HasBoundedTreeDamage and treeWrongnessV2." },
-    { id: "positionTreeDist_succ_le", file: "AKS/TreeSorting.lean", line: 1069, status: "proved", kind: "lemma",
+    { id: "positionTreeDist_succ_le", file: "AKS/TreeSorting.lean", line: 1039, status: "proved", kind: "lemma",
       sig: "positionTreeDist_succ_le :\n  positionTreeDist n (t+1) v i ≤ positionTreeDist n t v i + 2",
       desc: "Tree distance increases by at most 2 when refining from level t to t+1. Uses sectionIndex_succ_div_two and indexAtLevel agreement." },
-    { id: "HasBoundedZigzagDamage", file: "AKS/TreeSorting.lean", line: 1226, status: "definition", kind: "definition",
+    { id: "HasBoundedZigzagDamage", file: "AKS/TreeSorting.lean", line: 1174, status: "definition", kind: "definition",
       sig: "HasBoundedZigzagDamage zig_net zag_net ε t : Prop",
       desc: "Combined zigzag bounded-damage with r → r+1 distance shift. Key structural property of even/odd cherry alternation." },
-    { id: "register_reassignment_increases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2796, status: "proved", kind: "lemma",
+    { id: "register_reassignment_increases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2474, status: "proved", kind: "lemma",
       sig: "register_reassignment_increases_wrongness_v2 :\n  treeWrongnessV2 (t+1) v J' r ≤ C · treeWrongnessV2 t v J (r-2)",
       desc: "V2 Lemma 1: Register reassignment. Single v, J'⊆J, distance shift 2, parameterized constant C." },
-    { id: "zigzag_decreases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2905, status: "proved", kind: "lemma",
+    { id: "zigzag_decreases_wrongness_v2", file: "AKS/TreeSorting.lean", line: 2583, status: "proved", kind: "lemma",
       sig: "zigzag_decreases_wrongness_v2 :\n  treeWrongnessV2 t v'' J r ≤ treeWrongnessV2 t v J (r+1) + 3ε·tw(r-4)",
       desc: "V2 Lemma 3: ZigZag combined step. Proved from HasBoundedZigzagDamage + anti-monotonicity consolidation." },
-    { id: "aks_tree_sorting", file: "AKS/TreeSorting.lean", line: 3029, status: "sorry", kind: "theorem", milestone: true,
-      sig: "aks_tree_sorting : IsEpsilonHalver halver ε → ε < 1/2 →\n  ∃ k, k ≤ 100 · log₂ n ∧ Monotone (iterate halver.exec k v)",
-      desc: "Main theorem: ε-halver sorts in O(log n) iterations. Assembles Lemmas 1-4 via induction on cycles.", difficulty: "months" }
+    { id: "aks_tree_sorting", file: "AKS/AKSNetwork.lean", line: 142, status: "sorry", kind: "theorem", milestone: true,
+      sig: "aks_tree_sorting : (∀ m, IsEpsilonHalver (halvers m) ε) → ε < 1/2 →\n  ∃ net, net.size ≤ 200·(d+1)·n·log₂ n ∧ ∀ v, Monotone (net.exec v)",
+      desc: "Main theorem: halver family → O(n log n) sorting network. Uses recursiveNearsort with multi-level halvers.", difficulty: "months" }
   ],
 
   // Edges: [source, target] means "target depends on source" (arrow points from source to target)
@@ -596,7 +627,6 @@ const PROOF_DATA = {
     ["rvwBound", "rvwBound_mono_right"],
     ["rvwBound", "rvw_quadratic_ineq"],
     ["rvw_quadratic_ineq", "rvw_operator_norm_bound"],
-    ["rayleigh_quotient_bound", "rvw_operator_norm_bound"],
 
     // Zig-zag assembly
     ["zigzag_walkCLM_eq", "zigzag_spectral_bound"],
@@ -628,7 +658,18 @@ const PROOF_DATA = {
     ["zigzagFamily_gap", "explicit_expanders_exist_zigzag"],
     ["zigzagFamily", "explicit_expanders_exist_zigzag"],
 
-    // Base expander
+    // Base expanders (Random16, Random1728, Random20736)
+    ["RegularGraph", "Random16.graph"],
+    ["certificate_bridge", "Random16.gap"],
+    ["Random16.graph", "Random16.gap"],
+    ["RegularGraph", "Random1728.graph"],
+    ["certificate_bridge", "Random1728.gap"],
+    ["Random1728.graph", "Random1728.gap"],
+    ["RegularGraph", "Random20736.graph"],
+    ["certificate_bridge", "Random20736.gap"],
+    ["Random20736.graph", "Random20736.gap"],
+    ["Random20736.gap", "explicit_expanders_exist_zigzag"],
+    // Retired edges (for historical snapshots)
     ["RegularGraph", "baseExpander"],
     ["spectralGap", "baseExpander_gap"],
     ["baseExpander", "baseExpander_gap"],
@@ -641,28 +682,23 @@ const PROOF_DATA = {
     ["zero_one_principle", "zigzag_implies_aks_network"],
     ["aks_tree_sorting", "zigzag_implies_aks_network"],
     ["expander_gives_halver", "zigzag_implies_aks_network"],
-    ["epsHalverMerge_exec_eq_iterate", "zigzag_implies_aks_network"],
-    ["epsHalverMerge_size", "zigzag_implies_aks_network"],
-    ["mono_of_iterate_mono", "zigzag_implies_aks_network"],
-    ["aks_size_bound", "zigzag_implies_aks_network"],
 
     // TreeSorting — edges FROM main proof chain into TreeSorting
-    ["IsEpsilonHalver", "halver_balances_ones"],
     ["IsEpsilonHalver", "halver_preserves_monotone"],
-    ["IsEpsilonHalver", "halver_has_cherry_shift_damage"],
+    ["IsEpsilonHalver", "parity_nearsort_has_bounded_tree_damage"],
+    ["IsEpsilonHalver", "parity_nearsort_has_improved_bound"],
     ["Comparator", "comparator_displacement_bound"],
 
     // TreeSorting — internal edges
     ["TreeNode", "treeWrongness"],
-    ["halver_balances_ones", "halver_bounds_top_excess"],
     ["countOnes_le", "countOnes_split"],
-    ["halver_has_cherry_shift_damage", "HasCherryShiftDamage"],
-    ["elementsAtTreeDist", "HasCherryShiftDamage"],
-    ["HasCherryShiftDamage", "cherry_shift_implies_bounded_tree"],
-    ["cherry_shift_implies_bounded_tree", "HasBoundedTreeDamage"],
-    ["HasCherryShiftDamage", "cherry_shift_damage_gives_zigzag"],
-    ["HasBoundedTreeDamage", "cherry_shift_damage_gives_zigzag"],
-    ["cherry_shift_damage_gives_zigzag", "HasBoundedZigzagDamage"],
+    ["recursiveNearsortParity", "parity_nearsort_has_bounded_tree_damage"],
+    ["recursiveNearsortParity", "parity_nearsort_has_improved_bound"],
+    ["parity_nearsort_has_bounded_tree_damage", "HasBoundedTreeDamage"],
+    ["parity_nearsort_has_improved_bound", "HasImprovedBound"],
+    ["HasImprovedBound", "bounded_tree_damage_pair_gives_zigzag"],
+    ["HasBoundedTreeDamage", "bounded_tree_damage_pair_gives_zigzag"],
+    ["bounded_tree_damage_pair_gives_zigzag", "HasBoundedZigzagDamage"],
 
     // V2 tree-distance-based definitions
     ["TreeNode", "sectionNode"],
@@ -686,7 +722,9 @@ const PROOF_DATA = {
     // aks_tree_sorting — depends on V2 chain
     ["register_reassignment_increases_wrongness_v2", "aks_tree_sorting"],
     ["zigzag_decreases_wrongness_v2", "aks_tree_sorting"],
-    ["halver_has_cherry_shift_damage", "aks_tree_sorting"],
+    ["parity_nearsort_has_bounded_tree_damage", "aks_tree_sorting"],
+    ["parity_nearsort_has_improved_bound", "aks_tree_sorting"],
+    ["bounded_tree_damage_pair_gives_zigzag", "aks_tree_sorting"],
 
     // Main.lean — iterated squaring and final assembly
     ["spectralGap_square", "spectralGap_squareIter"],
@@ -715,6 +753,7 @@ const PROOF_DATA = {
     ["certMatrixReal", "certMatrix_posdiag"],
     ["certMatrixReal", "kRowDominant_implies_diagDominant"],
     ["kRowDominant_implies_diagDominant", "congruence_diagDominant"],
+    ["checkColumnNormBound_perRow", "congruence_diagDominant"],
     ["certMatrix_posdiag", "checker_implies_spectralMatrix_psd"],
     ["congruence_diagDominant", "checker_implies_spectralMatrix_psd"],
     ["diagDominant_posSemidef", "checker_implies_spectralMatrix_psd"],
@@ -744,7 +783,9 @@ const PROOF_DATA = {
     { id: "AKS/SpectralMatrix.lean", label: "SpectralMatrix.lean", color: "#1a1e24" },
     { id: "AKS/DiagDominant.lean", label: "DiagDominant.lean", color: "#1a1e24" },
     { id: "AKS/CertificateBridge.lean", label: "CertificateBridge.lean", color: "#1a1e24" },
-    { id: "AKS/Random.lean", label: "Random.lean", color: "#1a1e24" },
+    { id: "AKS/Random16.lean", label: "Random16.lean", color: "#1a1e24" },
+    { id: "AKS/Random1728.lean", label: "Random1728.lean", color: "#1a1e24" },
+    { id: "AKS/Random20736.lean", label: "Random20736.lean", color: "#1a1e24" },
     { id: "AKS/TreeSorting.lean", label: "TreeSorting.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]
@@ -755,11 +796,13 @@ const statusColor = {
   proved: "#3fb950",
   sorry: "#d29922",
   axiom: "#f85149",
-  definition: "#58a6ff"
+  definition: "#58a6ff",
+  retired: "#30363d"  // hidden in live view, visible when scrubbing history
 };
 
 // Difficulty → radius mapping
-function difficultyRadius(d) {
+function difficultyRadius(d, status) {
+  if (status === "retired") return 0;
   if (!d) return 4;
   if (d === "days") return 6;
   if (d === "1-2 weeks" || d === "weeks") return 8;
@@ -809,7 +852,7 @@ const maxDepth = Math.max(...PROOF_DATA.nodes.map(n => depth.get(n.id)));
 // ── Assign radius and initial positions ──
 PROOF_DATA.nodes.forEach(n => {
   n.depth = depth.get(n.id);
-  n.radius = difficultyRadius(n.difficulty);
+  n.radius = difficultyRadius(n.difficulty, n.status);
 });
 
 // Group nodes by file for group rectangles
@@ -845,19 +888,21 @@ layers.forEach((nodesInLayer, d) => {
 const svg = d3.select("#graph");
 const g = svg.append("g");
 
-// Arrow marker
+// Arrow markers (green for clean edges, orange for edges with sorry/axiom below)
 const defs2 = svg.append("defs");
-defs2.append("marker")
-  .attr("id", "arrowhead")
-  .attr("viewBox", "0 0 10 6")
-  .attr("refX", 10)
-  .attr("refY", 3)
-  .attr("markerWidth", 8)
-  .attr("markerHeight", 5)
-  .attr("orient", "auto")
-  .append("polygon")
-  .attr("points", "0,0 10,3 0,6")
-  .attr("fill", "#484f58");
+[["arrow-green", "#3fb950"], ["arrow-orange", "#d29922"]].forEach(([id, color]) => {
+  defs2.append("marker")
+    .attr("id", id)
+    .attr("viewBox", "0 0 10 6")
+    .attr("refX", 10)
+    .attr("refY", 3)
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto")
+    .append("polygon")
+    .attr("points", "0,0 10,3 0,6")
+    .attr("fill", color);
+});
 
 // Zoom
 const zoom = d3.zoom()
@@ -886,13 +931,46 @@ function resetZoom(instant) {
 let labelsVisible = true;
 function toggleLabels() {
   labelsVisible = !labelsVisible;
-  g.selectAll(".node-label").attr("opacity", labelsVisible ? 1 : 0);
+  g.selectAll(".node-label").attr("opacity", d => (d.status !== "retired" && labelsVisible) ? 1 : 0);
 }
 
 // ── Build links ──
 const links = PROOF_DATA.edges
   .filter(([s, t]) => nodeMap.has(s) && nodeMap.has(t))
   .map(([s, t]) => ({ source: nodeMap.get(s), target: nodeMap.get(t) }));
+
+// ── Edge color computation ──
+// For each node, compute whether it and all its transitive dependencies are
+// "clean" (proved or definition).  Edge color = green if source is clean,
+// orange if any dependency below is sorry/axiom.
+const depsMap = new Map();
+PROOF_DATA.nodes.forEach(n => depsMap.set(n.id, []));
+links.forEach(l => {
+  const arr = depsMap.get(l.target.id);
+  if (arr) arr.push(l.source.id);
+});
+
+let edgeCleanMap;
+function computeEdgeColors(getStatus) {
+  const clean = new Map();
+  function check(id) {
+    if (clean.has(id)) return clean.get(id);
+    clean.set(id, true); // cycle guard
+    const st = getStatus(id);
+    if (st !== "proved" && st !== "definition") { clean.set(id, false); return false; }
+    for (const dep of (depsMap.get(id) || [])) {
+      if (!check(dep)) { clean.set(id, false); return false; }
+    }
+    return true;
+  }
+  PROOF_DATA.nodes.forEach(n => check(n.id));
+  edgeCleanMap = clean;
+}
+function edgeStroke(l) { return edgeCleanMap.get(l.source.id) ? "#3fb950" : "#d29922"; }
+function edgeMarker(l) { return edgeCleanMap.get(l.source.id) ? "url(#arrow-green)" : "url(#arrow-orange)"; }
+
+// Initial computation from live statuses
+computeEdgeColors(id => nodeMap.get(id)?.status || "sorry");
 
 // ── Force simulation for organic layout ──
 // Strong Y force keeps depth ordering; charge + collision spread nodes apart
@@ -924,8 +1002,15 @@ simulation.on("end", () => {
 });
 
 function isNodeVisible(id) {
-  if (currentSnapshotIndex === null || !HISTORY_DATA) return true;
-  if (currentSnapshotIndex >= HISTORY_DATA.snapshots.length) return true;
+  if (currentSnapshotIndex === null || !HISTORY_DATA) {
+    // Live view: hide retired nodes
+    const node = nodeMap.get(id);
+    return node && node.status !== "retired";
+  }
+  if (currentSnapshotIndex >= HISTORY_DATA.snapshots.length) {
+    const node = nodeMap.get(id);
+    return node && node.status !== "retired";
+  }
   return !!HISTORY_DATA.snapshots[currentSnapshotIndex].nodes[id];
 }
 
@@ -950,10 +1035,13 @@ const linkSel = g.append("g")
   .data(links)
   .join("path")
   .attr("class", "link")
-  .attr("stroke", "#30363d")
+  .attr("stroke", edgeStroke)
   .attr("stroke-width", 1.2)
-  .attr("opacity", 0.3)
-  .attr("marker-end", "url(#arrowhead)");
+  .attr("opacity", l => {
+    if (l.source.status === "retired" || l.target.status === "retired") return 0;
+    return 0.35;
+  })
+  .attr("marker-end", edgeMarker);
 
 // ── Draw nodes ──
 const nodeSel = g.append("g")
@@ -964,6 +1052,7 @@ const nodeSel = g.append("g")
   .attr("r", d => d.radius)
   .attr("fill", d => statusColor[d.status])
   .attr("stroke", d => d3.color(statusColor[d.status]).darker(0.5).formatHex())
+  .attr("opacity", d => d.status === "retired" ? 0 : 1)
   .call(d3.drag()
     .on("start", (e, d) => { if (!e.active) simulation.alphaTarget(0.15).restart(); d.fx = d.x; d.fy = d.y; })
     .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
@@ -976,6 +1065,7 @@ const labelSel = g.append("g")
   .data(PROOF_DATA.nodes)
   .join("text")
   .attr("class", "node-label")
+  .attr("opacity", d => d.status === "retired" ? 0 : 1)
   .text(d => {
     let name = d.id;
     name = name.replace("RegularGraph.", "").replace("CLM", "");
@@ -1084,9 +1174,12 @@ nodeSel.on("mouseover.highlight", (e, d) => {
   if (HISTORY_DATA && slider && parseInt(slider.value) < HISTORY_DATA.snapshots.length) {
     applySnapshot(parseInt(slider.value), false);
   } else {
-    nodeSel.attr("opacity", 1);
-    labelSel.attr("opacity", labelsVisible ? 1 : 0);
-    linkSel.attr("opacity", 0.3);
+    nodeSel.attr("opacity", d => d.status === "retired" ? 0 : 1);
+    labelSel.attr("opacity", d => (d.status !== "retired" && labelsVisible) ? 1 : 0);
+    linkSel.attr("opacity", l => {
+      if (l.source.status === "retired" || l.target.status === "retired") return 0;
+      return 0.35;
+    }).attr("stroke", edgeStroke).attr("marker-end", edgeMarker);
   }
 });
 
@@ -1152,7 +1245,7 @@ function applySnapshot(index, animated) {
   // Nodes: position, color, size, opacity
   tw(nodeSel)
     .attr("cx", d => d.x).attr("cy", d => d.y)
-    .attr("r", d => vis.get(d.id) ? d.radius : 0)
+    .attr("r", d => vis.get(d.id) ? (d.radius || 4) : 0)
     .attr("fill", d => {
       const st = isLive ? d.status : (snapshot.nodes[d.id] || null);
       return statusColor[st] || statusColor[d.status];
@@ -1168,11 +1261,19 @@ function applySnapshot(index, animated) {
     .attr("x", d => d.x).attr("y", d => d.y + d.radius + 12)
     .attr("opacity", d => (vis.get(d.id) && labelsVisible) ? 1 : 0);
 
-  // Edges: path + opacity (opacity hides arrows too, unlike stroke-opacity)
+  // Recompute edge colors for this snapshot's statuses
+  computeEdgeColors(id => {
+    const st = isLive ? nodeMap.get(id)?.status : (snapshot.nodes[id] || null);
+    return st || nodeMap.get(id)?.status || "sorry";
+  });
+
+  // Edges: path, color, opacity
   tw(linkSel)
     .attr("d", edgePath)
+    .attr("stroke", edgeStroke)
+    .attr("marker-end", edgeMarker)
     .attr("opacity", l => {
-      return (isLive || (vis.get(l.source.id) && vis.get(l.target.id))) ? 0.3 : 0;
+      return (isLive || (vis.get(l.source.id) && vis.get(l.target.id))) ? 0.35 : 0;
     });
 
   // Group rects: recompute bounds from visible nodes only
@@ -1410,7 +1511,7 @@ function dismissTooltip() {
   } else {
     nodeSel.attr('opacity', d => isNodeVisible(d.id) ? 1 : 0);
     labelSel.attr('opacity', d => (isNodeVisible(d.id) && labelsVisible) ? 1 : 0);
-    linkSel.attr('opacity', 0.3);
+    linkSel.attr('opacity', 0.35).attr('stroke', edgeStroke).attr('marker-end', edgeMarker);
   }
 }
 

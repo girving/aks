@@ -939,36 +939,6 @@ lemma cherry_elements_partition {n : ℕ} (cherry : Cherry n) :
     rw [Interval.mem_toFinset_iff] at hb
     omega
 
-/-! **Count Ones and Sorted Version (needed for element classification)** -/
-
-/-- Helper: Count ones in a boolean sequence. -/
-def countOnes {n : ℕ} (v : Fin n → Bool) : ℕ :=
-  (Finset.univ.filter (fun i => v i = true)).card
-
-/-- Count ones is bounded by n. -/
-lemma countOnes_le {n : ℕ} (v : Fin n → Bool) : countOnes v ≤ n := by
-  unfold countOnes
-  trans (Finset.univ : Finset (Fin n)).card
-  · exact Finset.card_filter_le _ _
-  · exact le_of_eq (Finset.card_fin n)
-
-/-- The globally sorted version of a Boolean sequence: all 0s then all 1s.
-    The threshold is `n - countOnes v`, so positions `[0, threshold)` are false
-    and positions `[threshold, n)` are true. -/
-def sortedVersion {n : ℕ} (v : Fin n → Bool) : Fin n → Bool :=
-  fun i => decide (n - countOnes v ≤ i.val)
-
-/-- The sorted version is monotone. -/
-lemma sortedVersion_monotone {n : ℕ} (v : Fin n → Bool) : Monotone (sortedVersion v) := by
-  intro i j hij
-  unfold sortedVersion
-  by_cases h : n - countOnes v ≤ i.val
-  · have hj : n - countOnes v ≤ j.val := le_trans h hij
-    rw [decide_eq_true_eq.mpr h, decide_eq_true_eq.mpr hj]
-  · push_neg at h
-    rw [show decide (n - countOnes v ≤ i.val) = false from by simp; omega]
-    exact Bool.false_le _
-
 /-- Helper: Partition elements in an interval by where they belong.
     Elements belong either to lower sections (should be in left/bottom),
     upper sections (should be in right/top), or locally (stay in place).
@@ -1162,46 +1132,34 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
       (elementsAtTreeDist n t v J r).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
 
-/-- Cherry-shift bounded-damage: like `HasBoundedTreeDamage` but with `r+1` in the
-    leading term instead of `r`. This captures the effect of cherry alternation:
-    a zig (or zag) network operating on one cherry partition shifts the distance
-    threshold by one level.
+/-- Tree-distance-based improved-bound property.
+    Like `HasBoundedTreeDamage` but with an `r → r+1` shift: elements at
+    tree-distance ≥ `r` after the network are bounded by elements at
+    tree-distance ≥ `r+1` BEFORE, plus `ε` times count at `r-2`.
 
-    Specifically: elements at tree-distance ≥ `r` after the network are bounded by
-    elements at tree-distance ≥ `r+1` before, plus `ε` times elements at `r-2`.
-
-    This is strictly stronger than `HasBoundedTreeDamage` (which has `r` instead of
-    `r+1` in the leading term). The `r+1` shift is the mechanism that makes zigzag
-    achieve geometric decrease in wrongness. -/
-def HasCherryShiftDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
+    This is STRONGER than `HasBoundedTreeDamage` (which uses `r` not `r+1` on RHS).
+    The identity network does NOT satisfy this — the improvement requires the network
+    to actually push elements closer to their sorted positions, which is what
+    the cherry-parity structure of the AKS construction achieves. -/
+def HasImprovedBound {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
   ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
     ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
       (elementsAtTreeDist n t v J (r + 1)).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
 
-/-- `HasCherryShiftDamage` implies `HasBoundedTreeDamage` via anti-monotonicity:
-    `|E(v, J, r+1)| ≤ |E(v, J, r)|`, so the cherry-shift bound is stronger. -/
-lemma cherry_shift_implies_bounded_tree {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
-    (hε_nn : 0 ≤ ε) (h : HasCherryShiftDamage net ε t) :
-    HasBoundedTreeDamage net ε t := by
-  intro v J r
-  have hanti : ((elementsAtTreeDist n t v J (r + 1)).card : ℝ) ≤
-      (elementsAtTreeDist n t v J r).card :=
-    Nat.cast_le.mpr (Finset.card_le_card (elementsAtTreeDist_anti v J r))
-  calc ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ)
-      ≤ (elementsAtTreeDist n t v J (r + 1)).card +
-          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := h v J r
-    _ ≤ (elementsAtTreeDist n t v J r).card +
-          ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card := by
-        linarith
+/-- A Boolean sequence is ε-nearsorted if every initial segment `{0,...,k-1}`
+    and end segment `{k,...,n-1}` has at most `ε · |segment|` displaced elements
+    (positions where `v` differs from `sortedVersion v`).
 
-/-- Helper: nested if-distance simplification.
-    `(if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
-     (if r ≥ 4 then r - 4 else 0)` -/
-private lemma nested_if_dist_eq (r : ℕ) :
-    (if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
-    (if r ≥ 4 then r - 4 else 0) := by
-  split_ifs <;> omega
+    (AKS Section 4) This is the output guarantee of the recursive nearsort,
+    and is stronger than simple ε-sortedness (which only counts total displacements). -/
+def IsEpsilonNearsorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
+  let sv := sortedVersion v
+  ∀ k : ℕ, k ≤ n →
+    ((Finset.univ.filter (fun i : Fin n ↦
+        (i : ℕ) < k ∧ v i ≠ sv i)).card : ℝ) ≤ ε * k ∧
+    ((Finset.univ.filter (fun i : Fin n ↦
+        k ≤ (i : ℕ) ∧ v i ≠ sv i)).card : ℝ) ≤ ε * (n - k)
 
 /-- V2: Combined zigzag bounded-damage with `r → r+1` distance shift.
 
@@ -1210,19 +1168,9 @@ private lemma nested_if_dist_eq (r : ℕ) :
     tree-distance ≥ `r+1` before, plus error terms from exceptions at each step.
 
     This is the KEY structural property of even/odd cherry alternation
-    (AKS Section 6). It does NOT follow from composing two `HasBoundedTreeDamage`
-    properties alone — it requires that zig has `HasCherryShiftDamage` (the `r+1`
-    shift from operating on one cherry partition).
-
-    The `r+1` in the first term is the geometric decrease mechanism:
-    after each zigzag cycle, wrongness at distance `r` is controlled
-    by wrongness at distance `r+1` before the cycle.
-
-    Error term coefficients:
-    - `2ε` on `r-2`: zig exceptions (`ε·|E(v,r-2)|`) plus zag exceptions on
-      zig output (`ε·|E(v',r-2)|`), where `|E(v',r-2)|` is bounded by
-      `|E(v,r-2)| + ε·|E(v,r-4)|` from cherry shift at `r-2`
-    - `ε` on `r-4`: cross-term `ε²·|E(v,r-4)|`, simplified using `ε ≤ 1` -/
+    (AKS Section 6). The `r+1` in the first term is the geometric decrease
+    mechanism: after each zigzag cycle, wrongness at distance `r` is controlled
+    by wrongness at distance `r+1` before the cycle. -/
 def HasBoundedZigzagDamage {n : ℕ}
     (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
   ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
@@ -1232,72 +1180,56 @@ def HasBoundedZigzagDamage {n : ℕ}
         2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
         ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
 
-/-- Composing zig (`HasCherryShiftDamage`) and zag (`HasBoundedTreeDamage`) gives
-    combined zigzag damage with the `r → r+1` improvement.
+/-- **Lemma 3 (AKS Section 8):** Zigzag combination from improvement + stability.
 
-    **Proof:**
-    1. From zag (BoundedTreeDamage) at `r` with input `v' = zig.exec v`:
-       `|E(v'',J,r)| ≤ |E(v',J,r)| + ε·|E(v',J,s)|`  where s = if r≥2 then r-2 else 0
-    2. From zig (CherryShiftDamage) at `r`:
-       `|E(v',J,r)| ≤ |E(v,J,r+1)| + ε·|E(v,J,s)|`
-    3. From zig (as BoundedTreeDamage, implied by cherry shift) at `s`:
-       `|E(v',J,s)| ≤ |E(v,J,s)| + ε·|E(v,J,s')|`  where s' = if r≥4 then r-4 else 0
-    4. Combine: `|E(v'',J,r)| ≤ |E(v,J,r+1)| + 2ε·|E(v,J,s)| + ε²·|E(v,J,s')|`
-    5. Since `ε ≤ 1`: `ε² ≤ ε`, giving the exact `HasBoundedZigzagDamage` bound. -/
-lemma cherry_shift_damage_gives_zigzag
+    Given:
+    - Zig has the `r → r+1` improvement (`HasImprovedBound`): the cherry-parity
+      structure of the AKS construction pushes elements closer to sorted positions.
+    - Zig has stability (`HasBoundedTreeDamage`): bounded damage at lower distances.
+    - Zag has stability (`HasBoundedTreeDamage`): bounded damage.
+
+    Then zig-then-zag satisfies `HasBoundedZigzagDamage`.
+
+    **Proof** (algebraic):
+    1. Zag stability: `|E(v'',r)| ≤ |E(v',r)| + ε·|E(v',r-2)|`
+    2. Zig improvement: `|E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,r-2)|`
+    3. Zig stability: `|E(v',r-2)| ≤ |E(v,r-2)| + ε·|E(v,r-4)|`
+    4. Substitute: `|E(v'',r)| ≤ |E(v,r+1)| + 2ε·|E(v,r-2)| + ε²·|E(v,r-4)|`
+    5. Since `ε ≤ 1`: `ε² ≤ ε`, giving the `HasBoundedZigzagDamage` bound. -/
+lemma bounded_tree_damage_pair_gives_zigzag
     {n : ℕ} (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ)
     (hε_nn : 0 ≤ ε) (hε_le : ε ≤ 1)
-    (hzig : HasCherryShiftDamage zig_net ε t)
-    (hzag : HasBoundedTreeDamage zag_net ε t) :
+    (hzig_improve : HasImprovedBound zig_net ε t)
+    (hzig_stable : HasBoundedTreeDamage zig_net ε t)
+    (hzag_stable : HasBoundedTreeDamage zag_net ε t) :
     HasBoundedZigzagDamage zig_net zag_net ε t := by
   intro v J r
   set v' := zig_net.exec v
-  set v'' := zag_net.exec v'
-  set s := if r ≥ 2 then r - 2 else 0 with hs_def
-  set s' := if r ≥ 4 then r - 4 else 0 with hs'_def
-  -- Step 1: zag bound (HasBoundedTreeDamage at r, input v')
-  have h_zag := hzag v' J r
-  -- Step 2: zig bound (HasCherryShiftDamage at r, input v)
-  have h_zig_r := hzig v J r
-  -- Step 3: zig bound at s (via cherry_shift_implies_bounded_tree)
-  have h_zig_btd := cherry_shift_implies_bounded_tree zig_net ε t hε_nn hzig
-  have h_zig_s := h_zig_btd v J s
-  -- Step 4: Combine. Need nested_if_dist_eq to simplify the s-of-s term.
-  rw [nested_if_dist_eq] at h_zig_s
-  -- Step 5: ε² ≤ ε
-  have hε_sq : ε * ε ≤ ε := by nlinarith [sq_nonneg (1 - ε)]
-  -- Chain the inequalities
-  -- Step 1: zag at r gives |E(v'',r)| ≤ |E(v',r)| + ε·|E(v',s)|
-  have h1 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
-      (elementsAtTreeDist n t v' J r).card +
-        ε * (elementsAtTreeDist n t v' J s).card := h_zag
-  -- Step 2: zig at r gives |E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,s)|
-  -- (h_zig_r already has this)
-  -- Step 3: zig at s gives |E(v',s)| ≤ |E(v,s)| + ε·|E(v,s')|
-  -- (h_zig_s already has this, with nested_if_dist_eq applied)
-  -- Combine: substitute into h1
-  have h2 : ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
-      ((elementsAtTreeDist n t v J (r + 1)).card +
-        ε * (elementsAtTreeDist n t v J s).card) +
-      ε * ((elementsAtTreeDist n t v J s).card +
-        ε * (elementsAtTreeDist n t v J s').card) := by
-    calc ((elementsAtTreeDist n t v'' J r).card : ℝ)
-        ≤ (elementsAtTreeDist n t v' J r).card +
-            ε * (elementsAtTreeDist n t v' J s).card := h1
-      _ ≤ ((elementsAtTreeDist n t v J (r + 1)).card +
-              ε * (elementsAtTreeDist n t v J s).card) +
-            ε * ((elementsAtTreeDist n t v J s).card +
-              ε * (elementsAtTreeDist n t v J s').card) := by
-          -- Multiply h_zig_s by ε to linearize
-          have h_eps_s : ε * ((elementsAtTreeDist n t v' J s).card : ℝ) ≤
-              ε * ((elementsAtTreeDist n t v J s).card +
-                ε * (elementsAtTreeDist n t v J s').card) :=
-            mul_le_mul_of_nonneg_left h_zig_s hε_nn
-          linarith [h_zig_r, h_eps_s]
-  -- Expand and simplify: ε² ≤ ε (so ε²·x ≤ ε·x)
-  have hs'_nn : (0 : ℝ) ≤ ((elementsAtTreeDist n t v J s').card : ℝ) :=
-    Nat.cast_nonneg _
-  nlinarith [hε_sq, hs'_nn]
+  -- Step 1: Zag stability
+  have h1 := hzag_stable v' J r
+  -- Step 2: Zig improvement
+  have h2 := hzig_improve v J r
+  -- Step 3: Zig stability at (if r≥2 then r-2 else 0)
+  have h3 := hzig_stable v J (if r ≥ 2 then r - 2 else 0)
+  -- ε² ≤ ε
+  have hε_sq : ε * ε ≤ ε := by nlinarith
+  -- The nested conditional from h3: (if (if r≥2 then r-2 else 0) ≥ 2 then ... else 0)
+  -- Need: elementsAtTreeDist at nested conditional ≤ elementsAtTreeDist at (if r≥4 then r-4 else 0)
+  -- Case split on r to simplify all conditionals
+  -- Auxiliary: nested conditional in HasBoundedTreeDamage applied at (if r≥2 then r-2 else 0)
+  -- equals (if r≥4 then r-4 else 0)
+  have h_cond : elementsAtTreeDist n t v J
+      (if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
+      elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0) := by
+    congr 1; split_ifs <;> omega
+  rw [h_cond] at h3
+  -- Now h1: |E(v'',r)| ≤ |E(v',r)| + ε·|E(v',r₂)|
+  -- h2: |E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,r₂)|
+  -- h3: |E(v',r₂)| ≤ |E(v,r₂)| + ε·|E(v,r₄)|
+  -- Goal: |E(v'',r)| ≤ |E(v,r+1)| + 2ε·|E(v,r₂)| + ε·|E(v,r₄)|
+  have hE_nn : (0 : ℝ) ≤ ((elementsAtTreeDist n t v J
+    (if r ≥ 4 then r - 4 else 0)).card : ℝ) := Nat.cast_nonneg _
+  nlinarith
 
 /-- Elements partition into three disjoint sets: toLower, toUpper, correctlyPlaced. -/
 lemma elements_partition {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
@@ -1358,33 +1290,6 @@ lemma displaced_elements_le {n t : ℕ} (v : Fin n → Bool) (J : Interval n) :
   exact Finset.card_le_card (Finset.union_subset
     (by simp [elementsToLower])
     (by simp [elementsToUpper]))
-
-/-- **Halver → Cherry Shift Damage** (AKS Section 8)
-
-    An ε-halver satisfies `HasCherryShiftDamage` at any tree level `t`.
-    This is the bridge from the aggregate balance property (`IsEpsilonHalver`:
-    `onesInTop ≤ totalOnes/2 + ε·(n/2)`) to the local tree-distance damage
-    property used in the sorting proof.
-
-    The cherry-shift property says: after applying the halver, elements at
-    tree-distance ≥ r are bounded by elements at tree-distance ≥ r+1 before,
-    plus ε times elements at tree-distance ≥ r-2 before.
-
-    The r+1 shift (vs r for `HasBoundedTreeDamage`) captures that the halver
-    operates on complementary cherries — it processes top/bottom halves, which
-    correspond to alternating tree nodes. This structural alignment means the
-    halver "sees" one level of the tree hierarchy per application.
-
-    Mathematical argument: The halver's ε-balance guarantee controls how many
-    elements can cross the midpoint. Elements already at high tree-distance
-    either stay in place or move to the correct side, reducing their distance.
-    New exceptions arise only from the ε-fraction imbalance, and these are
-    concentrated at distance ≤ 2 from the threshold within the relevant
-    cherry partition. -/
-lemma halver_has_cherry_shift_damage {n : ℕ} (halver : ComparatorNetwork n) (ε : ℝ)
-    (hε : 0 < ε) (hhalver : IsEpsilonHalver halver ε) (t : ℕ) :
-    HasCherryShiftDamage halver ε t := by
-  sorry
 
 /-! **Sections and Tree-Based Wrongness (AKS Section 8)** -/
 
@@ -2019,104 +1924,60 @@ lemma displacement_from_tree_wrongness {n t : ℕ} (ht : t ≥ 1) (v : Fin n →
     · exact globalWrongness_nonneg v r
   linarith
 
-/-! **ε-Nearsort Construction (AKS Section 4)** -/
+/-! **Recursive Nearsort Construction (AKS Section 4)** -/
 
-/-- Recursive ε-nearsort construction from AKS Section 4.
+/-- Apply a halver to a sub-interval `[offset, offset + 2*m)` within an `n`-wire network.
+    The halver operates on `2*m` wires and is shifted to the correct position. -/
+private def applyHalverToSubinterval (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (m offset : ℕ) (h : offset + 2 * m ≤ n) : ComparatorNetwork n :=
+  (halvers m).shiftEmbed n offset h
 
-    Given an ε₁-halver, construct an ε-nearsort by:
-    - Applying ε₁-halver to the entire range
-    - Recursively applying to top/bottom halves
-    - Continuing until pieces are smaller than εm
+/-- Apply halvers to all sub-intervals at a given tree level.
+    At level `l`: there are `2^l` sub-intervals, each of size `⌊n / 2^l⌋`.
+    Each sub-interval is halved by applying the appropriate halver via `shiftEmbed`. -/
+private def applyHalversAtLevel (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (level : ℕ) : ComparatorNetwork n :=
+  let chunkSize := n / 2 ^ level
+  let halfChunk := chunkSize / 2
+  let numChunks := 2 ^ level
+  { comparators := (List.range numChunks).flatMap fun k ↦
+      let offset := k * chunkSize
+      if h : offset + 2 * halfChunk ≤ n then
+        (applyHalverToSubinterval n halvers halfChunk offset h).comparators
+      else [] }
 
-    Parameters:
-    - m: size of the region to sort
-    - ε: target nearsort parameter
-    - ε₁: halver parameter (must be << ε)
-    - depth: recursion depth (for termination)
+/-- Recursive ε-nearsort from AKS Section 4.
+    Takes a halver family (one halver per sub-interval size, from the expander family)
+    and applies halvers at each tree level, from coarsest (level 0) to finest.
 
-    The construction ensures that at most ε fraction of elements
-    remain out of place relative to their target sections.
+    At level `l`, there are `2^l` sub-intervals of size `⌊n / 2^l⌋`.
+    Each sub-interval is halved using `halvers (⌊n / 2^l⌋ / 2)`.
 
-    **STUB:** Current implementation just iterates the halver on the full range.
-    The correct AKS construction recursively applies to sub-ranges (top/bottom halves).
-    See `halver_has_cherry_shift_damage` for the bridge from halver to damage bound. -/
-noncomputable def epsilonNearsort (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
-    (depth : ℕ) : ComparatorNetwork m :=
-  if h : depth = 0 ∨ m < 2 then
-    -- Base case: no sorting needed or recursion limit reached
-    { comparators := [] }
-  else
-    -- Apply halver to entire range, then recurse.
-    -- Full implementation needs index remapping for top/bottom halves.
-    -- For now: apply halver `depth` times (simple iteration).
-    have hd : depth ≠ 0 := by push_neg at h; exact h.1
-    have : depth - 1 < depth := Nat.sub_lt (Nat.pos_of_ne_zero hd) Nat.one_pos
-    let rest := epsilonNearsort m ε ε₁ halver (depth - 1)
-    { comparators := halver.comparators ++ rest.comparators }
-  termination_by depth
+    This replaces the old `epsilonNearsort` which just iterated a single halver
+    and had a FALSE statement. The key insight: different halvers at each level
+    (derived from different-sized expander graphs) provide the mixing structure
+    needed for tree-distance damage bounds. -/
+noncomputable def recursiveNearsort (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (depth : ℕ) : ComparatorNetwork n :=
+  { comparators := (List.range depth).flatMap fun l ↦
+      (applyHalversAtLevel n halvers l).comparators }
 
--- NOTE: `epsilonNearsort_correct` was deleted because the `epsilonNearsort` definition
--- is a stub (just iterates the halver, doesn't do recursive sub-range application).
--- The correct bridge is `halver_has_cherry_shift_damage`, which proves a single halver
--- satisfies `HasCherryShiftDamage` — the key property for the sorting proof.
+/-- Recursive ε-nearsort restricted to levels with a given parity.
+    For `parity = 0`: applies halvers at levels 0, 2, 4, ... (even levels).
+    For `parity = 1`: applies halvers at levels 1, 3, 5, ... (odd levels).
 
-/-- The length of `epsilonNearsort` is `depth * |halver|`. -/
-private lemma epsilonNearsort_length (m : ℕ) (ε ε₁ : ℝ) (halver : ComparatorNetwork m)
-    (depth : ℕ) :
-    (epsilonNearsort m ε ε₁ halver depth).comparators.length =
-      (if m < 2 then 0 else depth * halver.comparators.length) := by
-  induction depth with
-  | zero =>
-    simp [epsilonNearsort]
-  | succ d ih =>
-    unfold epsilonNearsort
-    by_cases hm : d + 1 = 0 ∨ m < 2
-    · -- base case: d+1 = 0 is impossible, so m < 2
-      have hm2 : m < 2 := by omega
-      simp [epsilonNearsort, hm2]
-    · simp only [dif_neg hm]
-      push_neg at hm
-      have hm2 : ¬(m < 2) := by omega
-      have hd1 : d + 1 - 1 = d := by omega
-      simp only [List.length_append, hm2, ↓reduceIte, hd1] at ih ⊢
-      rw [ih]
-      ring
-  termination_by depth
-
-/-- Recursion depth for ε-nearsort is logarithmic. -/
-lemma epsilonNearsort_depth_bound (m : ℕ) (ε : ℝ) (hε : 0 < ε) (hε1 : ε < 1) :
-    ∃ depth : ℕ, depth ≤ 2 * Nat.log 2 m ∧
-      (∀ ε₁ (halver : ComparatorNetwork m),
-        halver.comparators.length ≤ m →
-        (epsilonNearsort m ε ε₁ halver depth).comparators.length ≤ m * depth) := by
-  refine ⟨2 * Nat.log 2 m, le_refl _, fun ε₁ halver hsize => ?_⟩
-  rw [epsilonNearsort_length]
-  split_ifs with hm
-  · omega
-  · -- depth * |halver| ≤ m * depth since |halver| ≤ m
-    rw [Nat.mul_comm m]
-    exact Nat.mul_le_mul_left _ hsize
-
-/-- Error accumulation through recursive halvers. -/
-lemma error_accumulation_bound {m : ℕ} {ε : ℝ} (depth : ℕ) (ε₁ : ℝ)
-    (hε : 0 < ε) (hdepth : depth ≤ Nat.log 2 m) (hε₁ : ε₁ < ε / depth ^ 4) :
-    depth * ε₁ < ε := by
-  by_cases hd : depth = 0
-  · simp [hd]; linarith
-  · have hd_pos : (0 : ℝ) < depth := Nat.cast_pos.mpr (Nat.pos_of_ne_zero hd)
-    have hd_ge1 : (1 : ℝ) ≤ depth := by exact_mod_cast Nat.pos_of_ne_zero hd
-    -- Step 1: depth * ε₁ < depth * (ε / depth^4)
-    have h1 : (depth : ℝ) * ε₁ < (depth : ℝ) * (ε / (depth : ℝ) ^ 4) :=
-      mul_lt_mul_of_pos_left hε₁ hd_pos
-    -- Step 2: depth * (ε / depth^4) = ε / depth^3
-    have h2 : (depth : ℝ) * (ε / (depth : ℝ) ^ 4) = ε / (depth : ℝ) ^ 3 := by
-      have hd_ne : (depth : ℝ) ≠ 0 := ne_of_gt hd_pos
-      field_simp
-    -- Step 3: ε / depth^3 ≤ ε
-    have h3 : ε / (depth : ℝ) ^ 3 ≤ ε := by
-      have hd3 : (1 : ℝ) ≤ (depth : ℝ) ^ 3 := by nlinarith [sq_nonneg ((depth : ℝ) - 1)]
-      exact div_le_self (le_of_lt hε) hd3
-    linarith
+    This is the "zig" (`parity = 0`) and "zag" (`parity = 1`) decomposition
+    from AKS Section 6: zig operates on even-level cherries, zag on odd-level.
+    The partition offset between even and odd levels creates the `r → r+1`
+    distance improvement that drives geometric convergence of wrongness. -/
+noncomputable def recursiveNearsortParity (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (depth : ℕ) (parity : ℕ) : ComparatorNetwork n :=
+  { comparators := ((List.range depth).filter (· % 2 = parity)).flatMap fun l ↦
+      (applyHalversAtLevel n halvers l).comparators }
 
 /-! **Boolean Sequence Helpers** -/
 
@@ -2278,142 +2139,6 @@ lemma swap_preserves_countOnes {n : ℕ} (v : Fin n → Bool) (i j : Fin n) :
     rw [h1, h2]; ring
 
 /-! **Connecting Halvers to Element Movement** -/
-
-/-- A halver balances ones between top and bottom halves.
-
-    This is a restatement of IsEpsilonHalver for convenience. -/
-lemma halver_balances_ones {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
-    let w := net.exec v
-    let topHalf := Finset.univ.filter (fun i : Fin n => (i : ℕ) < n / 2)
-    let onesInTop := (topHalf.filter (fun i => w i = true)).card
-    let totalOnes := (Finset.univ.filter (fun i : Fin n => w i = true)).card
-    (onesInTop : ℝ) ≤ totalOnes / 2 + ε * (n / 2) := by
-  -- This follows directly from the definition of IsEpsilonHalver
-  exact hnet v
-
-/-- If more than the fair share of ones are in the top half before halving,
-    the halver bounds the excess ones in the top half of the output. -/
-lemma halver_pushes_excess_down {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool)
-    (h_excess : (Finset.univ.filter (fun i : Fin n => (i : ℕ) < n/2 ∧ v i = true)).card >
-                 (Finset.univ.filter (fun i => v i = true)).card / 2) :
-    (countOnesInRange (net.exec v) 0 (n/2) : ℝ) ≤ (countOnes (net.exec v) : ℝ) / 2 + ε * (n / 2) := by
-  -- Inline proof using halver_balances_ones (which is hnet v)
-  have h := halver_balances_ones net ε hnet v
-  -- Need to show the filters are equivalent
-  unfold countOnesInRange countOnes
-  have h_filter_eq : (Finset.univ.filter (fun i : Fin n => 0 ≤ (i : ℕ) ∧ (i : ℕ) < n / 2 ∧ net.exec v i = true)).card =
-                      ((Finset.univ.filter (fun i : Fin n => (i : ℕ) < n / 2)).filter (fun i => net.exec v i = true)).card := by
-    congr 1; ext i
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-    constructor
-    · intro ⟨_, hlt, htrue⟩; exact ⟨hlt, htrue⟩
-    · intro ⟨hlt, htrue⟩; exact ⟨Nat.zero_le _, hlt, htrue⟩
-  rw [h_filter_eq]
-  exact h
-
-/-- Network execution preserves monotone witnesses: for any monotone w,
-    `net.exec w` is also monotone. -/
-lemma balance_implies_movement {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
-    ∀ (w : Fin n → Bool), Monotone w →
-      ∃ w' : Fin n → Bool, Monotone w' := by
-  intro w hw
-  exact ⟨net.exec w, ComparatorNetwork.exec_preserves_monotone net w hw⟩
-
-/-- After applying a halver, excess ones in the top are bounded.
-
-    This is a key step toward showing that elements move correctly.
-    Note: The bound is in terms of total ones in the OUTPUT, not input. -/
-lemma halver_bounds_top_excess {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool) :
-    countOnesInRange (net.exec v) 0 (n/2) ≤ countOnes (net.exec v) / 2 + ε * (n / 2) := by
-  -- This follows directly from IsEpsilonHalver
-  unfold countOnesInRange countOnes
-  -- Use the halver property
-  have h := halver_balances_ones net ε hnet v
-  -- Need to show the filters are equivalent
-  have h_filter_eq : (Finset.univ.filter (fun i : Fin n => 0 ≤ (i : ℕ) ∧ (i : ℕ) < n / 2 ∧ net.exec v i = true)).card =
-                      ((Finset.univ.filter (fun i : Fin n => (i : ℕ) < n / 2)).filter (fun i => net.exec v i = true)).card := by
-    congr 1
-    ext i
-    simp only [Finset.mem_filter, Finset.mem_univ, true_and, and_assoc]
-    constructor
-    · intro ⟨_, hlt, htrue⟩; exact ⟨hlt, htrue⟩
-    · intro ⟨hlt, htrue⟩; exact ⟨Nat.zero_le _, hlt, htrue⟩
-  rw [h_filter_eq]
-  exact h
-
-/-- If an input has excess ones in the top half, the halver will reduce this excess. -/
-lemma halver_reduces_top_excess {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε) (v : Fin n → Bool)
-    (h_excess : countOnesInRange v 0 (n/2) > countOnes v / 2) :
-    -- After halving, the excess is bounded by ε * (n / 2)
-    countOnesInRange (net.exec v) 0 (n/2) - countOnes v / 2 ≤ ε * (n / 2) := by
-  have h_bound := halver_bounds_top_excess net ε hnet v
-  -- Prove countOnes is preserved by network execution (inline)
-  have h_pres : (countOnes (net.exec v) : ℝ) = (countOnes v : ℝ) := by
-    suffices h : countOnes (net.exec v) = countOnes v by exact_mod_cast h
-    unfold ComparatorNetwork.exec
-    have h_fold : ∀ (cs : List (Comparator n)) (w : Fin n → Bool),
-        countOnes (List.foldl (fun acc c => c.apply acc) w cs) = countOnes w := by
-      intro cs
-      induction cs with
-      | nil => intro w; rfl
-      | cons c cs' ih =>
-        intro w
-        simp only [List.foldl_cons]
-        rw [ih (c.apply w)]
-        unfold countOnes
-        -- Comparator preserves count: partition by {c.i, c.j} vs rest
-        set S := ({c.i, c.j} : Finset (Fin n))
-        set T := Finset.univ \ S
-        have hST : Disjoint S T := Finset.disjoint_sdiff
-        have hUnion : S ∪ T = Finset.univ := by
-          simp [S, T, Finset.union_sdiff_of_subset (Finset.subset_univ _)]
-        have split_new : (Finset.univ.filter (fun i => c.apply w i = true)).card =
-            (S.filter (fun i => c.apply w i = true)).card +
-            (T.filter (fun i => c.apply w i = true)).card := by
-          rw [← Finset.card_union_of_disjoint (Finset.disjoint_filter_filter hST)]
-          congr 1; rw [← Finset.filter_union, hUnion]
-        have split_old : (Finset.univ.filter (fun i => w i = true)).card =
-            (S.filter (fun i => w i = true)).card +
-            (T.filter (fun i => w i = true)).card := by
-          rw [← Finset.card_union_of_disjoint (Finset.disjoint_filter_filter hST)]
-          congr 1; rw [← Finset.filter_union, hUnion]
-        rw [split_new, split_old]
-        have hT_eq : (T.filter (fun i => c.apply w i = true)).card =
-                     (T.filter (fun i => w i = true)).card := by
-          congr 1; ext k; simp only [Finset.mem_filter, T, Finset.mem_sdiff, Finset.mem_univ,
-            true_and, S, Finset.mem_insert, Finset.mem_singleton]
-          constructor
-          · intro ⟨hk, hval⟩
-            have hk' : k ≠ c.i ∧ k ≠ c.j := by push_neg at hk; exact hk
-            have : c.apply w k = w k := by
-              unfold Comparator.apply; rw [if_neg hk'.1, if_neg hk'.2]
-            rw [this] at hval; exact ⟨by push_neg; exact hk', hval⟩
-          · intro ⟨hk, hval⟩
-            have hk' : k ≠ c.i ∧ k ≠ c.j := by push_neg at hk; exact hk
-            have : c.apply w k = w k := by
-              unfold Comparator.apply; rw [if_neg hk'.1, if_neg hk'.2]
-            rw [this]; exact ⟨by push_neg; exact hk', hval⟩
-        rw [hT_eq]
-        have hne : c.i ≠ c.j := ne_of_lt c.h
-        have filter_pair (p : Fin n → Bool) :
-            (S.filter (fun i => p i = true)).card =
-            (if p c.i = true then 1 else 0) + (if p c.j = true then 1 else 0) := by
-          simp only [S, Finset.filter_insert, Finset.filter_singleton]
-          split_ifs with h1 h2
-          · simp [Finset.card_pair hne]
-          · simp
-          · simp [hne]
-          · simp
-        rw [filter_pair, filter_pair]
-        cases hvi : w c.i <;> cases hvj : w c.j <;>
-          simp [Comparator.apply, hne, hne.symm, hvi, hvj]
-    exact h_fold net.comparators v
-  linarith
 
 /-- Comparators move at most a bounded number of elements. -/
 lemma comparator_displacement_bound {n : ℕ} (c : Comparator n) (v : Fin n → Bool) :
@@ -2673,52 +2398,6 @@ lemma network_disagreements_le {n : ℕ} (net : ComparatorNetwork n) (v w : Fin 
         _ ≤ (Finset.univ.filter (fun i => v₀ i ≠ w₀ i)).card := comparator_disagreements_le c v₀ w₀
   exact h_fold net.comparators v w
 
-/-- If the input has a monotone witness, the halver preserves structure.
-
-    Specifically, after halving, we can still find a monotone witness
-    for the output, and it's related to the input witness by the halver property.
-
-    This is a key lemma toward showing that halvers improve sortedness. -/
-lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
-    (ε : ℝ) (hnet : IsEpsilonHalver net ε)
-    (v : Fin n → Bool) (w : Fin n → Bool) (hw : Monotone w)
-    (δ : ℝ) (h_witness : (Finset.univ.filter (fun i => v i ≠ w i)).card ≤ δ * n) :
-    ∃ w' : Fin n → Bool, Monotone w' ∧
-      (Finset.univ.filter (fun i => net.exec v i ≠ w' i)).card ≤ (δ + ε) * n := by
-  use net.exec w
-  constructor
-  · exact ComparatorNetwork.exec_preserves_monotone net w hw
-  · -- Displacement doesn't increase through network (stronger than needed: δ·n ≤ (δ+ε)·n)
-    calc ((Finset.univ.filter (fun i => net.exec v i ≠ (net.exec w) i)).card : ℝ)
-        ≤ (Finset.univ.filter (fun i => v i ≠ w i)).card := by
-          exact_mod_cast network_disagreements_le net v w
-      _ ≤ δ * n := h_witness
-      _ ≤ (δ + ε) * n := by
-          -- Need ε * ↑n ≥ 0. Derive from halver property.
-          -- Apply halver to all-false input
-          have h_halver := hnet (fun _ : Fin n => false)
-          -- The output also has 0 ones (network preserves countOnes)
-          set v₀ := net.exec (fun _ : Fin n => false)
-          have h0 : countOnes v₀ = 0 := by
-            rw [show v₀ = net.exec _ from rfl, network_preserves_countOnes]; simp [countOnes]
-          -- onesInTop ≤ totalOnes ≤ countOnes v₀ = 0
-          have h_total_le : (Finset.univ.filter (fun i : Fin n => v₀ i = true)).card = 0 := by
-            simp only [countOnes] at h0; exact h0
-          -- onesInTop is also 0 (subset of totalOnes which is 0)
-          have h_top_le : ((Finset.univ.filter (fun i : Fin n => (↑i : ℕ) < n / 2)).filter
-              (fun i => v₀ i = true)).card = 0 := by
-            apply Nat.eq_zero_of_le_zero
-            calc ((Finset.univ.filter (fun i : Fin n => (↑i : ℕ) < n / 2)).filter
-                    (fun i => v₀ i = true)).card
-                ≤ (Finset.univ.filter (fun i : Fin n => v₀ i = true)).card :=
-                  Finset.card_le_card (by
-                    intro k hk
-                    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hk ⊢
-                    exact hk.2)
-              _ = 0 := h_total_le
-          simp only [h_total_le, h_top_le, Nat.cast_zero, zero_div] at h_halver
-          nlinarith
-
 /-! **Helper Lemmas for Lemma 2** -/
 
 /-
@@ -2726,26 +2405,25 @@ lemma halver_preserves_witness_structure {n : ℕ} (net : ComparatorNetwork n)
 
   The key interfaces are:
   - `HasBoundedTreeDamage` (V2): tree-distance-based damage bound from ε-nearsort
-  - `HasCherryShiftDamage` (V2): like HasBoundedTreeDamage but r→r+1 in leading term
   - `HasBoundedZigzagDamage` (V2): combined zig+zag damage with r→r+1 improvement
 
-  Proof chain (V2 — tree-distance-based):
+  Proof chain (V2 — tree-distance-based, with parity decomposition):
   1. ✅ halver_preserves_monotone (PROVED)
   2. ✅ Interval.mem_toFinset (PROVED)
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
-  4. ⚠️ halver_has_cherry_shift_damage (sorry — halver → HasCherryShiftDamage)
-     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
+  4a. ⚠️ parity_nearsort_has_bounded_tree_damage (sorry — parity nearsort → BoundedTreeDamage)
+  4b. ⚠️ parity_nearsort_has_improved_bound (sorry — even-level nearsort → HasImprovedBound)
   5. ✅ cherry_wrongness_after_nearsort_v2 (PROVED — direct from HasBoundedTreeDamage)
   6. ✅ zig_step_bounded_increase_v2 (PROVED — scales by 8A ≥ 1)
   7. ✅ zigzag_decreases_wrongness_v2 (PROVED — from HasBoundedZigzagDamage)
-     - ✅ cherry_shift_damage_gives_zigzag: CherryShift + BoundedTree → Zigzag (PROVED)
-     - ✅ cherry_shift_implies_bounded_tree: CherryShift → BoundedTree (PROVED)
+     - ✅ bounded_tree_damage_pair_gives_zigzag (PROVED — from HasImprovedBound + HasBoundedTreeDamage)
   8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
-  9. ⚠️ aks_tree_sorting (top-level assembly)
+  9. ⚠️ aks_tree_sorting (top-level assembly — halver family version)
 
-  Remaining gaps (2):
-  - `halver_has_cherry_shift_damage`: IsEpsilonHalver → HasCherryShiftDamage
-  - `aks_tree_sorting`: assembly using halver_has_cherry_shift_damage + proved lemmas
+  Remaining gaps (extracted to separate files for parallel work):
+  - `parity_nearsort_has_bounded_tree_damage` → TreeDamageStability.lean (Lemma 2a)
+  - `parity_nearsort_has_improved_bound` → TreeDamageImprovement.lean (Lemma 2b)
+  - `aks_tree_sorting` → AKSNetwork.lean (assembly)
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
@@ -3006,31 +2684,3 @@ lemma displacement_from_wrongness
     nlinarith
   linarith
 
-/-! **Main Theorem Assembly** -/
-
-/-- **Main Theorem**: Tree-based AKS sorting works (AKS 1983, Section 8).
-
-    Given an ε-halver (with ε < 1/2), iterating it O(log n) times sorts any
-    Boolean input. The iteration count `k` depends only on `n` and `ε`, not
-    on the input `v` — so the same network sorts all inputs.
-
-    The proof (when completed):
-    1. Start with arbitrary v (trivially Δᵣ ≤ 1 for all r)
-    2. Each cycle: reassign registers (Lemma 1) → ZigZag (Lemma 3)
-    3. Lemma 1: reassignment shifts distance by -2, multiplies by C
-    4. Lemma 3: each ZigZag shifts distance by +1, adds ε-error terms
-    5. Net effect per cycle: distance decreases, wrongness decays geometrically
-    6. After O(log n) cycles: Δᵣ → 0 exponentially for all r
-    7. Lemma 4 (`displacement_from_wrongness`): δ → 0 as well
-    8. When δ < 1/n: must be sorted (discrete)
-
-    The bound `k ≤ 100 * Nat.log 2 n` comes from needing the geometric
-    decay (rate depending on ε < 1/2) to reach below 1/n. -/
-theorem aks_tree_sorting {n : ℕ} (ε : ℝ)
-    (hε : 0 < ε) (hε1 : ε < 1/2)
-    (halver : ComparatorNetwork n) (hhalver : IsEpsilonHalver halver ε)
-    (v : Fin n → Bool) :
-    ∃ (k : ℕ),
-      k ≤ 100 * Nat.log 2 n ∧
-      Monotone (Nat.iterate (fun w ↦ halver.exec w) k v) := by
-  sorry
