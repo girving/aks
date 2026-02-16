@@ -19,53 +19,115 @@ LEAN_FILES = [
     "AKS/Square.lean",
     "AKS/CompleteGraph.lean",
     "AKS/Mixing.lean",
-    "AKS/Basic.lean",
+    "AKS/ComparatorNetwork.lean",
+    "AKS/AKSNetwork.lean",
     "AKS/Halver.lean",
     "AKS/ZigZagOperators.lean",
     "AKS/ZigZagSpectral.lean",
     "AKS/RVWBound.lean",
-    "AKS/ZigZag.lean",
+    "AKS/WalkBound.lean",
+    "AKS/SpectralMatrix.lean",
+    "AKS/DiagDominant.lean",
+    "AKS/CertificateBridge.lean",
     "AKS/Random.lean",
+    "AKS/Random20736.lean",
+    "AKS/ZigZag.lean",
+    "AKS/Main.lean",
     "AKS/TreeSorting.lean",
+    "AKS/Basic.lean",
     "AKS.lean",
 ]
 
 # Node IDs to track (from PROOF_DATA in docs/index.html)
 TRACKED_IDS = {
+    # Fin.lean
     "Fin.pair_lt",
+    # RegularGraph.lean
     "RegularGraph", "walkCLM", "meanCLM", "spectralGap",
     "spectralGap_nonneg", "spectralGap_le_one",
+    "meanCLM_idempotent", "meanCLM_isSelfAdjoint",
+    # Square.lean
     "RegularGraph.square", "spectralGap_square",
+    # CompleteGraph.lean
     "completeGraph", "spectralGap_complete",
+    # Mixing.lean
     "indicatorVec", "expander_mixing_lemma",
+    # ComparatorNetwork.lean
     "Comparator", "ComparatorNetwork", "IsSortingNetwork",
     "zero_one_principle",
-    "AKS", "AKS.size_nlogn", "AKS.sorts",
+    # AKSNetwork.lean
+    "epsHalverMerge_exec_eq_iterate", "epsHalverMerge_size",
+    "mono_of_iterate_mono", "aks_size_bound",
+    "zigzag_implies_aks_network",
+    # Halver.lean
     "IsEpsilonHalver", "expander_gives_halver", "epsHalverMerge",
-    "IsEpsilonSorted", "halver_composition", "halver_convergence",
+    "IsEpsilonSorted", "Monotone.bool_pattern",
+    "halver_composition", "halver_convergence",  # historical (deleted)
+    # ZigZagOperators.lean
     "RegularGraph.zigzag", "withinClusterCLM", "stepPermCLM",
     "clusterMeanCLM", "zigzag_walkCLM_eq",
+    # ZigZagSpectral.lean
     "clusterMeanCLM_idempotent", "clusterMeanCLM_isSelfAdjoint",
     "withinClusterCLM_isSelfAdjoint", "withinCluster_comp_clusterMean",
     "clusterMean_comp_withinCluster", "withinClusterCLM_norm_le_one",
     "stepPermCLM_sq_eq_one", "stepPermCLM_isSelfAdjoint",
+    "stepPermCLM_comp_meanCLM",
     "withinCluster_tilde_contraction", "hat_block_norm",
     "meanCLM_eq_clusterMean_comp", "clusterMean_comp_meanCLM",
+    # RVWBound.lean
     "rvwBound", "rvwBound_mono_left", "rvwBound_mono_right",
-    "quadratic_form_bound", "rvw_operator_norm_bound",
-    "baseExpander", "baseExpander_gap",
+    "rvw_quadratic_ineq", "rayleigh_quotient_bound",
+    "rvw_operator_norm_bound",
+    # WalkBound.lean
+    "spectralGap_le_of_walk_bound", "sqrt_coeff_le_frac",
+    # SpectralMatrix.lean
+    "spectralMatrix", "spectralMatrix_isHermitian",
+    "spectralMatrix_posSemidef_implies_walk_bound",
+    # DiagDominant.lean
+    "diagDominant_isUnit", "diagDominant_posSemidef",
+    # CertificateBridge.lean
+    "certMatrixReal", "certMatrix_posdiag",
+    "kRowDominant_implies_diagDominant",
+    "checkColumnNormBound_perRow", "congruence_diagDominant",
+    "checker_implies_spectralMatrix_psd",
+    "certificate_implies_walk_bound", "certificate_bridge",
+    # Random.lean / Random20736.lean
+    "baseExpander", "baseExpander_gap",  # historical (retired)
+    "Random20736.graph", "Random20736.gap",
+    # ZigZag.lean
     "zigzag_spectral_bound", "zigzagFamily", "zigzagFamily_gap",
-    "explicit_expanders_exist_zigzag", "zigzag_implies_aks_network",
-    "TreeNode", "treeWrongness", "halver_preserves_monotone",
-    "monotone_bool_zeros_then_ones", "halver_balances_ones",
+    "explicit_expanders_exist_zigzag",
+    # Main.lean
+    "squareIter", "spectralGap_squareIter",
+    "exists_pow_two_pow_lt", "expander_family_small_gap",
+    "aks_sorting_networks_exist",
+    # TreeSorting.lean
+    "TreeNode", "treeWrongness",
+    "halver_preserves_monotone", "monotone_bool_zeros_then_ones",
     "countOnes_le", "countOnes_split", "comparator_displacement_bound",
-    "halver_bounds_top_excess", "halver_implies_nearsort_property",
-    "zig_step_bounded_increase",
+    "HasBoundedDamage", "recursiveNearsort",
+    "nearsort_has_bounded_tree_damage", "bounded_tree_damage_pair_gives_zigzag",
+    "sectionIndex", "sectionNode", "positionTreeDist",
+    "elementsAtTreeDist", "HasBoundedTreeDamage",
+    "IsEpsilonNearsorted", "HasBoundedZigzagDamage",
+    "treeWrongnessV2",
+    "cherry_wrongness_after_nearsort_v2", "zig_step_bounded_increase_v2",
+    "positionTreeDist_succ_le", "register_reassignment_increases_wrongness_v2",
+    "zigzag_decreases_wrongness_v2",
+    "displacement_from_wrongness",
+    "aks_tree_sorting",
+    # Historical (deleted from current codebase but appear in old snapshots)
+    "halver_balances_ones", "halver_bounds_top_excess",
+    "halver_implies_nearsort_property", "zig_step_bounded_increase",
+    "AKS", "AKS.size_nlogn", "AKS.sorts",
+    "quadratic_form_bound",
 }
 
 # Aliases: Lean declaration name → PROOF_DATA ID (when they differ)
 ALIASES = {
     "reflection_quadratic_bound": "quadratic_form_bound",
+    "graph": "Random20736.graph",
+    "gap": "Random20736.gap",
 }
 
 

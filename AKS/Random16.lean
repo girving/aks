@@ -17,9 +17,14 @@ namespace Random16
 def rotData : String := bin_base85% "data/16/rot_map.bin"
 def certData : String := bin_base85% "data/16/cert_z.bin"
 
+theorem involution_check : checkInvolutionSpec (rotData.toUTF8) 16 4 = true := by
+  native_decide
+
 def graph : RegularGraph 16 4 where
   rot := rotFun rotData 16 4 (by decide) (by decide)
-  rot_involution := by native_decide
+  rot_involution :=
+    checkInvolutionSpec_implies_rotFun_involution rotData 16 4 (by decide) (by decide)
+      involution_check
 
 theorem certificate_passes :
     checkCertificate rotData certData 16 4 216 9 1 = true := by

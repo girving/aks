@@ -11,6 +11,10 @@
 
   This file imports only `Init` (no Mathlib) so it can be precompiled into a
   shared library via `precompileModules := true` in `lakefile.lean`.
+
+  **Keep this file minimal:** definitions only, no proofs about them.
+  Proofs that these functions have desired properties go in
+  `AKS/CertificateBridge.lean` (which can import Mathlib).
 -/
 
 
@@ -198,16 +202,26 @@ def rotFun (rotStr : String) (n d : Nat) (hn : 0 < n) (hd : 0 < d)
   (⟨decodeBase85Nat rotBytes (2 * k) % n, Nat.mod_lt _ hn⟩,
    ⟨decodeBase85Nat rotBytes (2 * k + 1) % d, Nat.mod_lt _ hd⟩)
 
-/-- If `checkInvolution` passes on the raw bytes of `rotStr`, then `rotFun` is
-    an involution.  The proof is sorry'd: `checkInvolution` verifies that every
-    `k < n*d` round-trips (`rot(rot(k)) = k`) and that all decoded indices are
-    in-bounds, which makes `% n` / `% d` in `rotFun` no-ops, giving pointwise
-    equality. -/
-theorem checkInvolution_implies_rotFun_involution (rotStr : String) (n d : Nat)
-    (hn : 0 < n) (hd : 0 < d)
-    (h : checkInvolution (rotStr.toUTF8) n d = true) :
-    ∀ vp, rotFun rotStr n d hn hd (rotFun rotStr n d hn hd vp) = vp := by
-  sorry
+/-! **Pure involution spec (for `native_decide`)** -/
+
+/-- Check involution at a single index: decoded `(w,q)` is in-bounds and round-trips. -/
+def checkInvAt (rotBytes : ByteArray) (n d k : Nat) : Bool :=
+  let w := decodeBase85Nat rotBytes (2 * k)
+  let q := decodeBase85Nat rotBytes (2 * k + 1)
+  decide (w < n) && decide (q < d) &&
+  decide (decodeBase85Nat rotBytes (2 * (w * d + q)) * d +
+          decodeBase85Nat rotBytes (2 * (w * d + q) + 1) = k)
+
+/-- Check all indices from 0 to `m-1`. -/
+def checkInvBelow (rotBytes : ByteArray) (n d : Nat) : Nat → Bool
+  | 0 => true
+  | k + 1 => checkInvAt rotBytes n d k && checkInvBelow rotBytes n d k
+
+/-- Pure recursive involution check. Computationally equivalent to `checkInvolution`
+    but structured for formal reasoning (no imperative loop).
+    Bridge proof: `checkInvolutionSpec_implies_rotFun_involution` in `CertificateBridge.lean`. -/
+def checkInvolutionSpec (rotBytes : ByteArray) (n d : Nat) : Bool :=
+  decide (rotBytes.size = n * d * 2 * 5) && checkInvBelow rotBytes n d (n * d)
 
 
 /-! **Pure functional definitions for bridge proofs** -/
@@ -257,69 +271,70 @@ def checkAllRowsDomPure (rotBytes certBytes : ByteArray) (n d : Nat)
               checkRowDomPure rotBytes certBytes n d c₁ c₂ c₃ m
 
 
-/-! **Column-norm bound check (O(n²))** -/
+/-! **Pure recursive helpers for column-norm bound** -/
 
-/-- Check that Z column norms are bounded relative to diagonal entries.
-    Combined with the PSD check (minDiag, epsMax), this implies K = Z^T M Z
-    is strictly diag-dominant — without the O(n³) K computation.
+/-- Integer absolute value. Avoids notation ambiguity in match cases and
+    works without Mathlib imports. Equals `|x|` from `Mathlib.Algebra.Abs`. -/
+@[inline] def intAbs (x : Int) : Int := if x ≥ 0 then x else -x
 
-    For each row i, diagonal dominance requires:
-      Z[i,i] · (minDiag + epsMax) > epsMax · T_i
-    where T_i = ∑_{j<i} S_j + (n-i) · S_i and S_j = ∑_{k≤j} |Z[k,j]|.
+/-- Column sum of certificate column `j`: `∑_{l<n} Z[l,j]`.
+    Pre-computed and threaded through `epsMaxCol` to avoid O(n) recomputation
+    per `pEntryPure` call, keeping total complexity O(n²d²) instead of O(n²d²+n³). -/
+def colSumZ (certBytes : ByteArray) (n j : Nat) : Int :=
+  sumTo (fun l ↦ certEntryInt certBytes l j) n
 
-    This function recomputes minDiag and epsMax from the certificate, then
-    checks the column-norm inequality. Complexity: O(n²·d) for minDiag/epsMax
-    (same as PSD check), O(n²) for column norms. -/
+/-- Maximum `|P[k,j]|` for `k < bound`, with pre-computed column sum.
+    The inlined P entry computation equals `pEntryPure k j` when
+    `colSum = colSumZ certBytes n j`. -/
+def epsMaxCol (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (j : Nat) (colSum : Int) : Nat → Int
+  | 0 => 0
+  | k + 1 =>
+    let zj : Nat → Int := fun i ↦ certEntryInt certBytes i j
+    let b2zj_k := adjMulPure rotBytes (fun v ↦ adjMulPure rotBytes zj n d v) n d k
+    let pij := c₁ * certEntryInt certBytes k j - c₂ * b2zj_k + c₃ * colSum
+    max (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j colSum k) (intAbs pij)
+
+/-- Maximum off-diagonal `|P[k,j]|` over `k < j`, for all `j < bound`. -/
+def epsMaxVal (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) : Nat → Int
+  | 0 => 0
+  | j + 1 =>
+    max (epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ j)
+        (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j (colSumZ certBytes n j) j)
+
+/-- Minimum diagonal `P[j,j]` over `j < bound`. Returns `0` for `bound = 0`. -/
+def minDiagVal (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) : Nat → Int
+  | 0 => 0
+  | 1 => pEntryPure rotBytes certBytes n d c₁ c₂ c₃ 0 0
+  | m + 2 => min (minDiagVal rotBytes certBytes n d c₁ c₂ c₃ (m + 1))
+                  (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ (m + 1) (m + 1))
+
+/-- Column ℓ₁-norm of Z: `∑_{k<n} |Z[k,j]|`. -/
+def zColNormPure (certBytes : ByteArray) (n j : Nat) : Int :=
+  sumTo (fun k ↦ intAbs (certEntryInt certBytes k j)) n
+
+/-- Per-row column-norm bound check. Checks rows `i, i+1, ..., i+remaining-1`.
+    `prefSum` = `∑_{j<i} zColNormPure certBytes n j`. -/
+def checkPerRow (certBytes : ByteArray) (n : Nat) (ε mdpe : Int)
+    (remaining i : Nat) (prefSum : Int) : Bool :=
+  match remaining with
+  | 0 => true
+  | r + 1 =>
+    let si := zColNormPure certBytes n i
+    let ti := prefSum + (↑(n - i) : Int) * si
+    decide (certEntryInt certBytes i i * mdpe > ε * ti) &&
+    checkPerRow certBytes n ε mdpe r (i + 1) (prefSum + si)
+
+/-- Check column-norm bound using pure recursive functions.
+    Computes `epsMax` (max off-diagonal `|P|`), `minDiag` (min diagonal `P`),
+    and checks `Z[i,i]·(minDiag + epsMax) > epsMax·T_i` for each row `i`. -/
 def checkColumnNormBound (rotBytes certBytes : ByteArray) (n d : Nat)
     (c₁ c₂ c₃ : Int) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
-  else Id.run do
-    -- Phase 1: Compute minDiag and epsMax (same as checkPSDCertificate)
-    let mut epsMax : Int := 0
-    let mut minDiag : Int := 0
-    let mut first := true
-    for j in [:n] do
-      let colStart := j * (j + 1) / 2
-      let mut zCol := Array.replicate n (0 : Int)
-      for k in [:j+1] do
-        zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
-      let bz := mulAdj rotBytes zCol n d
-      let b2z := mulAdj rotBytes bz n d
-      let mut colSum : Int := 0
-      for k in [:j+1] do
-        colSum := colSum + zCol[k]!
-      for i in [:n] do
-        let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
-        if i == j then
-          if first then
-            minDiag := pij
-            first := false
-          else if pij < minDiag then
-            minDiag := pij
-        else if i < j then
-          let absPij := if pij >= 0 then pij else -pij
-          if absPij > epsMax then
-            epsMax := absPij
-    -- Phase 2: Compute column norms S_j = ∑_{k≤j} |Z[k,j]|
-    let mut colNorms := Array.replicate n (0 : Int)
-    for j in [:n] do
-      let colStart := j * (j + 1) / 2
-      let mut norm : Int := 0
-      for k in [:j+1] do
-        let entry := decodeBase85Int certBytes (colStart + k)
-        norm := norm + (if entry >= 0 then entry else -entry)
-      colNorms := colNorms.set! j norm
-    -- Phase 3: Check Z[i,i] · (minDiag + epsMax) > epsMax · T_i for each row
-    let mdpe := minDiag + epsMax  -- minDiag + epsMax
-    let mut prefSum : Int := 0  -- ∑_{j<i} S_j
-    for i in [:n] do
-      let colStartI := i * (i + 1) / 2
-      let diag := decodeBase85Int certBytes (colStartI + i)
-      -- T_i = prefSum + (n - i) · S_i
-      let ti := prefSum + (↑(n - i) : Int) * colNorms[i]!
-      if !(diag * mdpe > epsMax * ti) then return false
-      prefSum := prefSum + colNorms[i]!
-    return true
+  else
+    let ε := epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n
+    let δ := minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n
+    checkPerRow certBytes n ε (δ + ε) n 0 0
 
 
 /-! **Fast implementations with pre-decoded data** -/
@@ -521,7 +536,7 @@ def checkColumnNormPhase23 (certBytes : ByteArray) (n : Nat)
   return true
 
 /-- Parallel certificate check: same result as `checkCertificate` but splits
-    the O(n²d) PSD column loop across 4 dedicated OS threads via `Task.spawn`.
+    the O(n²d) PSD column loop across 64 dedicated OS threads via `Task.spawn`.
     Also shares epsMax/minDiag between PSD and column-norm checks (avoiding
     redundant O(n²d) recomputation). -/
 def checkCertificateFast (rotStr certStr : String)
@@ -534,7 +549,7 @@ def checkCertificateFast (rotStr certStr : String)
   else
     let neighbors := decodeNeighbors rotBytes n d
     -- Build interleaved column lists for load balancing
-    let numChunks := 4
+    let numChunks := 64
     let columnLists := Id.run do
       let mut lists := Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1))
       for j in [:n] do
