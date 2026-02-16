@@ -655,7 +655,7 @@ private lemma reflection_cs_minus {n : ℕ}
     `x² = (1 - λ₂²) · λ₁ · x + λ₂²`.
     This characterizes it as the positive root of `t² - ct - d² = 0`
     where `c = (1-λ₂²)λ₁` and `d = λ₂`. -/
-private lemma rvwBound_quadratic_eq (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂) :
+lemma rvwBound_quadratic_eq (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂) :
     (rvwBound lam₁ lam₂) ^ 2 = (1 - lam₂ ^ 2) * lam₁ * rvwBound lam₁ lam₂ + lam₂ ^ 2 := by
   unfold rvwBound
   set S := Real.sqrt ((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2)
@@ -668,7 +668,7 @@ private lemma rvwBound_quadratic_eq (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam�
   nlinarith [hS_sq]
 
 /-- `rvwBound` is nonneg when `0 ≤ λ₁` and `0 ≤ λ₂ ≤ 1`. -/
-private lemma rvwBound_nonneg (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
+lemma rvwBound_nonneg (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂)
     (hlam₂_le : lam₂ ≤ 1) :
     0 ≤ rvwBound lam₁ lam₂ := by
   unfold rvwBound
@@ -681,7 +681,7 @@ private lemma rvwBound_nonneg (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hl
     then `x ≤ (c + √(c² + 4d²))/2`.
     This is because `(c + √(c²+4d²))/2` is the positive root of `t² - ct - d² = 0`,
     and the polynomial is ≤ 0 on `[0, positive root]`. -/
-private lemma quadratic_root_upper_bound {x c d : ℝ}
+lemma quadratic_root_upper_bound {x c d : ℝ}
     (hx : 0 ≤ x) (hd : 0 ≤ d)
     (h : x ^ 2 ≤ c * x + d ^ 2) :
     x ≤ (c + Real.sqrt (c ^ 2 + 4 * d ^ 2)) / 2 := by
