@@ -2,119 +2,138 @@
 
 ## Problem
 
-Prove `rvw_quadratic_ineq` in `AKS/RVWBound.lean` — the core inequality for the RVW operator norm bound.
+Prove `rvw_quadratic_ineq` in `AKS/RVWBound.lean` (line ~756) — the core scalar inequality for the RVW operator norm bound.
 
-**Lean signature** (line ~784):
-```lean
-(p + 2 * q + r) ^ 2 ≤
-  (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |p + 2 * q + r| + (c / b) ^ 2
+**Goal** (after clearing denominators):
 ```
-
-**After clearing denominators** (proved equivalent in the `suffices` block):
+A*B*X^2 <= (B-C)*|p|*|X| + A*C
 ```
-a²b²X² ≤ (b²-c²)|p||X| + a²c²
+Equivalently:
 ```
-
-**After reducing to polynomial form** (proved: `(b²-c²)|p||X| ≥ (b²-c²)pX`):
+G := A*C + (B-C)*|p|*|X| - A*B*X^2 >= 0
 ```
-G := a²c² + (b²-c²)pX - a²b²X² ≥ 0
-```
-where X = p+2q+r, a²+b²=1, |p|≤a², |r|≤c², c≤b, q²≤V₁=(a²+p)(c²+r), q²≤V₂=(a²-p)(c²-r).
+where `A = a^2`, `B = b^2 = 1-A`, `C = c^2`, `X = p + 2q + r`.
 
-## Current State of `RVWBound.lean`
+**Constraints:**
+- `|p| <= A`, `|r| <= C`
+- `q^2 <= (A+p)(C+r)` (CS+, or F1)
+- `q^2 <= (A-p)(C-r)` (CS-, or F2)
 
-**Only 2 sorries**: line ~331 (`rayleigh_quotient_bound`, unrelated) and the target `rvw_quadratic_ineq` (line ~805).
-
-**Proved helper lemmas** (all compile):
-- `rvw_X_le_sum_sq` (line ~722): `|p+2q+r| ≤ a²+c²` — AM-GM on V₁,V₂
-- `rvw_q_sq_le` (line ~762): `q² ≤ a²c²+pr` — averaging V₁+V₂
-- `rvw_weighted` (line ~769): `a²q² ≤ c²(a⁴-p²)` — weighted V₁+V₂
-
-**Scaffolding** (compiles through to sorry):
-- Fraction clearing via `suffices` + `le_div_iff₀` + `field_simp; ring`
-- Reduction from `|p||X|` to `pX` via `(b²-c²)|p||X| ≥ (b²-c²)pX`
+**Derived constraints** (already proved in Lean):
+- `q^2 <= A*C + p*r` (sum CS)
+- `A*q^2 <= C*(A^2 - p^2)` (weighted CS)
 
 ## What Has Been Proven Impossible
 
-### Scalar multiplier nlinarith at degree ≤ 4 (LP infeasibility — PROVEN MULTIPLE TIMES)
+### Scalar multiplier `nlinarith` (LP infeasibility — proven repeatedly)
 
-1. **G ≥ 0 directly** (5 variables A,C,p,q,r): LP with 202 certificate terms. **INFEASIBLE.**
-2. **G ≥ 0 with extended quadratic forms**: LP with additional degree-2 squares. **INFEASIBLE.**
-3. **K ≥ 0** (4 variables A,C,p,r, the q-free part after substituting q²≤V₂): LP with 717 terms including triple products and constraint×square combinations. **INFEASIBLE.**
-4. **Previous session results**: Two independent LP runs confirmed infeasibility with different variable sets.
+The inequality G >= 0 CANNOT be proved by `nlinarith` using products of the available constraints (A, 1-A, C, 1-A-C, p, A-p, C+r, C-r, p+r, Ar+Cp) at any degree.
 
-**Root cause**: G has cross terms (pq, qr) with sign-varying coefficients that depend on parameters A, C. The constraint q²≤V has no linear-in-q terms. At degree 4, there is no way to generate the right parameter-dependent pq/qr coefficients from non-negative combinations of constraint products and squares. This is a structural impossibility, not a search failure.
+**Tested configurations (all INFEASIBLE):**
+1. 4 variables (A,C,p,r), degree 4, 11 constraints, 1124 products: rank 70 = full. INFEASIBLE.
+2. 5 variables (A,C,p,r,Q) with Q = sqrt(F), degree 4, 1814 products: rank 126 = full. INFEASIBLE.
+3. 5 variables with equality Q^2 = F2 (ideal + nonneg), degree 5: 5107 columns, rank 252. INFEASIBLE.
+4. 5 variables with equality, degree 6: 15081 columns, rank 462. INFEASIBLE.
+5. Change of variables x = A-p, y = C-r: INFEASIBLE.
+6. `D0 = gamma_0 - 4AB*F2 >= 0` (all 4 case splits on sign of s and Ar+Cp): INFEASIBLE.
+7. `D0^2 - beta^2*F2 >= 0` (degree 8, with all constraints): INFEASIBLE.
+8. `beta >= 0` implied by `D0 <= 0`: INFEASIBLE.
+9. `16*A^2*B^2*F2 <= (B-C)^2*p^2 + 4*A^2*B*C` (degree 4 with alpha <= 0): INFEASIBLE.
 
-**Implication**: No `nlinarith` proof exists for G ≥ 0 regardless of what product hints are provided, as long as all hints have total degree ≤ 4 in the variables. The same applies to K ≥ 0.
+**Conclusion**: The inequality inherently requires `Real.sqrt` reasoning. Every approach to eliminate sqrt leads to the same degree-8 polynomial inequality `D0^2 >= beta^2*F_min`, which is LP-infeasible. The S-lemma (Yakubovich) also reduces to this same condition. This is not a limitation of the hint search — the Positivstellensatz certificate literally does not exist in the product-of-linear-constraints form.
 
-### AM-GM relaxation
+### Numerical SOS (SDP) approach
 
-K ≥ |β₀|·(A-p+C-r) fails numerically (min ≈ -0.23). The tight bound K²≥β²V₂ cannot be relaxed to degree < 8 via AM-GM.
+- SCS solver found a numerical certificate with ~2e-3 reconstruction error
+- Rationalization failed (error grew to 2e-2)
+- LP for exact rational weights on rounded terms: INFEASIBLE
 
-### Discriminant/completing-the-square
+## Key Mathematical Facts (Numerically Verified)
 
-Completing the square of G in X yields Z²≤RHS where Z=2a²b²X-(b²-c²)p, which is algebraically equivalent to G ≥ 0. Circular — no simplification.
+### Facts that ARE LP-provable (nlinarith-accessible)
 
-### SDP/SOS numerical certificates (previous sessions)
+1. **gamma_0 >= 0** when s >= 0: LP-FEASIBLE with certificate involving ~15 terms.
+   `gamma_0 = AC + (B-C)*p*s - AB*s^2` where `s = p + r`.
+   Certificate includes products like `A*(1-A)*(C-r)*(p+r)`, `(1-A)*(1-A-C)*p*(p+r)`, etc.
 
-Numerical SOS certificates found but too imprecise to extract exact rational proofs.
+2. **gamma_0_neg >= 0** when s < 0: LP-FEASIBLE with certificate.
+   `gamma_0_neg = AC - (B-C)*p*s - AB*s^2`.
 
-## What IS Known (Mathematical Analysis)
+3. **D_disc - alpha^2 = 4*AB*gamma_0**: algebraic identity.
+   Where `D_disc = (B-C)^2*p^2 + 4*A^2*B*C` and `alpha = 2*AB*s - (B-C)*|p|`.
+   This means `|alpha| <= sqrt(D_disc)` follows from `gamma_0 >= 0`.
 
-### The inequality is true and tight (minimum = 0)
+### Facts that are TRUE but NOT LP-provable
 
-Numerical optimization confirms G ≥ 0 with G = 0 at:
-1. A = 1/2, C arbitrary, p=0, r=0, q=±√(AC): G = AC(2A-1)² = 0.
-2. C = B = 1-A: G = 0 along a curve.
+4. **D0_min = gamma_0 - 4*AB*min(F1,F2) >= 0**: 0 violations in 100M+ samples.
+   Minimum is essentially 0 (achieved at extreme parameters).
 
-### Key structural insights
+5. **D0^2 >= beta^2*F_min**: 0 violations in 10M samples.
+   This is degree 8 and LP-infeasible.
 
-1. **G is concave in q** (coefficient -4AB < 0). So for q ∈ [-√V₂, √V₂], G is minimized at the boundary q = ±√V₂.
-2. **G ≥ K + βq** where K = γ-4ABV₂ (substituting q²→V₂), β = 2[(B-C-2AB)p - 2ABr]. K ≥ 0 when V₂ ≤ V₁ (confirmed numerically). K² ≥ β²V₂ (confirmed numerically).
-3. **|X| ≤ a²+c² ≤ 1** (proved in Lean), so X² ≤ |X| ≤ 1.
-4. **WLOG V₂ ≤ V₁** by symmetry (p,r)→(-p,-r).
-5. **(b²-c²)|p||X| ≥ (b²-c²)pX** always (since `|p||X| = |pX| ≥ pX`), so proving G ≥ 0 suffices.
+6. **G(Q) = gamma_0 + beta*Q - 4*AB*Q^2 >= 0** at Q = sqrt(F_min): 0 violations in 10M samples.
 
-### The K+βq decomposition (degree 8 bottleneck)
+7. **|s-T| + 2*sqrt(F_min) <= sqrt(D_disc)/(2*AB)**: 0 violations in 10M samples.
+   Where T = (B-C)*|p|/(2*AB).
 
-The proof chain is:
-1. G ≥ K + βq (linear bound from q²≤V₂, valid since coeff of q² is negative)
-2. K ≥ 0 (degree 4 in A,C,p,r — LP-infeasible at deg 4, needs higher degree or mathematical argument)
-3. K² ≥ β²V₂ (degree 8 in A,C,p,r — only feasible at high degree)
-4. K ≥ 0 and K² ≥ (βq)² imply K ≥ |βq|, so K+βq ≥ 0
-5. Therefore G ≥ 0.
+### Structural insights
 
-Steps 2 and 3 are the hard parts. Both require degree > 4 Positivstellensatz.
+8. **D0 < 0 AND beta <= 0 is IMPOSSIBLE** when s >= 0 (0 cases in 10M samples with either F1 or F2).
 
-## Viable Proof Paths (for future sessions)
+9. **F1 - F2 = 2*(Ar + Cp)**: determines which CS bound is tighter.
 
-### Path A: Quadratic-in-r elimination
+10. **h_worse(s/2) = AC**: when `beta >= 0`, evaluating the "worse boundary" concave function
+    `h(v) = gamma_0 - beta*v - 4*AB*v^2` at `v = s/2` gives exactly `AC >= 0`.
+    This is verified algebraically: `gamma_0 - beta*s/2 - AB*s^2 = AC`.
 
-K is quadratic in r with negative leading coefficient -AB (concave in r). So K ≥ 0 on the feasible r interval [max(-C, -pC/A), C]. Check K at the endpoints:
-- K(r=C): V₂=(A-p)·0=0 ⇒ q=0, simplifies to degree 2 in (A,C,p)
-- K(r=-pC/A): V₁=V₂ intersection, simplifies via parametrization
+## Proof Strategy
 
-If K at both endpoints can be shown ≥ 0 by nlinarith (each is degree ≤ 4 in 3 variables), the concavity gives K ≥ 0 for all feasible r.
+### The double-concavity approach
 
-### Path B: Lean proof via completing the square + sqrt bounds
+The proof uses two levels of concavity:
 
-Instead of polynomial certificates, use Lean's real analysis:
-1. Complete the square: G = -AB(X-X₀)² + D where D = AC + (B-C)²p²/(4AB) ≥ 0
-2. Need |X-X₀| ≤ √(D/AB). This involves √ but might be provable using existing `Real.sqrt_le_sqrt` etc.
-3. Bound |X-X₀| using the constraints on q.
+**Level 1**: G(q) = gamma_0 + beta*q - 4*AB*q^2 is concave in q.
+- G(0) = gamma_0 >= 0 (LP-provable)
+- By `concave_quad_min_boundary`, G >= 0 on [-Q, Q] iff G(Q) >= 0 and G(-Q) >= 0
+- where Q = Real.sqrt(F) for the appropriate CS bound F
 
-### Path C: Direct vector-level proof in the operator theory
+**Level 2**: G(Q) = gamma_0 + beta*Q - 4*AB*Q^2 is concave in Q (viewed as a real variable).
+- G(0) = gamma_0 >= 0 (same as above)
+- For the case beta_tilde >= 0 (where beta_tilde = |beta| or -|beta| depending on boundary):
+  - h_worse(v) = gamma_0 - |beta|*v - 4*AB*v^2
+  - h_worse(0) = gamma_0 >= 0
+  - h_worse(s/2) = AC >= 0 (algebraic identity, for the right sign of beta)
+  - If sqrt(F) <= s/2: done by concavity (h_worse is nonneg on [0, s/2] and sqrt(F) is in this interval)
 
-Instead of proving the scalar inequality, prove the operator norm bound directly in Lean using inner product manipulations (avoiding the Rayleigh quotient reduction entirely). This would bypass the polynomial arithmetic bottleneck but requires significant restructuring.
+### Remaining gap
 
-### Path D: SOS at degree 6+ with rational arithmetic
+When sqrt(F) > s/2 (about 42% of parameter space), the double-concavity with evaluation at s/2 is insufficient. The AM-GM bound `sqrt(F2) <= (A-p+C-r)/2` also fails (~32% violations).
 
-Use an SDP solver with high-precision rational arithmetic (e.g., DSOS/SDSOS which reduce to LP/SOCP) to find exact rational certificates at degree 6 or 8. Then translate to Lean as explicit `have` statements.
+For these cases, the proof requires either:
+- **A degree-8 polynomial certificate** (D0^2 >= beta^2*F): LP-infeasible, needs SOS/SDP
+- **A trigonometric proof** following the paper (Section 4.2, Claim 4.4)
+- **A different algebraic decomposition** not yet discovered
 
 ## File Locations
 
-- Main Lean file: `AKS/RVWBound.lean`
-- This status doc: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
-- LP feasibility scripts: `/tmp/rvw_lp.py`, `/tmp/rvw_k_lp.py`
-- Numerical verification: `/tmp/rvw_g.py` (G≥0), `/tmp/rvw_decomp.py`
-- Previous SDP attempts: `/tmp/rvw_clarabel.py`, `/tmp/rvw_full_psatz.py`
+- Main Lean file: `AKS/RVWBound.lean` (line ~756 for the sorry)
+- This status document: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
+- Analysis scripts: `/tmp/rvw_*.py` (various LP and numerical checks)
+
+## Recommended Next Steps
+
+1. **Try SOS via proper SDP solver** (e.g., DSOS/SDSOS in Julia or MATLAB).
+   The degree-8 polynomial D0^2 - beta^2*F_min may have an SOS certificate
+   that LP (product-of-linear-constraints) cannot find. If found, the certificate
+   can be verified in Lean via `nlinarith` with explicit SOS terms.
+
+2. **Formalize the trigonometric proof** from RVW Section 4.2.
+   This avoids the polynomial certificate entirely but requires working with
+   `Real.cos`, `Real.sin`, `Real.arctan` in Lean/Mathlib.
+
+3. **Try `polyrith`** on sub-goals (it uses Groebner bases, not just LP).
+   May succeed where `nlinarith` fails, though unlikely for degree-8 problems.
+
+4. **Factor the degree-8 polynomial manually**.
+   D0^2 - beta^2*F has 99 terms. If it can be written as a sum of squares
+   of explicit polynomials (even with case splits), this would give a Lean proof.

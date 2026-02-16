@@ -6,4 +6,4 @@ lake-manifest.json
 .claude/*
 !.claude/settings.json
 data/
-rust/compute-certificate/target/
+rust/*/target/
