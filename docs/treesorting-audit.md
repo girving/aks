@@ -1,7 +1,7 @@
 # TreeSorting.lean Audit — Statement Correctness and Proof Path
 
 **Date:** 2026-02-16
-**Sorry count:** 4 (1 in Halver.lean, 3 in TreeSorting.lean)
+**Sorry count:** 7 (1 in Halver.lean, 3 in TreeSorting.lean, 1 each in TreeDamageStability/Improvement/AKSNetwork)
 
 ## Summary
 
@@ -55,6 +55,20 @@ tree-distance at level `t`.
     Added `rank`, `EpsilonInitialHalved`, `EpsilonFinalHalved`, `EpsilonHalved`.
   - `expander_gives_halver` stays sorry (now correct statement)
   - All downstream references (TreeSorting.lean, AKSNetwork.lean) updated and verified
+**Phase 3h (DONE):** Audit definitions against AKS paper, permutation-based overhaul:
+  - Added `EpsilonInitialNearsorted`, `EpsilonFinalNearsorted`, `EpsilonNearsorted` to Halver.lean
+    (permutation-based, matching AKS Section 4 eq. (i)). Old `IsEpsilonNearsorted` deprecated.
+  - Added `elementTreeDist`, `permElementsAtTreeDist`, `foreignElements` to TreeSorting.lean
+    (permutation-based element tracking using tree distance from position to home section)
+  - **Replaced** `HasBoundedTreeDamage`, `HasImprovedBound`, `HasBoundedZigzagDamage` to quantify
+    over `Fin n → Fin n` (element assignments) using `permElementsAtTreeDist` instead of Bool-based
+    `elementsAtTreeDist`. Paper's Lemma 2 tracks labeled elements, not 0-1 values.
+  - **Re-proved** `bounded_tree_damage_pair_gives_zigzag` with new types (algebraic, no sorry)
+  - **Sorry'd** 3 previously-proved lemmas that bridged Bool↔permutation worlds:
+    `cherry_wrongness_after_nearsort_v2`, `zig_step_bounded_increase_v2`,
+    `zigzag_decreases_wrongness_v2`. These need a bridge between Bool-based `treeWrongnessV2`
+    and permutation-based `HasBoundedTreeDamage`.
+  - Net: 4 sorry → 7 sorry. Definitions now match AKS paper; bridge lemmas needed.
 
 ## The fundamental issue: time-independent distance
 
@@ -134,7 +148,9 @@ which the identity network satisfies trivially.
 | Lemma | Status | Notes |
 |---|---|---|
 | `positionTreeDist_succ_le` | **PROVED** | Tree dist increases ≤ 2 when refining t → t+1. |
-| `zigzag_decreases_wrongness_v2` | **PROVED** | From `HasBoundedZigzagDamage` + anti-monotonicity. |
+| `cherry_wrongness_after_nearsort_v2` | sorry | Needs Bool↔permutation bridge (Phase 3h). |
+| `zig_step_bounded_increase_v2` | sorry | Needs Bool↔permutation bridge (Phase 3h). |
+| `zigzag_decreases_wrongness_v2` | sorry | Needs Bool↔permutation bridge (Phase 3h). |
 | `parity_nearsort_has_bounded_tree_damage` | sorry | Lemma 2a (`TreeDamageStability.lean`). |
 | `parity_nearsort_has_improved_bound` | sorry | Lemma 2b (`TreeDamageImprovement.lean`). |
 | `bounded_tree_damage_pair_gives_zigzag` | **PROVED** | Lemma 3 (`TreeSorting.lean`). |
@@ -152,9 +168,9 @@ aks_tree_sorting (halver family formulation) ← sorry
 │   └── HasBoundedZigzagDamage ← definition
 ├── register_reassignment_increases_wrongness_v2 ← PROVED
 │   └── positionTreeDist_succ_le ← PROVED
-├── zigzag_decreases_wrongness_v2 ← PROVED
-├── zig_step_bounded_increase_v2 ← PROVED
-├── cherry_wrongness_after_nearsort_v2 ← PROVED
+├── zigzag_decreases_wrongness_v2 ← sorry (needs Bool↔perm bridge)
+├── zig_step_bounded_increase_v2 ← sorry (needs Bool↔perm bridge)
+├── cherry_wrongness_after_nearsort_v2 ← sorry (needs Bool↔perm bridge)
 ├── displacement_from_wrongness ← PROVED
 └── tree_wrongness_implies_sorted ← PROVED
 ```
@@ -166,9 +182,9 @@ and match the AKS paper.
 
 | Lemma | Status |
 |---|---|
-| `zigzag_decreases_wrongness_v2` | PROVED |
-| `cherry_wrongness_after_nearsort_v2` | PROVED |
-| `zig_step_bounded_increase_v2` | PROVED |
+| `zigzag_decreases_wrongness_v2` | sorry (Phase 3h: needs Bool↔perm bridge) |
+| `cherry_wrongness_after_nearsort_v2` | sorry (Phase 3h: needs Bool↔perm bridge) |
+| `zig_step_bounded_increase_v2` | sorry (Phase 3h: needs Bool↔perm bridge) |
 | `register_reassignment_increases_wrongness_v2` | PROVED |
 | `positionTreeDist_succ_le` | PROVED |
 | `sectionIndex_succ_div_two` | PROVED |
