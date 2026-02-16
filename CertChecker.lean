@@ -536,7 +536,7 @@ def checkColumnNormPhase23 (certBytes : ByteArray) (n : Nat)
   return true
 
 /-- Parallel certificate check: same result as `checkCertificate` but splits
-    the O(n²d) PSD column loop across 4 dedicated OS threads via `Task.spawn`.
+    the O(n²d) PSD column loop across 64 dedicated OS threads via `Task.spawn`.
     Also shares epsMax/minDiag between PSD and column-norm checks (avoiding
     redundant O(n²d) recomputation). -/
 def checkCertificateFast (rotStr certStr : String)
@@ -549,7 +549,7 @@ def checkCertificateFast (rotStr certStr : String)
   else
     let neighbors := decodeNeighbors rotBytes n d
     -- Build interleaved column lists for load balancing
-    let numChunks := 4
+    let numChunks := 64
     let columnLists := Id.run do
       let mut lists := Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1))
       for j in [:n] do
