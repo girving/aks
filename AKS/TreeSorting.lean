@@ -1979,41 +1979,6 @@ noncomputable def recursiveNearsortParity (n : ℕ)
   { comparators := ((List.range depth).filter (· % 2 = parity)).flatMap fun l ↦
       (applyHalversAtLevel n halvers l).comparators }
 
-/-- **Lemma 2a (AKS Section 8):** Parity-restricted nearsort → bounded tree damage.
-    Each parity component of the recursive nearsort has bounded tree damage:
-    applying the network doesn't increase elements at tree-distance ≥ `r`
-    by more than `ε` times elements at distance ≥ `r-2`.
-
-    This is a STABILITY property — it holds for both the even-level (zig)
-    and odd-level (zag) components independently. -/
-lemma parity_nearsort_has_bounded_tree_damage {n : ℕ}
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (ε : ℝ) (hε : 0 < ε) (hε1 : ε ≤ 1)
-    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (t depth : ℕ) (parity : ℕ) :
-    HasBoundedTreeDamage (recursiveNearsortParity n halvers depth parity) ε t := by
-  sorry
-
-/-- **Lemma 2b (AKS Section 8):** Even-level nearsort has the improvement property.
-    The even-parity component of the recursive nearsort satisfies `HasImprovedBound`:
-    elements at tree-distance ≥ `r` after the network are bounded by elements at
-    tree-distance ≥ `r+1` BEFORE, plus `ε` times elements at `r-2`.
-
-    This is the KEY construction-specific lemma capturing the cherry-parity structure
-    of AKS Section 6. The halvers at each even level push elements whose critical
-    level is even one step closer to their sorted positions. The even/odd partition
-    ensures no double-counting across levels.
-
-    Note: by symmetry, the odd-level component also satisfies `HasImprovedBound`,
-    but only one improvement hypothesis is needed for `bounded_tree_damage_pair_gives_zigzag`. -/
-lemma parity_nearsort_has_improved_bound {n : ℕ}
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (ε : ℝ) (hε : 0 < ε) (hε1 : ε ≤ 1)
-    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (t depth : ℕ) :
-    HasImprovedBound (recursiveNearsortParity n halvers depth 0) ε t := by
-  sorry
-
 /-! **Boolean Sequence Helpers** -/
 
 /-- A Boolean sequence is balanced if it has equal 0s and 1s. -/
@@ -2455,12 +2420,10 @@ lemma network_disagreements_le {n : ℕ} (net : ComparatorNetwork n) (v w : Fin 
   8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
   9. ⚠️ aks_tree_sorting (top-level assembly — halver family version)
 
-  Remaining gaps (3):
-  - `parity_nearsort_has_bounded_tree_damage`: parity-restricted nearsort
-    → HasBoundedTreeDamage (Lemma 2a, AKS Section 8)
-  - `parity_nearsort_has_improved_bound`: even-level nearsort
-    → HasImprovedBound (Lemma 2b, AKS Section 8 — cherry-parity structure)
-  - `aks_tree_sorting`: assembly using parity nearsort + proved lemmas
+  Remaining gaps (extracted to separate files for parallel work):
+  - `parity_nearsort_has_bounded_tree_damage` → TreeDamageStability.lean (Lemma 2a)
+  - `parity_nearsort_has_improved_bound` → TreeDamageImprovement.lean (Lemma 2b)
+  - `aks_tree_sorting` → AKSNetwork.lean (assembly)
 -/
 
 /-- Applying an ε-halver to a monotone sequence preserves monotonicity.
@@ -2721,33 +2684,3 @@ lemma displacement_from_wrongness
     nlinarith
   linarith
 
-/-! **Main Theorem Assembly** -/
-
-/-- **Main Theorem**: Tree-based AKS sorting works (AKS 1983, Section 8).
-
-    Given a family of ε-halvers (one per sub-interval size, from the expander
-    family) with ε < 1/2, the recursive nearsort construction produces a
-    comparator network that sorts all Boolean inputs.
-
-    The construction uses `recursiveNearsortParity` to build zig (even levels)
-    and zag (odd levels), then iterates zigzag cycles for geometric convergence.
-    The size is bounded by `200 * (d + 1) * n * log₂ n`.
-
-    The proof (when completed):
-    1. Build zig = `recursiveNearsortParity n halvers depth 0` (even levels)
-       Build zag = `recursiveNearsortParity n halvers depth 1` (odd levels)
-    2. `parity_nearsort_has_bounded_tree_damage` → `HasBoundedTreeDamage` for both
-    3. `parity_nearsort_has_improved_bound` → `HasImprovedBound` for zig
-    4. `bounded_tree_damage_pair_gives_zigzag` → `HasBoundedZigzagDamage` (PROVED)
-    5. `zigzag_decreases_wrongness_v2` → geometric decay of wrongness (PROVED)
-    6. `displacement_from_wrongness` → displacement → 0 (PROVED)
-    7. When displacement < 1/n: must be sorted (discrete) -/
-theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (d : ℕ)
-    (hε : 0 < ε) (hε1 : ε < 1/2)
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (hhalver_size : ∀ m, (halvers m).size ≤ m * d) :
-    ∃ (net : ComparatorNetwork n),
-      (net.size : ℝ) ≤ 200 * (↑d + 1) * ↑n * ↑(Nat.log 2 n) ∧
-      ∀ (v : Fin n → Bool), Monotone (net.exec v) := by
-  sorry
