@@ -8,6 +8,14 @@ Lean formalization of the Ajtai–Komlós–Szemerédi (1983) O(n log n) sorting
 
 Most theorems have `sorry` placeholders — this is intentional. The codebase is a structural skeleton demonstrating the complete proof architecture.
 
+### Primary Sources
+
+The two key papers are checked into the repo:
+- **`docs/aks.pdf`** — Ajtai, Komlós, Szemerédi (1983): the sorting network construction
+- **`docs/rvw.pdf`** — Reingold, Vadhan, Wigderson (2002): the zig-zag product and spectral analysis
+
+**Always consult these PDFs first** when checking theorem statements, proof strategies, or definitions. Read the relevant section of the paper before doing web searches — the papers are the ground truth and web sources frequently get details wrong.
+
 ## Build Commands
 
 ```bash
