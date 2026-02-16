@@ -407,9 +407,9 @@ const PROOF_DATA = {
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
     // ── AKS/AKSNetwork.lean — top-level parameterized theorem ──
-    { id: "zigzag_implies_aks_network", file: "AKS/AKSNetwork.lean", line: 132, status: "sorry", kind: "theorem",
+    { id: "zigzag_implies_aks_network", file: "AKS/AKSNetwork.lean", line: 132, status: "proved", kind: "theorem",
       sig: "zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
-      desc: "Parameterized AKS theorem: expander family → O(n log n) sorting networks. Builds halver family via Classical.choice, calls aks_tree_sorting. No direct sorry (sorry is in aks_tree_sorting)." },
+      desc: "Parameterized AKS theorem: expander family → O(n log n) sorting networks. Builds halver family via Classical.choice, calls aks_tree_sorting." },
 
     // ── AKS/Main.lean — top-level assembly via iterated squaring ──
     { id: "squareIter", file: "AKS/Main.lean", line: 35, status: "definition", kind: "def",
