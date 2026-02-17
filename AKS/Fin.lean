@@ -8,6 +8,7 @@
 
 import Mathlib.Data.Fin.Basic
 import Mathlib.Data.Fintype.Card
+import Mathlib.Order.Interval.Finset.Fin
 import Mathlib.Tactic.Ring
 
 /-- Encoding a pair `(j, i) : Fin n × Fin d` as `j * d + i` stays in bounds. -/
@@ -51,3 +52,10 @@ theorem fin_div_add_mod {n d : ℕ} (ij : Fin (n * d))
     For `Fin n`, this equals the element's value. -/
 def rank {α : Type*} [Fintype α] [LinearOrder α] (a : α) : ℕ :=
   (Finset.univ.filter (· < a)).card
+
+/-- The rank of a `Fin n` element equals its value. -/
+lemma rank_fin_val {n : ℕ} (i : Fin n) : rank i = i.val := by
+  unfold rank
+  have : Finset.univ.filter (· < i) = Finset.Iio i := by
+    ext x; simp [Finset.mem_Iio]
+  rw [this, Fin.card_Iio]

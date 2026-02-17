@@ -22,9 +22,10 @@ import AKS.RegularGraph
 import AKS.Square
 import AKS.CompleteGraph
 import AKS.Mixing
-import AKS.ZigZagOperators
-import AKS.ZigZagSpectral
-import AKS.RVWBound
+import AKS.ZigZag.Operators
+import AKS.ZigZag.Spectral
+import AKS.ZigZag.RVWInequality
+import AKS.ZigZag.RVWBound
 import AKS.ZigZag
 import AKS.Random
 import AKS.Certificate

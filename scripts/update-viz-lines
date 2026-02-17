@@ -102,7 +102,7 @@ def main():
     # Extract all node entries with regex (JS object literals, not strict JSON)
     # Find each "{ id: "...", file: "...", line: N, ... }" block
     node_pattern = re.compile(
-        r'\{\s*id:\s*"([^"]+)"\s*,\s*file:\s*"([^"]+)"\s*,\s*line:\s*(\d+)'
+        r'\{\s*id:\s*"([^"]+)"\s*,\s*file:\s*"([^"]+)"\s*,\s*line:\s*(\d+)\s*,\s*status:\s*"([^"]+)"'
     )
 
     updates = []  # (id, file, old_line, new_line)
@@ -112,6 +112,10 @@ def main():
         node_id = m.group(1)
         filepath = m.group(2)
         old_line = int(m.group(3))
+        status = m.group(4)
+
+        if status == "retired":
+            continue
 
         new_line = find_line(filepath, node_id)
         if new_line is None:
