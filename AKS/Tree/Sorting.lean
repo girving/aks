@@ -33,7 +33,7 @@
 -/
 
 import AKS.Sort.Monotone
-import AKS.Halver
+import AKS.Halver.Defs
 
 open Finset BigOperators
 

@@ -18,7 +18,7 @@
   • `halverNetwork_size`: total size ≤ depth · (n · d)
 -/
 
-import AKS.Halver
+import AKS.Halver.Defs
 import AKS.Nearsort
 
 open Finset BigOperators
