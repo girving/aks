@@ -135,7 +135,7 @@ private theorem walkCLM_isSelfAdjoint {n d : ℕ} (G : RegularGraph n d) :
     exact (G.sum_neighbor_swap (fun v ↦ g v) (fun v ↦ f v)).symm
 
 /-- The mean projection absorbs the walk operator: P ∘ W = P (for d > 0). -/
-private theorem meanCLM_comp_walkCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
+theorem meanCLM_comp_walkCLM {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
     meanCLM n * G.walkCLM = (meanCLM n : EuclideanSpace ℝ (Fin n) →L[ℝ] _) := by
   ext f v
   simp only [ContinuousLinearMap.mul_apply, meanCLM_apply, RegularGraph.walkCLM_apply]

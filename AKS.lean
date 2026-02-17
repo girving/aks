@@ -11,6 +11,8 @@ import AKS.Depth
 import AKS.Fin
 import AKS.AKSNetwork
 import AKS.Halver
+import AKS.Tanner
+import AKS.ExpanderToHalver
 import AKS.TreeSorting
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement
