@@ -18,9 +18,9 @@ import AKS.HalverToNearsort
 import AKS.TreeSorting
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement
-import AKS.RegularGraph
-import AKS.Square
-import AKS.CompleteGraph
+import AKS.Graph.Regular
+import AKS.Graph.Square
+import AKS.Graph.Complete
 import AKS.Mixing
 import AKS.ZigZag.Operators
 import AKS.ZigZag.Spectral

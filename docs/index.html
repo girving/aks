@@ -153,45 +153,45 @@ const PROOF_DATA = {
       sig: "rank_fin_val {n : ℕ} (i : Fin n) : rank i = i.val",
       desc: "The rank of a Fin n element equals its value. Unfolds rank and uses Fin.card_Iio." },
 
-    // ── RegularGraph.lean ──
-    { id: "RegularGraph", file: "AKS/RegularGraph.lean", line: 35, status: "definition", kind: "structure",
+    // ── Graph/Regular.lean ──
+    { id: "RegularGraph", file: "AKS/Graph/Regular.lean", line: 35, status: "definition", kind: "structure",
       sig: "structure RegularGraph (n d : ℕ) where\n  rot : Fin n × Fin d → Fin n × Fin d\n  rot_involution : ...",
       desc: "D-regular graph on n vertices, represented by an involutory rotation map on vertex-port pairs." },
-    { id: "walkCLM", file: "AKS/RegularGraph.lean", line: 130, status: "definition", kind: "def",
+    { id: "walkCLM", file: "AKS/Graph/Regular.lean", line: 130, status: "definition", kind: "def",
       sig: "RegularGraph.walkCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
       desc: "Walk operator as a continuous linear map: averages a function over neighbors." },
-    { id: "meanCLM", file: "AKS/RegularGraph.lean", line: 163, status: "definition", kind: "def",
+    { id: "meanCLM", file: "AKS/Graph/Regular.lean", line: 163, status: "definition", kind: "def",
       sig: "meanCLM (n : ℕ) : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
       desc: "Mean projection CLM: projects onto the constant-function subspace." },
-    { id: "meanCLM_idempotent", file: "AKS/RegularGraph.lean", line: 173, status: "proved", kind: "theorem",
+    { id: "meanCLM_idempotent", file: "AKS/Graph/Regular.lean", line: 173, status: "proved", kind: "theorem",
       sig: "meanCLM_idempotent : meanCLM n * meanCLM n = meanCLM n",
       desc: "Mean projection is idempotent (P² = P)." },
-    { id: "meanCLM_isSelfAdjoint", file: "AKS/RegularGraph.lean", line: 184, status: "proved", kind: "theorem",
+    { id: "meanCLM_isSelfAdjoint", file: "AKS/Graph/Regular.lean", line: 184, status: "proved", kind: "theorem",
       sig: "meanCLM_isSelfAdjoint : IsSelfAdjoint (meanCLM n)",
       desc: "Mean projection is self-adjoint." },
-    { id: "spectralGap", file: "AKS/RegularGraph.lean", line: 263, status: "definition", kind: "def",
+    { id: "spectralGap", file: "AKS/Graph/Regular.lean", line: 263, status: "definition", kind: "def",
       sig: "spectralGap (G : RegularGraph n d) : ℝ := ‖G.walkCLM - meanCLM n‖",
       desc: "Spectral gap: operator norm of walk minus mean projection." },
-    { id: "spectralGap_nonneg", file: "AKS/RegularGraph.lean", line: 267, status: "proved", kind: "theorem",
+    { id: "spectralGap_nonneg", file: "AKS/Graph/Regular.lean", line: 267, status: "proved", kind: "theorem",
       sig: "spectralGap_nonneg : 0 ≤ spectralGap G",
       desc: "Spectral gap is non-negative (norm is non-negative)." },
-    { id: "spectralGap_le_one", file: "AKS/RegularGraph.lean", line: 330, status: "proved", kind: "theorem",
+    { id: "spectralGap_le_one", file: "AKS/Graph/Regular.lean", line: 330, status: "proved", kind: "theorem",
       sig: "spectralGap_le_one : spectralGap G ≤ 1",
       desc: "Spectral gap is at most 1. Proved via walk contraction and WP = P factoring." },
 
-    // ── Square.lean ──
-    { id: "RegularGraph.square", file: "AKS/Square.lean", line: 39, status: "definition", kind: "def",
+    // ── Graph/Square.lean ──
+    { id: "RegularGraph.square", file: "AKS/Graph/Square.lean", line: 39, status: "definition", kind: "def",
       sig: "RegularGraph.square : RegularGraph n (d * d)",
       desc: "Squared graph: two-step walks become single edges. Degree goes from d to d*d." },
-    { id: "spectralGap_square", file: "AKS/Square.lean", line: 182, status: "proved", kind: "theorem",
+    { id: "spectralGap_square", file: "AKS/Graph/Square.lean", line: 182, status: "proved", kind: "theorem",
       sig: "spectralGap_square : spectralGap G.square = (spectralGap G) ^ 2",
       desc: "Squaring a graph squares its spectral gap. Key CLM identity: (W-P)^2 = W^2 - P." },
 
-    // ── CompleteGraph.lean ──
-    { id: "completeGraph", file: "AKS/CompleteGraph.lean", line: 30, status: "definition", kind: "def",
+    // ── Graph/Complete.lean ──
+    { id: "completeGraph", file: "AKS/Graph/Complete.lean", line: 30, status: "definition", kind: "def",
       sig: "completeGraph (n : ℕ) : RegularGraph (n + 1) n",
       desc: "Complete graph K_{n+1} as an n-regular graph, using Fin.succAbove/predAbove." },
-    { id: "spectralGap_complete", file: "AKS/CompleteGraph.lean", line: 112, status: "proved", kind: "theorem",
+    { id: "spectralGap_complete", file: "AKS/Graph/Complete.lean", line: 112, status: "proved", kind: "theorem",
       sig: "spectralGap_complete : spectralGap (completeGraph n) = 1 / n",
       desc: "The complete graph K_{n+1} has spectral gap exactly 1/n." },
 
@@ -822,9 +822,9 @@ const PROOF_DATA = {
   // File groupings with display names
   groups: [
     { id: "AKS/Fin.lean", label: "Fin.lean", color: "#1a1e24" },
-    { id: "AKS/RegularGraph.lean", label: "RegularGraph.lean", color: "#1a1e24" },
-    { id: "AKS/Square.lean", label: "Square.lean", color: "#1a1e24" },
-    { id: "AKS/CompleteGraph.lean", label: "CompleteGraph.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Regular.lean", label: "Graph/Regular.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Square.lean", label: "Graph/Square.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Complete.lean", label: "Graph/Complete.lean", color: "#1a1e24" },
     { id: "AKS/Mixing.lean", label: "Mixing.lean", color: "#1a1e24" },
     { id: "AKS/ComparatorNetwork.lean", label: "ComparatorNetwork.lean", color: "#1a1e24" },
     { id: "AKS/AKSNetwork.lean", label: "AKSNetwork.lean", color: "#1a1e24" },

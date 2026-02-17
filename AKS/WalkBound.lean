@@ -10,7 +10,7 @@
   2. `sqrt_coeff_le_frac`: coefficient arithmetic converting √(c₁/(c₂·d²)) to βn/(βd·d)
 -/
 
-import AKS.RegularGraph
+import AKS.Graph.Regular
 
 open BigOperators Finset
 
