@@ -15,6 +15,7 @@
   This file has NO graph imports — it works in abstract inner product spaces.
 -/
 
+import AKS.RVWInequality
 import Mathlib.Analysis.InnerProductSpace.PiL2
 import Mathlib.Analysis.InnerProductSpace.Adjoint
 import Mathlib.Analysis.InnerProductSpace.Rayleigh
@@ -718,131 +719,6 @@ lemma quadratic_root_upper_bound {x c d : ℝ}
       have : 0 < (x - r) * (x - r') := mul_pos h_contra h_pos
       linarith
     linarith
-
-/-- AM-GM bound: `|p + 2q + r| ≤ a² + c²` from Cauchy-Schwarz constraints. -/
-private lemma rvw_X_le_sum_sq
-    (a c p q r : ℝ)
-    (h_refl_u : |p| ≤ a ^ 2) (h_refl_w : |r| ≤ c ^ 2)
-    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
-    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
-    |p + 2 * q + r| ≤ a ^ 2 + c ^ 2 := by
-  have hp_lo : -a ^ 2 ≤ p := neg_le_of_abs_le h_refl_u
-  have hp_hi : p ≤ a ^ 2 := abs_le.mp h_refl_u |>.2
-  have hr_lo : -c ^ 2 ≤ r := neg_le_of_abs_le h_refl_w
-  have hr_hi : r ≤ c ^ 2 := abs_le.mp h_refl_w |>.2
-  have hAp : 0 ≤ a ^ 2 - p := by linarith
-  have hCr : 0 ≤ c ^ 2 - r := by linarith
-  have hAp' : 0 ≤ a ^ 2 + p := by linarith
-  have hCr' : 0 ≤ c ^ 2 + r := by linarith
-  rw [abs_le]
-  constructor
-  · -- Lower bound: -(a² + c²) ≤ p + 2q + r
-    by_cases hq : q ≤ 0
-    · -- q ≤ 0: p + 2q + r ≥ p + r + 2q ≥ -a²-c² + 2q, and 2q ≥ -(a²+p+c²+r) from V1
-      -- From V1 AM-GM: 4q² ≤ ((a²+p)+(c²+r))², so |2q| ≤ a²+p+c²+r
-      have hV1_amgm : 4 * q ^ 2 ≤ (a ^ 2 + p + (c ^ 2 + r)) ^ 2 := by
-        nlinarith [sq_nonneg (a ^ 2 + p - (c ^ 2 + r))]
-      -- Since q ≤ 0: -2q ≤ a²+p+c²+r, i.e., 2q ≥ -(a²+p+c²+r)
-      have h2q : -(a ^ 2 + p + c ^ 2 + r) ≤ 2 * q := by nlinarith [sq_nonneg (2 * q + (a ^ 2 + p + c ^ 2 + r))]
-      linarith
-    · -- q > 0: p + 2q + r ≥ p + r ≥ -a² - c²
-      push_neg at hq
-      linarith
-  · -- Upper bound: p + 2q + r ≤ a² + c²
-    by_cases hq : 0 ≤ q
-    · -- q ≥ 0: From V2 AM-GM: 4q² ≤ ((a²-p)+(c²-r))², so 2q ≤ a²-p+c²-r
-      have hV2_amgm : 4 * q ^ 2 ≤ (a ^ 2 - p + (c ^ 2 - r)) ^ 2 := by
-        nlinarith [sq_nonneg (a ^ 2 - p - (c ^ 2 - r))]
-      have h2q : 2 * q ≤ a ^ 2 - p + c ^ 2 - r := by nlinarith [sq_nonneg (2 * q - (a ^ 2 - p + c ^ 2 - r))]
-      linarith
-    · -- q < 0: p + 2q + r ≤ p + r ≤ a² + c²
-      push_neg at hq
-      linarith
-
-/-- Combined V1+V2: `q² ≤ a²c² + pr`. -/
-private lemma rvw_q_sq_le
-    (a c p q r : ℝ)
-    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
-    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
-    q ^ 2 ≤ a ^ 2 * c ^ 2 + p * r := by nlinarith
-
-/-- Weighted V1+V2: `a²q² ≤ c²(a⁴ - p²)`. -/
-private lemma rvw_weighted
-    (a c p q r : ℝ)
-    (h_refl_u : |p| ≤ a ^ 2) (h_refl_w : |r| ≤ c ^ 2)
-    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
-    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
-    a ^ 2 * q ^ 2 ≤ c ^ 2 * (a ^ 4 - p ^ 2) := by
-  have hp_lo : -(a ^ 2) ≤ p := neg_le_of_abs_le h_refl_u
-  have hp_hi : p ≤ a ^ 2 := (abs_le.mp h_refl_u).2
-  nlinarith [mul_le_mul_of_nonneg_left h_cs_plus (by linarith : (0:ℝ) ≤ a ^ 2 - p),
-             mul_le_mul_of_nonneg_left h_cs_minus (by linarith : (0:ℝ) ≤ a ^ 2 + p)]
-
-/-- The core quadratic inequality: `X² ≤ (1-μ₂²)μ₁|X| + μ₂²`.
-    After clearing denominators by `a²b²`, this becomes
-    `a²b²X² ≤ (b²-c²)|p||X| + a²c²`. -/
-private lemma rvw_quadratic_ineq
-    (a b c p q r : ℝ)
-    (ha : 0 < a) (hb : 0 < b) (hc : 0 ≤ c) (hcb : c ≤ b)
-    (h_unit : a ^ 2 + b ^ 2 = 1)
-    (h_refl_u : |p| ≤ a ^ 2) (h_refl_w : |r| ≤ c ^ 2)
-    (h_cs_plus : q ^ 2 ≤ (a ^ 2 + p) * (c ^ 2 + r))
-    (h_cs_minus : q ^ 2 ≤ (a ^ 2 - p) * (c ^ 2 - r)) :
-    (p + 2 * q + r) ^ 2 ≤
-      (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |p + 2 * q + r| + (c / b) ^ 2 := by
-  -- Reduce to cleared form: a²b²X² ≤ (b²-c²)|p||X| + a²c²
-  set X := p + 2 * q + r
-  have hab2 : (0 : ℝ) < a ^ 2 * b ^ 2 := by positivity
-  suffices h : a ^ 2 * b ^ 2 * X ^ 2 ≤
-      (b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2 by
-    have h1 : X ^ 2 ≤ ((b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2) / (a ^ 2 * b ^ 2) := by
-      rw [le_div_iff₀ hab2]; nlinarith
-    calc X ^ 2
-        ≤ ((b ^ 2 - c ^ 2) * |p| * |X| + a ^ 2 * c ^ 2) / (a ^ 2 * b ^ 2) := h1
-      _ = (1 - (c / b) ^ 2) * (|p| / a ^ 2) * |X| + (c / b) ^ 2 := by
-            rw [div_pow]; field_simp
-  -- Cleared goal: a²b²X² ≤ (b²-c²)|p||X| + a²c²
-  -- Since |p|·|X| ≥ 0 and (b²-c²) ≥ 0, RHS ≥ a²c². Use |X|² = X².
-  -- Strategy: case split on signs, reduce to polynomial inequality,
-  -- then use concavity of G(q) = a²c² + (b²-c²)|p|X - a²b²X² and constraint q²≤V.
-  have hb2c2 : c ^ 2 ≤ b ^ 2 := by nlinarith [sq_nonneg c, sq_nonneg b]
-  have hp_lo : -(a ^ 2) ≤ p := neg_le_of_abs_le h_refl_u
-  have hp_hi : p ≤ a ^ 2 := (abs_le.mp h_refl_u).2
-  have hr_lo : -(c ^ 2) ≤ r := neg_le_of_abs_le h_refl_w
-  have hr_hi : r ≤ c ^ 2 := (abs_le.mp h_refl_w).2
-  -- Use |p|·|X| = |p·X| and the identity a²b²X² - (b²-c²)|p|·|X| - a²c² ≤ 0
-  -- which is G(|X|) ≤ 0 where G(Y) = a²b²Y² - (b²-c²)|p|Y - a²c² (convex in Y≥0).
-  -- G(0) = -a²c² ≤ 0. So G(|X|) ≤ 0 iff |X| ≤ positive root.
-  -- Equivalently: a²b²X² ≤ (b²-c²)|p||X| + a²c².
-  -- Rewrite using sq_abs: X² = |X|² and use nlinarith.
-  -- Key fact: (a²b²|X| - (b²-c²)|p|/2)·(something) relates to discriminant.
-  -- Direct approach: show (b²-c²)|p||X| ≥ a²b²X² - a²c² by bounding X.
-  -- From constraints: a²b²X² ≤ a²b²(a²+c²)² (since |X|≤a²+c²)
-  -- and (b²-c²)|p||X| ≥ 0. But this isn't tight enough.
-  -- Instead use: the quadratic a²b²t² - (b²-c²)|p|t - a²c² has positive root
-  -- Y₊ = ((b²-c²)|p| + √D)/(2a²b²) where D = (b²-c²)²p² + 4a⁴b²c².
-  -- We need |X| ≤ Y₊. Use Cauchy-Schwarz type bound on X.
-  --
-  -- Alternative: prove the equivalent G_poly ≥ 0 by case analysis + nlinarith.
-  -- G_poly = a²c² + (b²-c²)|p|·|X| - a²b²X²
-  -- With |p|·|X| ≥ p·X (when p,X have same sign) or |p|·|X| ≥ -p·X:
-  -- In all cases |p|·|X| ≥ ±p·X. So G_poly ≥ a²c² + (b²-c²)(±pX) - a²b²X²
-  -- and we need one of these ≥ 0.
-  -- Actually |p|·|X| = |pX|, so G_poly = a²c² + (b²-c²)|pX| - a²b²X².
-  -- Case pX ≥ 0: G_poly = a²c² + (b²-c²)pX - a²b²X² (need this ≥ 0)
-  -- Case pX < 0: G_poly = a²c² - (b²-c²)pX - a²b²X² ≥ a²c² + (b²-c²)pX - a²b²X²
-  --   (since -(b²-c²)pX ≥ (b²-c²)pX when pX < 0).
-  -- So it suffices to prove: a²c² + (b²-c²)pX - a²b²X² ≥ 0 always!
-  suffices h_main : a ^ 2 * c ^ 2 + (b ^ 2 - c ^ 2) * p * X - a ^ 2 * b ^ 2 * X ^ 2 ≥ 0 by
-    have hbc : 0 ≤ b ^ 2 - c ^ 2 := by linarith
-    have hpX : p * X ≤ |p| * |X| := by rw [← abs_mul]; exact le_abs_self _
-    have := mul_le_mul_of_nonneg_left hpX hbc
-    nlinarith
-  -- Now prove: a²c² + (b²-c²)pX - a²b²X² ≥ 0 where X = p+2q+r.
-  -- This is G = AC + (B-C)pX - ABX² with A=a², B=b², C=c².
-  -- G is concave in X (coeff -AB < 0). Its discriminant is (B-C)²p² + 4A²B²C ≥ 0.
-  -- So G ≥ 0 iff X is between the roots. We prove this using the constraints.
-  sorry
 
 private lemma rvw_exact_bound
     (a b c p q r : ℝ)

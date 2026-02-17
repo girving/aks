@@ -79,6 +79,10 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 **When the user says "commit", always push immediately after committing.** The standard workflow is: commit → pull if needed → push. Don't wait for explicit permission to push.
 
+### URL Fetching
+
+**When asked to fetch a URL that returns an error (403, timeout, etc.), ask the user for help** rather than silently falling back to searching local files or other sources. The user shared that URL for a reason — the content matters, and local files may contain outdated or different information.
+
 ### Resource Constraints
 
 **Never increase precision or memory usage without explicit permission.** If the user asks for f32, use f32. If they ask for low memory, keep it low. Do not silently switch from f32 to f64 or allocate larger buffers "because the margin is better." OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.

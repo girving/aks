@@ -20,6 +20,7 @@ import AKS.CompleteGraph
 import AKS.Mixing
 import AKS.ZigZagOperators
 import AKS.ZigZagSpectral
+import AKS.RVWInequality
 import AKS.RVWBound
 import AKS.ZigZag
 import AKS.Random
