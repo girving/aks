@@ -12,7 +12,7 @@
 -/
 
 import AKS.Mixing
-import AKS.Square
+import AKS.Graph.Square
 
 open Finset BigOperators
 

@@ -11,7 +11,7 @@
 -/
 
 import AKS.Halver
-import AKS.Tanner
+import AKS.Halver.Tanner
 import AKS.TreeSorting
 
 open Finset BigOperators

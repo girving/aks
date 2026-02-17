@@ -14,7 +14,7 @@
   The tree-based AKS correctness proof is in `TreeSorting.lean`.
 -/
 
-import AKS.ComparatorNetwork
+import AKS.Sort.Defs
 import AKS.Fin
 
 open Finset BigOperators

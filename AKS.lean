@@ -6,26 +6,25 @@
   • `AKS/Main.lean` — concrete instantiation with zig-zag expander family
 -/
 
-import AKS.ComparatorNetwork
-import AKS.Depth
+import AKS.Sort
 import AKS.Fin
 import AKS.AKSNetwork
 import AKS.Nearsort
 import AKS.Halver
-import AKS.Tanner
-import AKS.ExpanderToHalver
-import AKS.HalverToNearsort
+import AKS.Halver.Tanner
+import AKS.Halver.ExpanderToHalver
+import AKS.Nearsort.HalverToNearsort
 import AKS.TreeSorting
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement
-import AKS.RegularGraph
-import AKS.Square
-import AKS.CompleteGraph
+import AKS.Graph.Regular
+import AKS.Graph.Square
+import AKS.Graph.Complete
 import AKS.Mixing
-import AKS.ZigZagOperators
-import AKS.ZigZagSpectral
-import AKS.RVWInequality
-import AKS.RVWBound
+import AKS.ZigZag.Operators
+import AKS.ZigZag.Spectral
+import AKS.ZigZag.RVWInequality
+import AKS.ZigZag.RVWBound
 import AKS.ZigZag
 import AKS.Random
 import AKS.Certificate

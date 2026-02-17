@@ -2,7 +2,7 @@
   # Fin Arithmetic Helpers
 
   Reusable `Fin` encode/decode lemmas for product-type indexing.
-  Used by graph constructions in `RegularGraph.lean` and `ZigZag.lean` that represent
+  Used by graph constructions in `Graph/Regular.lean` and `ZigZag.lean` that represent
   `Fin n × Fin d` as `Fin (n * d)` via `j * d + i` encoding.
 -/
 
@@ -44,6 +44,15 @@ theorem fin_div_add_mod {n d : ℕ} (ij : Fin (n * d))
   apply Fin.ext
   show (ij.val / d) * d + ij.val % d = ij.val
   rw [Nat.mul_comm]; exact Nat.div_add_mod ij.val d
+
+
+/-! **Order** -/
+
+/-- Strict inequality from `≤` and `≠` for `Fin`. -/
+lemma Fin.lt_of_le_of_ne {n : ℕ} {a b : Fin n} (h1 : a ≤ b) (h2 : a ≠ b) : a < b := by
+  by_contra h
+  push_neg at h
+  exact h2 (Fin.le_antisymm h1 h)
 
 
 /-! **Rank** -/

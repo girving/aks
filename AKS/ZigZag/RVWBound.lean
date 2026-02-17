@@ -15,7 +15,7 @@
   This file has NO graph imports — it works in abstract inner product spaces.
 -/
 
-import AKS.RVWInequality
+import AKS.ZigZag.RVWInequality
 import Mathlib.Analysis.InnerProductSpace.PiL2
 import Mathlib.Analysis.InnerProductSpace.Adjoint
 import Mathlib.Analysis.InnerProductSpace.Rayleigh
@@ -326,15 +326,6 @@ private lemma rayleigh_at_eigenvector {n : ℕ}
   have := eigenvalue_inner_eq A v lambda h
   simp [hv_norm] at this
   exact this
-
-/-- Rayleigh quotient bound: ‖A‖ = sup_{‖x‖=1} |⟨Ax, x⟩| for self-adjoint A.
-    Currently unused — will be needed when proving `rvw_operator_norm_bound`. -/
-private lemma rayleigh_quotient_bound {n : ℕ} (_hn : 0 < n)
-    (A : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
-    (_hA_sa : IsSelfAdjoint A) :
-    ‖A‖ = sSup (Set.range fun (x : {x : EuclideanSpace ℝ (Fin n) // ‖x‖ = 1}) =>
-      |@inner ℝ _ _ (A x.val) x.val|) := by
-  sorry
 
 /-- The 2×2 matrix whose largest eigenvalue equals rvwBound(λ₁, λ₂).
     This is the matrix M = [[(1-λ₂²)λ₁, λ₂], [λ₂, 0]]. -/

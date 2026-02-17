@@ -131,13 +131,13 @@ The Ajtai–Komlós–Szemerédi construction and analysis:
 `parity_nearsort_has_improved_bound` (sorry): even-level nearsort → `HasImprovedBound`. Cherry-parity improvement property. Imports only `TreeSorting.lean`.
 
 ### `AKS/Halver.lean` — ε-Halver Theory
-ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
+ε-halvers and the expander → halver bridge. Imports `Graph/Regular.lean` and `Mixing.lean`:
 1. **Sorted version** — `countOnes`, `sortedVersion`, `sortedVersion_monotone`
 2. **ε-halvers** — `rank`, `EpsilonInitialHalved`, `EpsilonHalved`, `IsEpsilonHalver` (permutation-based, AKS Section 3), `epsHalverMerge`
 3. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
-Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here. The `expander_gives_halver` proof is in `ExpanderToHalver.lean`.
+Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here. The `expander_gives_halver` proof is in `Halver/ExpanderToHalver.lean`.
 
-### `AKS/Tanner.lean` — Tanner's Vertex Expansion Bound (~270 lines)
+### `AKS/Halver/Tanner.lean` — Tanner's Vertex Expansion Bound (~270 lines)
 Tanner's bound and supporting lemmas. Imports `Mixing.lean` and `Square.lean`:
 1. **Neighborhood/codegree** — `neighborSet`, `codeg`, `codeg_eq_zero_of_not_mem`
 2. **Codegree sum** — `codeg_sum`: Σ codeg(v) = d·|T| (via rotation bijection)
@@ -145,27 +145,27 @@ Tanner's bound and supporting lemmas. Imports `Mixing.lean` and `Square.lean`:
 4. **Orthogonal decomposition** — `norm_sq_walk_indicatorVec_le`: ‖W·1_T‖² ≤ |T|·(|T| + β²(n-|T|))/n
 5. **Tanner's bound** — `tanner_bound`: |N(T)|·(|T| + β²(n-|T|)) ≥ |T|·n (fully proved)
 
-### `AKS/ExpanderToHalver.lean` — Expander → ε-Halver Bridge (~650 lines)
-Proves `expander_gives_halver` via Tanner's bound. Imports `Halver.lean`, `Tanner.lean`, `TreeSorting.lean`:
+### `AKS/Halver/ExpanderToHalver.lean` — Expander → ε-Halver Bridge (~650 lines)
+Proves `expander_gives_halver` via Tanner's bound. Imports `Halver.lean`, `Halver/Tanner.lean`, `TreeSorting.lean`:
 1. **Bipartite construction** — `bipartiteComparators G` (compare position v with m + G.neighbor(v,p))
 2. **Edge monotonicity** — generalized to `LinearOrder α`: `exec_bipartite_edge_mono`
 3. **Permutation counting** — `exec_perm_card_lt`: exactly k positions have output val < k
 4. **Tanner-based proof** — `bipartite_epsilon_initial_halved`, `bipartite_epsilon_final_halved`
 5. **Main theorem** — `expander_gives_halver` (fully proved, 0 sorry)
 
-### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
+### `AKS/Graph/Regular.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
 1. **Regular graphs and adjacency matrices** — `RegularGraph` (rotation map representation), `adjMatrix`, symmetry proofs
 2. **Walk and mean operators** — `walkCLM` (CLM-first), `meanCLM`, `walkFun`/`walkLM`/`meanFun`/`meanLM` (three-layer pattern)
 3. **Spectral gap** — `spectralGap` := `‖walkCLM - meanCLM‖` (operator norm), `spectralGap_nonneg`, `spectralGap_le_one`
 
-### `AKS/Square.lean` — Graph Squaring (~225 lines)
+### `AKS/Graph/Square.lean` — Graph Squaring (~225 lines)
 Graph squaring and the spectral gap squaring identity:
 1. **Graph squaring** — `G.square`, `adjMatrix_square_eq_sq`
 2. **CLM identities** — self-adjointness, idempotency, `WP = PW = P`
 3. **Spectral gap squaring** — `spectralGap_square`: λ(G²) = λ(G)²
 
-### `AKS/CompleteGraph.lean` — Complete Graph (~108 lines)
+### `AKS/Graph/Complete.lean` — Complete Graph (~108 lines)
 The complete graph as a concrete example:
 1. **Complete graph** — `completeGraph` via `Fin.succAbove`/`Fin.predAbove`
 2. **Spectral gap** — `spectralGap_complete`: λ(K_{n+1}) = 1/n
@@ -178,7 +178,7 @@ Concrete base expander certified via davidad's triangular-inverse method:
 1. **`Random20736.graph`** — concrete `RegularGraph 20736 12`, rotation map verified by `native_decide`
 2. **`Random20736.gap`** — spectral gap ≤ 10/12 via `certificate_bridge` (sorry: 821 MB PSD certificate too large to embed on 16 GB machine)
 
-### `AKS/ZigZagOperators.lean` — Zig-Zag Product and Walk Operators (~230 lines)
+### `AKS/ZigZag/Operators.lean` — Zig-Zag Product and Walk Operators (~230 lines)
 Defines the zig-zag product and the three CLM operators for its spectral analysis:
 1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
 2. **Cluster encoding** — `cluster`/`port`/`encode` helpers for `Fin (n₁ * d₁)` ↔ `Fin n₁ × Fin d₁`
@@ -187,21 +187,27 @@ Defines the zig-zag product and the three CLM operators for its spectral analysi
 5. **Cluster mean** — `clusterMeanCLM` (`Q`: averages within each cluster)
 6. **Walk factorization** — `zigzag_walkCLM_eq`: `W_Z = B · Σ · B`
 
-### `AKS/ZigZagSpectral.lean` — Zig-Zag Operator Properties (~130 lines)
+### `AKS/ZigZag/Spectral.lean` — Zig-Zag Operator Properties (~130 lines)
 Algebraic identities and spectral bounds for the zig-zag operators:
 1. **Algebraic properties** — `Q² = Q`, `Q* = Q`, `B* = B`, `Σ² = 1`, `Σ* = Σ`, `BQ = QB = Q`
 2. **Tilde contraction** — `‖B(I-Q)‖ ≤ spectralGap G₂`
 3. **Hat block norm** — `‖QΣQ - P‖ ≤ spectralGap G₁`
 4. **Global mean decomposition** — `P·Q = Q·P = P`
 
-### `AKS/RVWBound.lean` — Abstract RVW Operator Bound (~85 lines)
-Pure operator theory, no graph imports:
+### `AKS/ZigZag/RVWInequality.lean` — Core RVW Scalar Inequality (~400 lines)
+Pure polynomial inequality, no operator imports. Fully proved (0 sorry):
+1. **`rvw_reduced_ineq`** — V1' inequality via a-quadratic case analysis
+2. **`rvw_cleared_ineq`** — cleared form via concavity + boundary reparameterization
+3. **`rvw_quadratic_ineq`** — division form via `p·X ≤ |p|·|X|`
+
+### `AKS/ZigZag/RVWBound.lean` — Abstract RVW Operator Bound
+Operator theory importing `RVWInequality.lean`:
 1. **`rvwBound`** — the precise RVW bound function
 2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
 3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
 
 ### `AKS/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
-Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `RegularGraph.lean`:
+Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `Graph/Regular.lean`:
 1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
 2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
 
@@ -213,15 +219,15 @@ Assembles the spectral bound and builds the iterated construction:
 
 ### Data flow
 ```
-Fin.lean → RegularGraph.lean → Square.lean ──────────────→ ZigZag.lean
-                              → CompleteGraph.lean              ↓
-                              → Mixing.lean ─→ Tanner.lean  AKS.lean
+Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
+                               → Graph/Complete.lean           ↓
+                              → Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
                               → WalkBound.lean ──→ CertificateBridge.lean
-                              → ZigZagOperators.lean ──→      ↑
-                                  ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean
+                              → ZigZag/Operators.lean ──→     ↑
+                                  ZigZag/Spectral.lean ─↗ ComparatorNetwork.lean ─→ AKSNetwork.lean
            Random.lean ────────────────────────────↗          ↑
-           RVWBound.lean ─────────────────────────↗  Halver.lean ─→ ExpanderToHalver.lean
-           Certificate.lean ──→ CertificateBridge.lean  Tanner.lean ─↗
+           ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗  Halver.lean ─→ Halver/ExpanderToHalver.lean
+           Certificate.lean ──→ CertificateBridge.lean  Halver/Tanner.lean ─↗
 ```
 
 ## Style
@@ -231,6 +237,7 @@ Fin.lean → RegularGraph.lean → Square.lean ───────────
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
 - Move reusable helpers into their own files (e.g., `Fin` arithmetic → `AKS/Fin.lean`). Iterate in-file during development, extract before committing.
 - Split files beyond ~300 lines. Smaller files = faster incremental checking (imports are precompiled; only the current file re-elaborates from the change point).
+- **Use parent module + subdirectory for cohesive subsystems.** Lean 4 allows `AKS/Name.lean` (parent module) and `AKS/Name/*.lean` (child modules) to coexist. The parent re-exports or assembles results; children hold the implementation. Example: `AKS/ZigZag.lean` imports `AKS.ZigZag.Operators`, `AKS.ZigZag.Spectral`, etc. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
 - **Parameterize theorems over abstract bounds, not hard-coded constants.** Take spectral gap bounds (β, c, etc.) as parameters with hypotheses, not baked-in fractions. Chain `.trans` through hypotheses, not `norm_num`. Prefer explicit types/degrees (`D * D`) over `∃ d`, and concrete objects as parameters over axioms in statements. Motivation: we want explicit, computable, extractable constants.
 - **Avoid non-terminal `simp`** — use `simp only [specific, lemmas]` or `rw` instead. Non-terminal `simp` is fragile (new simp lemmas can break downstream tactics). Exception: acceptable if the alternative is much uglier, but document why.
@@ -273,7 +280,7 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here (not in auto memory). This file is the single source of truth for accumulated lessons, so they persist across machines.
 
-**Extract defs from `where` blocks before proving properties.** Inline `where` blocks produce goals with fully-unfolded terms. Instead: extract as a standalone `private def` using `.1`/`.2` projections, prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` works cleanly. See `square_rot`/`square_rot_involution` in `RegularGraph.lean`.
+**Extract defs from `where` blocks before proving properties.** Inline `where` blocks produce goals with fully-unfolded terms. Instead: extract as a standalone `private def` using `.1`/`.2` projections, prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` works cleanly. See `square_rot`/`square_rot_involution` in `Graph/Regular.lean`.
 
 **Generalize helper lemmas from the start.** Write `Fin` arithmetic helpers with the most general signature (e.g., `Fin n × Fin d`, not `Fin d × Fin d`). General versions cost nothing extra and prevent rework.
 
@@ -291,7 +298,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. Repeated `omega`/`simp` failures usually indicate the definitions need restructuring, not a cleverer tactic combination.
 
-**Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `RegularGraph.lean`.
+**Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `Graph/Regular.lean`.
 
 **Triangle inequality for `|·|` via `dist_triangle`.** Convert to metric API: `|μ| = ‖μ‖ = dist μ 0` (via `Real.norm_eq_abs`, `dist_zero_right`), then `dist_triangle μ c 0`. Use `Real.dist_eq` for `dist x y = |x - y|`.
 
@@ -331,15 +338,15 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Indicator vector pattern for combinatorial-spectral bridges.** (1) Define `indicatorVec S` via `(WithLp.equiv 2 _).symm (fun v ↦ if v ∈ S then 1 else 0)` with `@[simp]` apply lemma; (2) `‖indicatorVec S‖ = √↑S.card` via `EuclideanSpace.norm_sq_eq` + `sum_boole`; (3) express edge count as `⟨1_S, A(1_T)⟩` using `ite_mul`/`sum_filter`/`sum_boole`; (4) apply `abs_real_inner_le_norm` + `le_opNorm`. Key: `simp_rw [ite_mul, one_mul, zero_mul]; rw [← Finset.sum_filter]; have : univ.filter (· ∈ S) = S := by ext; simp`.
 
-**Algebraic CLM identities via `ext + simp + field_simp`.** For operator equalities (Q² = Q, BQ = Q, QP = P): (1) `ext f vk`, (2) `simp only [operator_apply, ...]`, (3) `field_simp`. For complex cases, insert `rw [Finset.sum_div]` between simp and field_simp. See `ZigZagSpectral.lean`.
+**Algebraic CLM identities via `ext + simp + field_simp`.** For operator equalities (Q² = Q, BQ = Q, QP = P): (1) `ext f vk`, (2) `simp only [operator_apply, ...]`, (3) `field_simp`. For complex cases, insert `rw [Finset.sum_div]` between simp and field_simp. See `ZigZag/Spectral.lean`.
 
-**Sum bijection helpers for reorganizing double sums.** For `Fin n₁ × Fin d₁ ≃ Fin (n₁ * d₁)`: use `Finset.sum_bij'` helpers (see `sum_encode_eq_sum`, `sum_over_cluster` in `ZigZagOperators.lean`). Apply via `conv_lhs => rw [bijection_lemma]` in calc-style proofs.
+**Sum bijection helpers for reorganizing double sums.** For `Fin n₁ × Fin d₁ ≃ Fin (n₁ * d₁)`: use `Finset.sum_bij'` helpers (see `sum_encode_eq_sum`, `sum_over_cluster` in `ZigZag/Operators.lean`). Apply via `conv_lhs => rw [bijection_lemma]` in calc-style proofs.
 
 **Make helper definitions public when downstream proofs need them.** Remove `private` and add `@[simp]` lemmas when multiple files need encode/decode helpers. The larger API surface is outweighed by enabling downstream `simp`.
 
 **Rotation bijection for walk/neighbor sum equality.** Use `RegularGraph.sum_neighbor_eq G (fun v => f v)` to show `∑ v ∑ i, f(G.neighbor v i) = ∑ v ∑ i, f v` (from `G.rot` involution). Chain with `Finset.sum_const` + `Finset.card_fin` for the d₂ factor.
 
-**Block-diagonal operator norms via calc + per-block bounds.** (1) `opNorm_le_bound` → show `‖Bf‖ ≤ ‖f‖`, (2) expand `‖·‖²` via `EuclideanSpace.norm_sq_eq`, (3) regroup by blocks via bijection helpers, (4) `Finset.sum_le_sum` per-block, (5) connect to per-block norm bound. Use `Real.sqrt_le_sqrt` once. See `withinClusterCLM_norm_le_one` in `ZigZagSpectral.lean`.
+**Block-diagonal operator norms via calc + per-block bounds.** (1) `opNorm_le_bound` → show `‖Bf‖ ≤ ‖f‖`, (2) expand `‖·‖²` via `EuclideanSpace.norm_sq_eq`, (3) regroup by blocks via bijection helpers, (4) `Finset.sum_le_sum` per-block, (5) connect to per-block norm bound. Use `Real.sqrt_le_sqrt` once. See `withinClusterCLM_norm_le_one` in `ZigZag/Spectral.lean`.
 
 **When hitting technical obstacles, step back and reason mathematically first.** After 2-3 failed tactic attempts, don't revert to `sorry`. Instead: (1) write out what you're proving and why it's true, (2) identify key sublemmas, (3) implement as separate helper lemmas, (4) reassemble. Helpers are reusable and make the main proof readable.
 
@@ -376,20 +383,20 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZag/Spectral sublemmas through `rvw_operator_norm_bound`. ZigZag/Operators.lean: 0 sorry. ZigZag/Spectral.lean: 0 sorry. ZigZag/RVWBound.lean: 0 sorry (scalar inequality proved in `ZigZag/RVWInequality.lean`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all ZigZagOperators + ZigZagSpectral sublemmas (0 sorry each), `displacement_from_wrongness`, `zigzag_decreases_wrongness_v2`, `tanner_bound` (Tanner's vertex expansion), `expander_gives_halver` (expander → ε-halver bridge)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, `rvw_quadratic_ineq` (core scalar inequality, in `ZigZag/RVWInequality.lean`), all ZigZag/Operators + ZigZag/Spectral sublemmas (0 sorry each), `displacement_from_wrongness`, `zigzag_decreases_wrongness_v2`, `tanner_bound` (Tanner's vertex expansion), `expander_gives_halver` (expander → ε-halver bridge)
 
 **Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`. Also deleted: `HasCherryShiftDamage`, `cherry_shift_implies_bounded_tree`, `cherry_shift_damage_gives_zigzag` (not in AKS paper; `r→r+1` comes from partition offset in Lemma 3)
 
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
 - *Done (11/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`, `hat_block_norm` (‖QΣQ - P‖ ≤ spectralGap G₁), `withinCluster_tilde_contraction` (‖B(I-Q)‖ ≤ spectralGap G₂, 1 sorry in d₂=0 degenerate case)
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
-- *Hard (2-4 weeks):* `rvw_quadratic_ineq` — the sole remaining `sorry` in `rvw_operator_norm_bound`. See **RVW Quadratic Inequality** section below for detailed analysis. `rayleigh_quotient_bound` is also sorry'd but currently unused.
+- *Done:* `rvw_quadratic_ineq` (proved in `ZigZag/RVWInequality.lean` via a-quadratic case analysis)
 
-**Substantial (months):** **Proved:** `expander_gives_halver` (in `ExpanderToHalver.lean`, via Tanner's bound), `tanner_bound` (in `Tanner.lean`), `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
+**Substantial (months):** **Proved:** `expander_gives_halver` (in `Halver/ExpanderToHalver.lean`, via Tanner's bound), `tanner_bound` (in `Halver/Tanner.lean`), `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
 
 **Engineering (weeks, fiddly):** embedding 821 MB PSD certificate for `Random20736.gap` (needs machine with more RAM), reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
@@ -399,50 +406,13 @@ Base expander graphs are certified via davidad's triangular-inverse method + `na
 
 **Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
 
-## RVW Quadratic Inequality (`rvw_quadratic_ineq`)
+## RVW Quadratic Inequality (proved)
 
-The sole remaining `sorry` in `rvw_operator_norm_bound` (`AKS/RVWBound.lean`, ~line 814). This is the scalar core of the RVW spectral bound: after the operator-level proof reduces to a scalar inequality via reflection structure and Cauchy-Schwarz, we need:
+`rvw_quadratic_ineq` is fully proved in `AKS/ZigZag/RVWInequality.lean`. The proof chain:
+1. **`rvw_reduced_ineq`** — core V1' inequality in 4 variables (α, wh, zh, a). Proved by treating as a quadratic in `a` and case-splitting: disc ≤ 0 (no real roots), vertex ≥ 1 (f(1) ≥ 0 suffices), or vertex ≤ 0 (f(0) ≥ 0 suffices).
+2. **`rvw_cleared_ineq`** — cleared polynomial form, via concavity reduction + boundary reparameterization.
+3. **`rvw_quadratic_ineq`** — original form with spectral gap parameters, via `p·X ≤ |p|·|X|`.
 
-```
-X² ≤ (1 - μ₂²) · μ₁ · |X| + μ₂²
-```
+### Lesson: when `nlinarith` is structurally infeasible, try algebraic case analysis
 
-After clearing denominators: `G = AC + (B-C)·|p|·|X| - AB·X² ≥ 0` where `A = a²`, `B = 1-A`, `C = c²`, `X = p + 2q + r`, with constraints `|p| ≤ A`, `|r| ≤ C`, `q² ≤ (A±p)(C±r)`.
-
-### What has been proven impossible
-
-**`nlinarith` (diagonal Positivstellensatz) is structurally infeasible.** The inequality is tight on a 1D manifold `{C = B, p = A, r = C}` where `G = AB(1 - (A+C)²) = 0`. This forces every diagonal certificate term `h_i · m²` to vanish on the manifold, leaving too few degrees of freedom. Proven via LP at degrees 4-8, with multiple variable substitutions and constraint sets (158 Python scripts tested). **Do not attempt further LP/nlinarith variations** — the obstruction is structural, not a matter of finding the right hints or reparameterization.
-
-**Full-matrix SOS certificates exist but can't be extracted.** SDP solvers (SCS, CLARABEL) find near-feasible degree-6 certificates, confirming the Putinar representation exists. But first-order solvers achieve only ~0.003 primal residual — insufficient for rational reconstruction (~1e-10 needed). Rounding and LP-fitting the numerical certificate also fails.
-
-### What is already proved in Lean
-
-The scaffold in `RVWBound.lean` (lines 765-813) already handles:
-- Clearing denominators (`suffices h : A * B * X ^ 2 ≤ ...`)
-- Derived bounds: `q² ≤ AC + pr` (sum CS), `A·q² ≤ C·(A²-p²)` (weighted CS)
-- `concave_quad_min_boundary` helper lemma (concavity reduction)
-
-### Viable proof paths (in order of preference)
-
-**Path A: High-precision SDP → exact certificate → `nlinarith` hints.** Install MOSEK (free academic license) or SDPA-GMP (arbitrary precision). These achieve 1e-15+ precision, making rational reconstruction trivial. Extract the PSD matrix entries as exact rationals, decompose into squared linear combinations, and feed to `nlinarith` as `sq_nonneg (c₁·A + c₂·C + c₃·u + c₄·t + ...)` hints. This is mechanical once the solver is available. The SOS certificate uses the `(A,C,u,t)` variables where `u = √(A-p)`, `t = √(C-r)`.
-
-**Path B: Trigonometric proof (RVW paper Section 4.2, Claim 4.4).** Formalize the paper's geometric proof: (1) recognize Σ̃ as a reflection → `⟨Σ̃v,v⟩ = cos(2θ)·‖v‖²`, (2) bound `|cos(2θ)| · cos²φ/cos²φ'` by case-splitting on angle ranges, (3) optimize over φ direction → yields `rvwBound(μ₁,μ₂)`. Risk: trig identity manipulation is laborious in Lean, but mathematically guaranteed to work.
-
-**Path C: Axiomatize and move on.** Leave the `sorry` and work on other parts. Come back when a high-precision solver is available.
-
-### Lessons learned (for future hard inequalities)
-
-1. **When an LP is proven infeasible, do not try LP-like variations.** Reparameterizing variables, adding derived constraints, or increasing degree cannot fix a structural obstruction (tight manifold forcing diagonal terms to vanish). One clear infeasibility proof is sufficient.
-
-2. **Distinguish diagonal SOS (LP) from full-matrix SOS (SDP) early.** `nlinarith` uses diagonal Positivstellensatz — each certificate term is `(single constraint product) × (single monomial)²`. Full-matrix SOS allows cross-terms `(constraint) × (linear combination of monomials)²`. When the LP is infeasible but the inequality is true, the proof requires cross-terms, which means either `nlinarith` with explicit `sq_nonneg` hints (if you know the right linear combinations) or a fundamentally different proof technique.
-
-3. **SDP solver precision matters.** First-order solvers (SCS, CLARABEL) are fine for optimization but inadequate for exact certificate extraction. For proof-carrying code, use interior-point solvers (MOSEK, SDPA-GMP) that achieve 1e-12+ precision.
-
-4. **Algebraic rearrangements of a hard inequality are an infinite trap.** When you have a degree-6 inequality in 4+ variables, there are infinitely many decompositions, substitutions, and case splits. Each feels like progress but they all reduce to the same core difficulty. After ~5 failed decompositions, the probability of the next one working is negligible — switch to a fundamentally different approach.
-
-5. **Count your scripts.** If you've written 10+ analysis scripts for the same lemma without converging, you are thrashing. Stop, document what's been tried, and escalate.
-
-### Reference
-
-- Status document: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
-- Analysis scripts: `scripts/rvw/` (saved) and `/tmp/rvw_*.py` (ephemeral, 158 scripts from Feb 2026 sessions)
+Direct `nlinarith` (diagonal Positivstellensatz) was proven infeasible for this inequality. SOS certificates exist but couldn't be extracted at sufficient precision. The successful approach was mathematical: reparameterize to expose a quadratic in one variable, then case-split on discriminant sign and vertex location. Each case reduces to elementary `nlinarith` with explicit ring identity hints.
