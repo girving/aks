@@ -26,14 +26,13 @@ import AKS.ZigZag.Spectral
 import AKS.ZigZag.RVWInequality
 import AKS.ZigZag.RVWBound
 import AKS.ZigZag
-import AKS.Random
 import AKS.Certificate
 import AKS.WalkBound
 import AKS.DiagDominant
 import AKS.SpectralMatrix
 import AKS.CertificateBridge
 import AKS.NpyReader
-import AKS.Random16
-import AKS.Random1728
-import AKS.Random20736
+import AKS.Random.Random16
+import AKS.Random.Random1728
+import AKS.Random.Random20736
 import AKS.Main

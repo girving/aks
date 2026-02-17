@@ -411,34 +411,34 @@ const PROOF_DATA = {
       sig: "certificate_bridge :\n  checkCertificate = true → spectralGap G ≤ βn/(βd·d)",
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
-    // ── Random16.lean ──
-    { id: "Random16.graph", file: "AKS/Random16.lean", line: 23, status: "proved", kind: "def",
+    // ── Random/Random16.lean ──
+    { id: "Random16.graph", file: "AKS/Random/Random16.lean", line: 23, status: "proved", kind: "def",
       sig: "def Random16.graph : RegularGraph 16 4",
       desc: "Concrete 4-regular graph on 16 vertices. Small test graph, rotation map verified by native_decide." },
-    { id: "Random16.gap", file: "AKS/Random16.lean", line: 33, status: "proved", kind: "theorem",
+    { id: "Random16.gap", file: "AKS/Random/Random16.lean", line: 33, status: "proved", kind: "theorem",
       sig: "theorem Random16.gap : spectralGap graph ≤ 5/4",
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=16) verified by native_decide." },
 
-    // ── Random1728.lean ──
-    { id: "Random1728.graph", file: "AKS/Random1728.lean", line: 23, status: "proved", kind: "def",
+    // ── Random/Random1728.lean ──
+    { id: "Random1728.graph", file: "AKS/Random/Random1728.lean", line: 23, status: "proved", kind: "def",
       sig: "def Random1728.graph : RegularGraph 1728 12",
       desc: "Concrete 12-regular graph on 1728 = 12³ vertices. Medium test graph, rotation map verified by native_decide." },
-    { id: "Random1728.gap", file: "AKS/Random1728.lean", line: 33, status: "proved", kind: "theorem",
+    { id: "Random1728.gap", file: "AKS/Random/Random1728.lean", line: 33, status: "proved", kind: "theorem",
       sig: "theorem Random1728.gap : spectralGap graph ≤ 10/12",
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
 
-    // ── Random20736.lean ──
-    { id: "Random20736.graph", file: "AKS/Random20736.lean", line: 31, status: "proved", kind: "def",
+    // ── Random/Random20736.lean ──
+    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 31, status: "proved", kind: "def",
       sig: "def Random20736.graph : RegularGraph 20736 12",
       desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
-    { id: "Random20736.gap", file: "AKS/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
+    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
       sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
       desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
     // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
-    { id: "baseExpander", file: "AKS/Random20736.lean", line: 31, status: "retired", kind: "axiom",
+    { id: "baseExpander", file: "AKS/Random/Random20736.lean", line: 31, status: "retired", kind: "axiom",
       sig: "axiom baseExpander : RegularGraph 20736 12",
       desc: "Retired: replaced by Random20736.graph." },
-    { id: "baseExpander_gap", file: "AKS/Random20736.lean", line: 41, status: "retired", kind: "axiom",
+    { id: "baseExpander_gap", file: "AKS/Random/Random20736.lean", line: 41, status: "retired", kind: "axiom",
       sig: "axiom baseExpander_gap : spectralGap baseExpander ≤ 5/9",
       desc: "Retired: replaced by Random20736.gap." },
 
@@ -844,9 +844,9 @@ const PROOF_DATA = {
     { id: "AKS/SpectralMatrix.lean", label: "SpectralMatrix.lean", color: "#1a1e24" },
     { id: "AKS/DiagDominant.lean", label: "DiagDominant.lean", color: "#1a1e24" },
     { id: "AKS/CertificateBridge.lean", label: "CertificateBridge.lean", color: "#1a1e24" },
-    { id: "AKS/Random16.lean", label: "Random16.lean", color: "#1a1e24" },
-    { id: "AKS/Random1728.lean", label: "Random1728.lean", color: "#1a1e24" },
-    { id: "AKS/Random20736.lean", label: "Random20736.lean", color: "#1a1e24" },
+    { id: "AKS/Random/Random16.lean", label: "Random/Random16.lean", color: "#1a1e24" },
+    { id: "AKS/Random/Random1728.lean", label: "Random/Random1728.lean", color: "#1a1e24" },
+    { id: "AKS/Random/Random20736.lean", label: "Random/Random20736.lean", color: "#1a1e24" },
     { id: "AKS/Tree/Sorting.lean", label: "Tree/Sorting.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageStability.lean", label: "Tree/DamageStability.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageImprovement.lean", label: "Tree/DamageImprovement.lean", color: "#1a1e24" },

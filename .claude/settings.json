@@ -3,7 +3,9 @@
   "permissions": {
     "ask": [
       "Edit(.claude/settings.json)",
-      "Write(.claude/settings.json)"
+      "Write(.claude/settings.json)",
+      "Edit(AKS/Random/**)",
+      "Write(AKS/Random/**)"
     ],
     "allow": [
       "Bash(cat *)",
