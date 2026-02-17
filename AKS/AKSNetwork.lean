@@ -11,8 +11,8 @@
   For the concrete instantiation with the zig-zag construction, see `Main.lean`.
 -/
 
-import AKS.ComparatorNetwork
-import AKS.Depth
+import AKS.Sort.ZeroOne
+import AKS.Sort.Depth
 import AKS.Halver
 import AKS.Halver.ExpanderToHalver
 import AKS.TreeDamageStability

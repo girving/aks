@@ -46,6 +46,15 @@ theorem fin_div_add_mod {n d : ℕ} (ij : Fin (n * d))
   rw [Nat.mul_comm]; exact Nat.div_add_mod ij.val d
 
 
+/-! **Order** -/
+
+/-- Strict inequality from `≤` and `≠` for `Fin`. -/
+lemma Fin.lt_of_le_of_ne {n : ℕ} {a b : Fin n} (h1 : a ≤ b) (h2 : a ≠ b) : a < b := by
+  by_contra h
+  push_neg at h
+  exact h2 (Fin.le_antisymm h1 h)
+
+
 /-! **Rank** -/
 
 /-- The rank of an element: the number of strictly smaller elements.

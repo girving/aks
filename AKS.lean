@@ -6,8 +6,7 @@
   • `AKS/Main.lean` — concrete instantiation with zig-zag expander family
 -/
 
-import AKS.ComparatorNetwork
-import AKS.Depth
+import AKS.Sort
 import AKS.Fin
 import AKS.AKSNetwork
 import AKS.Nearsort

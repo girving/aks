@@ -12,7 +12,7 @@
   `rank` is defined in `Fin.lean`.
 -/
 
-import AKS.ComparatorNetwork
+import AKS.Sort.Defs
 import AKS.Fin
 
 open Finset BigOperators
