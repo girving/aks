@@ -8,15 +8,15 @@
 
 import AKS.Sort
 import AKS.Fin
-import AKS.AKSNetwork
+import AKS.Tree.AKSNetwork
 import AKS.Nearsort
 import AKS.Halver
 import AKS.Halver.Tanner
 import AKS.Halver.ExpanderToHalver
 import AKS.Nearsort.HalverToNearsort
-import AKS.TreeSorting
-import AKS.TreeDamageStability
-import AKS.TreeDamageImprovement
+import AKS.Tree.Sorting
+import AKS.Tree.DamageStability
+import AKS.Tree.DamageImprovement
 import AKS.Graph.Regular
 import AKS.Graph.Square
 import AKS.Graph.Complete
