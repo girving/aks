@@ -11,7 +11,7 @@
   to prove `zigzag_spectral_bound` in `ZigZag.lean`.
 -/
 
-import AKS.ZigZagOperators
+import AKS.ZigZag.Operators
 
 open Matrix BigOperators Finset
 

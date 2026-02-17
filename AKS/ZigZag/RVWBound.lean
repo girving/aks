@@ -15,7 +15,7 @@
   This file has NO graph imports — it works in abstract inner product spaces.
 -/
 
-import AKS.RVWInequality
+import AKS.ZigZag.RVWInequality
 import Mathlib.Analysis.InnerProductSpace.PiL2
 import Mathlib.Analysis.InnerProductSpace.Adjoint
 import Mathlib.Analysis.InnerProductSpace.Rayleigh

@@ -10,8 +10,8 @@
   iterated construction that yields expanders at every size.
 -/
 
-import AKS.ZigZagSpectral
-import AKS.RVWBound
+import AKS.ZigZag.Spectral
+import AKS.ZigZag.RVWBound
 import AKS.Square
 
 open Matrix BigOperators Finset
