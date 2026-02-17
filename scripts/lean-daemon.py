@@ -143,24 +143,37 @@ class LspConnection:
         return self._diagnostics.get(uri, [])
 
 
+def _snapshot_lean_files() -> frozenset[str]:
+    """Return the set of project .lean file paths relative to PROJECT_ROOT.
+
+    Includes top-level .lean files and everything under AKS/.
+    Excludes .lake/ (Mathlib, dependencies)."""
+    import glob
+    files: set[str] = set()
+    for pattern in ["*.lean", "AKS/**/*.lean"]:
+        files.update(glob.glob(pattern, root_dir=PROJECT_ROOT, recursive=True))
+    return frozenset(files)
+
+
 class LeanDaemon:
     """Persistent Lean language server wrapper."""
 
     def __init__(self):
         self.conn: LspConnection | None = None
         self.opened_files: dict[str, int] = {}  # uri -> version
+        self._file_snapshot: frozenset[str] = frozenset()
 
     def start(self):
         """Start lake serve and initialize LSP."""
         # Ensure CertChecker shared lib is built before starting LSP.
         # The AKS lib passes --load-dynlib for it, so it must exist.
-        print(f"[lean-daemon] Building CertChecker shared lib...")
+        print(f"[lean-daemon] Building CertChecker shared lib...", flush=True)
         subprocess.run(
             ["lake", "build", "CertChecker"],
             cwd=PROJECT_ROOT,
             capture_output=True,
         )
-        print(f"[lean-daemon] Starting lake serve in {PROJECT_ROOT}...")
+        print(f"[lean-daemon] Starting lake serve in {PROJECT_ROOT}...", flush=True)
         proc = subprocess.Popen(
             ["lake", "serve"],
             stdin=subprocess.PIPE,
@@ -182,8 +195,13 @@ class LeanDaemon:
             },
         })
         self.conn.notify("initialized", {})
+        self._file_snapshot = _snapshot_lean_files()
         dt = time.time() - t0
-        print(f"[lean-daemon] Initialized in {dt:.1f}s")
+        print(f"[lean-daemon] Initialized in {dt:.1f}s", flush=True)
+
+    def files_changed(self) -> bool:
+        """Check if the set of .lean files has changed since startup."""
+        return _snapshot_lean_files() != self._file_snapshot
 
     def check_file(self, filepath: str) -> dict:
         """Check a file and return diagnostics after full processing."""
@@ -229,6 +247,18 @@ class LeanDaemon:
             "diagnostics": diagnostics,
         }
 
+    def restart_if_stale(self) -> bool:
+        """Restart lake serve if the set of .lean files has changed.
+
+        Returns True if a restart occurred."""
+        if not self.files_changed():
+            return False
+        print("[lean-daemon] File layout changed, restarting lake serve...", flush=True)
+        self.shutdown()
+        self.opened_files.clear()
+        self.start()
+        return True
+
     def shutdown(self):
         """Gracefully shut down the server."""
         if self.conn:
@@ -249,12 +279,13 @@ def run_daemon():
 
     daemon = LeanDaemon()
     daemon.start()
+    restart_lock = threading.Lock()
 
     # Listen on Unix domain socket
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(SOCKET_PATH)
     server.listen(5)
-    print(f"[lean-daemon] Listening on {SOCKET_PATH}")
+    print(f"[lean-daemon] Listening on {SOCKET_PATH}", flush=True)
 
     def handle_client(client: socket.socket):
         try:
@@ -269,6 +300,8 @@ def run_daemon():
             request = json.loads(data.decode("utf-8"))
 
             if request.get("command") == "check":
+                with restart_lock:
+                    daemon.restart_if_stale()
                 result = daemon.check_file(request["file"])
                 response = json.dumps(result)
             elif request.get("command") == "ping":

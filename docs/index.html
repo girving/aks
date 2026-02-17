@@ -196,10 +196,10 @@ const PROOF_DATA = {
       desc: "The complete graph K_{n+1} has spectral gap exactly 1/n." },
 
     // ── Mixing.lean ──
-    { id: "indicatorVec", file: "AKS/Mixing.lean", line: 24, status: "definition", kind: "def",
+    { id: "indicatorVec", file: "AKS/Halver/Mixing.lean", line: 24, status: "definition", kind: "def",
       sig: "indicatorVec (S : Finset (Fin n)) : EuclideanSpace ℝ (Fin n)",
       desc: "Indicator vector: 1 on vertices in S, 0 elsewhere." },
-    { id: "expander_mixing_lemma", file: "AKS/Mixing.lean", line: 120, status: "proved", kind: "theorem",
+    { id: "expander_mixing_lemma", file: "AKS/Halver/Mixing.lean", line: 120, status: "proved", kind: "theorem",
       sig: "expander_mixing_lemma : |edges(S,T)/d - |S||T|/n| ≤ λ · √(|S|·|T|)",
       desc: "Expander mixing lemma: edge distribution between sets S,T is close to uniform, controlled by spectral gap." },
 
@@ -826,7 +826,7 @@ const PROOF_DATA = {
     { id: "AKS/Graph/Regular.lean", label: "Graph/Regular.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Square.lean", label: "Graph/Square.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Complete.lean", label: "Graph/Complete.lean", color: "#1a1e24" },
-    { id: "AKS/Mixing.lean", label: "Mixing.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/Mixing.lean", label: "Halver/Mixing.lean", color: "#1a1e24" },
     { id: "AKS/Sort/Defs.lean", label: "Sort/Defs.lean", color: "#1a1e24" },
     { id: "AKS/Sort/Monotone.lean", label: "Sort/Monotone.lean", color: "#1a1e24" },
     { id: "AKS/Sort/ZeroOne.lean", label: "Sort/ZeroOne.lean", color: "#1a1e24" },
