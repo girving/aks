@@ -10,11 +10,23 @@ Most theorems have `sorry` placeholders — this is intentional. The codebase is
 
 ### Primary Sources
 
-The two key papers are checked into the repo:
+The key papers are checked into the repo:
 - **`docs/aks.pdf`** — Ajtai, Komlós, Szemerédi (1983): the sorting network construction
 - **`docs/rvw.pdf`** — Reingold, Vadhan, Wigderson (2002): the zig-zag product and spectral analysis
+- **`docs/paterson.pdf`** — Paterson (1990): simplified AKS with (λ,ε)-separators, depth < 6100 log n
+- **`docs/seiferas.pdf`** — Seiferas (2009): further simplified, single potential function, depth ≤ ~49 log n
 
 **Always consult these PDFs first** when checking theorem statements, proof strategies, or definitions. Read the relevant section of the paper before doing web searches — the papers are the ground truth and web sources frequently get details wrong.
+
+### Two Paths to Tree-Based Sorting
+
+The project explores two parallel approaches for the tree-based correctness proof (halvers → sorting network):
+
+1. **AKS original** (`TreeSorting.lean`, `Nearsort.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
+
+2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (λ,ε)-separators + outsider counting with Seiferas's single potential function. Planned but not yet implemented. See `docs/separator-plan.md` for the full design.
+
+Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
 
 ## Build Commands
 
@@ -217,6 +229,15 @@ Assembles the spectral bound and builds the iterated construction:
 2. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
 3. **Main result** — `explicit_expanders_exist_zigzag`
 
+### `AKS/Separator/` — Separator-Based Tree Sorting (Planned)
+Paterson/Seiferas alternative to `TreeSorting.lean`. Not yet implemented.
+See `docs/separator-plan.md` for full design. Planned files:
+1. **`Defs.lean`** — `IsSeparator`, `SeparatorProperty` (Paterson Section 3)
+2. **`FromHalver.lean`** — `halver_gives_separator` (Paterson Section 4)
+3. **`Outsider.lean`** — `outsiderCount`, block assignment (Paterson Section 5)
+4. **`Potential.lean`** — Seiferas potential function and decrease lemma (Seiferas Section 7)
+5. **`TreeSort.lean`** — assembly: separators → sorting network
+
 ### Data flow
 ```
 Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
@@ -228,6 +249,12 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
            Random.lean ────────────────────────────↗          ↑
            ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗  Halver.lean ─→ Halver/ExpanderToHalver.lean
            Certificate.lean ──→ CertificateBridge.lean  Halver/Tanner.lean ─↗
+                                                                    ↓
+                                                         Separator/Defs.lean
+                                                         Separator/FromHalver.lean
+                                                         Separator/Outsider.lean
+                                                         Separator/Potential.lean
+                                                         Separator/TreeSort.lean ──→ AKSNetwork.lean
 ```
 
 ## Style

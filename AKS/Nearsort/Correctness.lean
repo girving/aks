@@ -46,14 +46,39 @@ import AKS.Nearsort.Construction
 open Finset BigOperators
 
 
-/-! **Correctness infrastructure** -/
+/-! **Network composition** -/
 
-/-- The state after applying the first `levels` levels of the halver network. -/
-def halverNetworkPartial (n : ℕ)
+/-- The halver network decomposes as previous levels followed by the new level. -/
+theorem halverNetwork_exec_succ (n : ℕ)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (levels : ℕ) : ComparatorNetwork n :=
-  { comparators := (List.range levels).flatMap fun l ↦
-      (halverAtLevel n halvers l).comparators }
+    {α : Type*} [LinearOrder α] (depth : ℕ) (v : Fin n → α) :
+    (halverNetwork n halvers (depth + 1)).exec v =
+    (halverAtLevel n halvers depth).exec ((halverNetwork n halvers depth).exec v) := by
+  unfold halverNetwork
+  simp only [List.range_succ, List.flatMap_append, List.flatMap_cons,
+    List.flatMap_nil, List.append_nil]
+  exact ComparatorNetwork.exec_append ⟨_⟩ ⟨_⟩ v
+
+
+/-! **Blow-up arithmetic** -/
+
+/-- When `1 ≤ ε · depth · 2^depth`, the sub-interval resolution `n / 2^depth`
+    is within the blow-up radius `⌊ε · depth · n⌋₊`. -/
+private lemma blowup_covers_displacement {n : ℕ} {ε : ℝ} {depth : ℕ}
+    (hdepth : (1 : ℝ) ≤ ε * ↑depth * 2 ^ depth) :
+    n / 2 ^ depth ≤ ⌊ε * ↑depth * ↑n⌋₊ := by
+  apply Nat.le_floor
+  have h2pos : (0 : ℝ) < ↑(2 ^ depth : ℕ) := by positivity
+  have hle : (↑(n / 2 ^ depth) : ℝ) ≤ ↑n / ↑(2 ^ depth : ℕ) := by
+    rw [le_div_iff₀ h2pos]
+    exact_mod_cast Nat.div_mul_le_self n (2 ^ depth)
+  calc (↑(n / 2 ^ depth) : ℝ)
+      ≤ ↑n / ↑(2 ^ depth : ℕ) := hle
+    _ ≤ ε * ↑depth * ↑n := by
+        rw [div_le_iff₀ h2pos]
+        have h2eq : (↑(2 ^ depth : ℕ) : ℝ) = (2 : ℝ) ^ depth := by push_cast; ring
+        rw [h2eq]
+        nlinarith [Nat.cast_nonneg (α := ℝ) n]
 
 
 /-! **Displacement reformulation** -/

@@ -104,6 +104,13 @@ theorem ComparatorNetwork.exec_injective {n : ℕ} {α : Type*} [LinearOrder α]
     simp only [List.foldl_cons]
     exact ih (c.apply_injective hv)
 
+/-- Executing a concatenated comparator list equals sequential execution. -/
+theorem ComparatorNetwork.exec_append {n : ℕ} {α : Type*} [LinearOrder α]
+    (net₁ net₂ : ComparatorNetwork n) (v : Fin n → α) :
+    (⟨net₁.comparators ++ net₂.comparators⟩ : ComparatorNetwork n).exec v =
+    net₂.exec (net₁.exec v) := by
+  simp [ComparatorNetwork.exec, List.foldl_append]
+
 /-- Folding comparators that don't touch position `j` leaves `v j` unchanged. -/
 private theorem foldl_comparators_outside {n : ℕ} {α : Type*} [LinearOrder α]
     (cs : List (Comparator n)) (v : Fin n → α) (j : Fin n)
@@ -130,6 +137,68 @@ theorem ComparatorNetwork.shiftEmbed_exec_outside {m : ℕ} {α : Type*} [Linear
   obtain ⟨c, _, rfl⟩ := hc'
   exact ⟨by intro heq; have := congr_arg Fin.val heq; dsimp at this; omega,
          by intro heq; have := congr_arg Fin.val heq; dsimp at this; omega⟩
+
+
+/-- A shifted comparator acts on positions within the range exactly as the original
+    comparator on the local view `fun j ↦ v ⟨offset + j, _⟩`. -/
+private theorem shifted_comparator_localView {m n : ℕ} {α : Type*} [LinearOrder α]
+    {offset : ℕ} (h : offset + m ≤ n) (c : Comparator m) (v : Fin n → α) :
+    let c' : Comparator n :=
+      ⟨⟨offset + c.i.val, by have := c.i.isLt; omega⟩,
+       ⟨offset + c.j.val, by have := c.j.isLt; omega⟩,
+       by show offset + c.i.val < offset + c.j.val
+          have := c.h; simp only [Fin.lt_def] at this; omega⟩
+    (fun (j : Fin m) ↦ c'.apply v ⟨offset + j.val, by have := j.isLt; omega⟩) =
+    c.apply (fun j ↦ v ⟨offset + j.val, by have := j.isLt; omega⟩) := by
+  intro c'
+  funext j
+  simp only [Comparator.apply]
+  by_cases hji : j = c.i
+  · -- j = c.i: both sides give min
+    have h_eq_i : (⟨offset + j.val, by have := j.isLt; omega⟩ : Fin n) = c'.i := by
+      ext; dsimp [c']; rw [hji]
+    rw [if_pos h_eq_i, if_pos hji]
+  · have hne_i : (⟨offset + j.val, by have := j.isLt; omega⟩ : Fin n) ≠ c'.i := by
+      intro heq; apply hji; ext
+      have := congr_arg Fin.val heq; dsimp [c'] at this; omega
+    rw [if_neg hne_i, if_neg hji]
+    by_cases hjj : j = c.j
+    · -- j = c.j: both sides give max
+      have h_eq_j : (⟨offset + j.val, by have := j.isLt; omega⟩ : Fin n) = c'.j := by
+        ext; dsimp [c']; rw [hjj]
+      rw [if_pos h_eq_j, if_pos hjj]
+    · have hne_j : (⟨offset + j.val, by have := j.isLt; omega⟩ : Fin n) ≠ c'.j := by
+        intro heq; apply hjj; ext
+        have := congr_arg Fin.val heq; dsimp [c'] at this; omega
+      rw [if_neg hne_j, if_neg hjj]
+
+/-- A shifted+embedded network acts on positions within its range `[offset, offset+m)`
+    exactly as the original network on the local view. -/
+theorem ComparatorNetwork.shiftEmbed_exec_inside {m : ℕ} {α : Type*} [LinearOrder α]
+    (net : ComparatorNetwork m) (n offset : ℕ) (h : offset + m ≤ n)
+    (v : Fin n → α) (i : Fin m) :
+    (net.shiftEmbed n offset h).exec v ⟨offset + i.val, by have := i.isLt; omega⟩ =
+    net.exec (fun (j : Fin m) ↦ v ⟨offset + j.val, by have := j.isLt; omega⟩) i := by
+  -- Prove the stronger function-level statement by induction
+  suffices hfun : ∀ (cs : List (Comparator m)) (v : Fin n → α),
+      (fun (j : Fin m) ↦
+        (cs.map fun c ↦ (⟨⟨offset + c.i.val, by have := c.i.isLt; omega⟩,
+          ⟨offset + c.j.val, by have := c.j.isLt; omega⟩,
+          by show offset + c.i.val < offset + c.j.val
+             have := c.h; simp only [Fin.lt_def] at this; omega⟩ : Comparator n)).foldl
+        (fun acc c ↦ c.apply acc) v ⟨offset + j.val, by have := j.isLt; omega⟩) =
+      cs.foldl (fun acc c ↦ c.apply acc)
+        (fun j ↦ v ⟨offset + j.val, by have := j.isLt; omega⟩) from
+    show _ = _ from congr_fun (hfun net.comparators v) i
+  intro cs
+  induction cs with
+  | nil => intro v; rfl
+  | cons c cs ih =>
+    intro v
+    simp only [List.map_cons, List.foldl_cons]
+    rw [ih]
+    congr 1
+    exact shifted_comparator_localView h c v
 
 
 /-! **Complexity Notation** -/
