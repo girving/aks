@@ -15,7 +15,7 @@
 -/
 
 import AKS.Sort.Defs
-import AKS.Fin
+import AKS.Misc.Fin
 
 open Finset BigOperators
 

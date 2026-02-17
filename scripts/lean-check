@@ -4,7 +4,7 @@
 The daemon auto-starts on first use; no need to run --start explicitly.
 
 Usage:
-  scripts/lean-check AKS/RegularGraph.lean
+  scripts/lean-check AKS/Graph/Regular.lean
   scripts/lean-check --all       # Check all project .lean files
   scripts/lean-check --start     # Start the daemon (optional, happens automatically)
   scripts/lean-check --stop      # Stop the daemon
