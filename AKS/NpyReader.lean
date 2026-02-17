@@ -6,7 +6,7 @@
   so the kernel sees the full array.
 
   Supports:
-  - Raw binary i32 little-endian (`.bin` files from `compute-certificate`)
+  - Raw binary i32 little-endian (`.bin` files from `rust/certificate.rs`)
   - NumPy int64 little-endian (`.npy` files)
 -/
 
@@ -172,7 +172,7 @@ def readNpyInt64Flat (path : System.FilePath) : IO (Array Int) := do
 /-! **Certificate data auto-generation** -/
 
 /-- Ensure certificate data files exist for a given graph size.
-    If `data/{n}/cert_z.bin` is missing, runs the Rust `compute-certificate` tool
+    If `data/{n}/cert_z.bin` is missing, runs `rust/certificate.rs`
     to generate them. This is called via `#eval` before `bin_base85%` macros so
     that data files are present at elaboration time. -/
 def ensureCertificateData (n d : Nat) (seed : Nat := 42) (scaleExp : Nat := 30) : IO Unit := do
@@ -184,14 +184,14 @@ def ensureCertificateData (n d : Nat) (seed : Nat := 42) (scaleExp : Nat := 30) 
   IO.FS.createDirAll dir
   let output ← IO.Process.output {
     cmd := "cargo"
-    args := #["run", "--release",
-              "--manifest-path", "rust/compute-certificate/Cargo.toml",
-              "--", s!"{n}", s!"{d}", s!"{seed}", s!"{scaleExp}", dir.toString]
+    args := #["+nightly", "-Zscript",
+              "rust/certificate.rs",
+              s!"{n}", s!"{d}", s!"{seed}", s!"{scaleExp}", dir.toString]
   }
   if output.exitCode != 0 then
     IO.eprintln output.stderr
     IO.eprintln output.stdout
-    throw (IO.userError s!"compute-certificate failed for n={n} (exit code {output.exitCode})")
+    throw (IO.userError s!"rust/certificate.rs failed for n={n} (exit code {output.exitCode})")
   -- Verify the file was actually created
   unless ← certFile.pathExists do
-    throw (IO.userError s!"compute-certificate ran but {certFile} was not created")
+    throw (IO.userError s!"rust/certificate.rs ran but {certFile} was not created")

@@ -11,7 +11,7 @@
   • `depth_le_of_decomposition` : Any parallel decomposition upper-bounds depth.
 -/
 
-import AKS.ComparatorNetwork
+import AKS.Sort.Defs
 
 open Finset BigOperators
 

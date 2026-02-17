@@ -40,9 +40,9 @@ script «gen-cert» _args do
     IO.println s!"Generating certificate data for n={n}, d={d}..."
     let output ← IO.Process.output {
       cmd := "cargo"
-      args := #["run", "--release",
-                "--manifest-path", "rust/compute-certificate/Cargo.toml",
-                "--", s!"{n}", s!"{d}", "42", "30", dir]
+      args := #["+nightly", "-Zscript",
+                "rust/certificate.rs",
+                s!"{n}", s!"{d}", "42", "30", dir]
     }
     if output.exitCode != 0 then
       IO.eprintln output.stderr

@@ -12,7 +12,7 @@
 
 import AKS.Halver
 import AKS.Halver.Tanner
-import AKS.TreeSorting
+import AKS.Tree.Sorting
 
 open Finset BigOperators
 

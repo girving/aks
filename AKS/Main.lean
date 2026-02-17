@@ -11,7 +11,7 @@
   4. This file: plug them together in `aks_sorting_networks_exist`
 -/
 
-import AKS.AKSNetwork
+import AKS.Tree.AKSNetwork
 import AKS.ZigZag
 import AKS.Graph.Square
 
