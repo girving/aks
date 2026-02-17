@@ -14,6 +14,7 @@
 import AKS.ComparatorNetwork
 import AKS.Depth
 import AKS.Halver
+import AKS.ExpanderToHalver
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement
 import Mathlib.Analysis.SpecialFunctions.Log.Base

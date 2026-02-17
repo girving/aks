@@ -73,6 +73,7 @@
 -/
 
 import AKS.Halver
+import AKS.Nearsort
 
 open Finset BigOperators
 

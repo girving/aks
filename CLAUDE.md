@@ -129,9 +129,25 @@ The Ajtai–Komlós–Szemerédi construction and analysis:
 ### `AKS/Halver.lean` — ε-Halver Theory
 ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
 1. **Sorted version** — `countOnes`, `sortedVersion`, `sortedVersion_monotone`
-2. **ε-halvers** — `rank`, `EpsilonInitialHalved`, `EpsilonHalved`, `IsEpsilonHalver` (permutation-based, AKS Section 3), `expander_gives_halver` (sorry — needs vertex expansion), `epsHalverMerge`
+2. **ε-halvers** — `rank`, `EpsilonInitialHalved`, `EpsilonHalved`, `IsEpsilonHalver` (permutation-based, AKS Section 3), `epsHalverMerge`
 3. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
-Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here.
+Note: The tree-based AKS correctness proof is in `TreeSorting.lean`, not here. The `expander_gives_halver` proof is in `ExpanderToHalver.lean`.
+
+### `AKS/Tanner.lean` — Tanner's Vertex Expansion Bound (~270 lines)
+Tanner's bound and supporting lemmas. Imports `Mixing.lean` and `Square.lean`:
+1. **Neighborhood/codegree** — `neighborSet`, `codeg`, `codeg_eq_zero_of_not_mem`
+2. **Codegree sum** — `codeg_sum`: Σ codeg(v) = d·|T| (via rotation bijection)
+3. **Walk-codegree identity** — `walkCLM_indicatorVec`, `norm_sq_walkCLM_indicatorVec`
+4. **Orthogonal decomposition** — `norm_sq_walk_indicatorVec_le`: ‖W·1_T‖² ≤ |T|·(|T| + β²(n-|T|))/n
+5. **Tanner's bound** — `tanner_bound`: |N(T)|·(|T| + β²(n-|T|)) ≥ |T|·n (fully proved)
+
+### `AKS/ExpanderToHalver.lean` — Expander → ε-Halver Bridge (~650 lines)
+Proves `expander_gives_halver` via Tanner's bound. Imports `Halver.lean`, `Tanner.lean`, `TreeSorting.lean`:
+1. **Bipartite construction** — `bipartiteComparators G` (compare position v with m + G.neighbor(v,p))
+2. **Edge monotonicity** — generalized to `LinearOrder α`: `exec_bipartite_edge_mono`
+3. **Permutation counting** — `exec_perm_card_lt`: exactly k positions have output val < k
+4. **Tanner-based proof** — `bipartite_epsilon_initial_halved`, `bipartite_epsilon_final_halved`
+5. **Main theorem** — `expander_gives_halver` (fully proved, 0 sorry)
 
 ### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
@@ -195,13 +211,13 @@ Assembles the spectral bound and builds the iterated construction:
 ```
 Fin.lean → RegularGraph.lean → Square.lean ──────────────→ ZigZag.lean
                               → CompleteGraph.lean              ↓
-                              → Mixing.lean               AKS.lean
+                              → Mixing.lean ─→ Tanner.lean  AKS.lean
                               → WalkBound.lean ──→ CertificateBridge.lean
                               → ZigZagOperators.lean ──→      ↑
-                                  ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean ─→ Halver.lean
+                                  ZigZagSpectral.lean ─↗  ComparatorNetwork.lean ─→ AKSNetwork.lean
            Random.lean ────────────────────────────↗          ↑
-           RVWBound.lean ─────────────────────────↗  RegularGraph.lean
-           Certificate.lean ──→ CertificateBridge.lean
+           RVWBound.lean ─────────────────────────↗  Halver.lean ─→ ExpanderToHalver.lean
+           Certificate.lean ──→ CertificateBridge.lean  Tanner.lean ─↗
 ```
 
 ## Style
@@ -356,11 +372,11 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is sorry'd (needs vertex expansion). `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZagSpectral sublemmas through `rvw_operator_norm_bound`. ZigZagOperators.lean: 0 sorry. ZigZagSpectral.lean: 0 sorry. RVWBound.lean: 2 sorry's (`rayleigh_quotient_bound` and `rvw_quadratic_ineq`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all ZigZagOperators + ZigZagSpectral sublemmas (0 sorry each), `displacement_from_wrongness`, `zigzag_decreases_wrongness_v2`
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, all ZigZagOperators + ZigZagSpectral sublemmas (0 sorry each), `displacement_from_wrongness`, `zigzag_decreases_wrongness_v2`, `tanner_bound` (Tanner's vertex expansion), `expander_gives_halver` (expander → ε-halver bridge)
 
 **Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`. Also deleted: `HasCherryShiftDamage`, `cherry_shift_implies_bounded_tree`, `cherry_shift_damage_gives_zigzag` (not in AKS paper; `r→r+1` comes from partition offset in Lemma 3)
 
@@ -369,7 +385,7 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 - *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
 - *Hard (2-4 weeks):* `rvw_quadratic_ineq` — the sole remaining `sorry` in `rvw_operator_norm_bound`. See **RVW Quadratic Inequality** section below for detailed analysis. `rayleigh_quotient_bound` is also sorry'd but currently unused.
 
-**Substantial (months):** Halver.lean sorry (1): `expander_gives_halver` (sorry — needs vertex expansion for segment-wise `IsEpsilonHalver`). **Proved:** `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
+**Substantial (months):** **Proved:** `expander_gives_halver` (in `ExpanderToHalver.lean`, via Tanner's bound), `tanner_bound` (in `Tanner.lean`), `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
 
 **Engineering (weeks, fiddly):** embedding 821 MB PSD certificate for `Random20736.gap` (needs machine with more RAM), reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
