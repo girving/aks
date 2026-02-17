@@ -11,7 +11,7 @@
   the spectral gap operator norm bound via orthogonal decomposition.
 -/
 
-import AKS.Mixing
+import AKS.Halver.Mixing
 import AKS.Graph.Square
 
 open Finset BigOperators

@@ -21,7 +21,7 @@ import AKS.TreeDamageImprovement
 import AKS.Graph.Regular
 import AKS.Graph.Square
 import AKS.Graph.Complete
-import AKS.Mixing
+import AKS.Halver.Mixing
 import AKS.ZigZag.Operators
 import AKS.ZigZag.Spectral
 import AKS.ZigZag.RVWInequality
