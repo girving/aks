@@ -145,11 +145,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 const PROOF_DATA = {
   repo: "https://github.com/girving/aks",
   nodes: [
-    // ── Fin.lean ──
-    { id: "Fin.pair_lt", file: "AKS/Fin.lean", line: 15, status: "proved", kind: "theorem",
+    // ── Misc/Fin.lean ──
+    { id: "Fin.pair_lt", file: "AKS/Misc/Fin.lean", line: 15, status: "proved", kind: "theorem",
       sig: "Fin.pair_lt : j.val * d + i.val < n * d",
       desc: "Product encoding bound for Fin n x Fin d." },
-    { id: "rank_fin_val", file: "AKS/Fin.lean", line: 66, status: "proved", kind: "lemma",
+    { id: "rank_fin_val", file: "AKS/Misc/Fin.lean", line: 66, status: "proved", kind: "lemma",
       sig: "rank_fin_val {n : ℕ} (i : Fin n) : rank i = i.val",
       desc: "The rank of a Fin n element equals its value. Unfolds rank and uses Fin.card_Iio." },
 
@@ -269,10 +269,10 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 59, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 142, status: "sorry", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound via trajectory tracking: correctly-classified elements stay within blow-up radius, misclassified ≤ ε·depth·k by union bound.", difficulty: "weeks" },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 72, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 173, status: "sorry", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via EpsilonFinalHalved and order reversal.", difficulty: "weeks" },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -822,7 +822,7 @@ const PROOF_DATA = {
 
   // File groupings with display names
   groups: [
-    { id: "AKS/Fin.lean", label: "Fin.lean", color: "#1a1e24" },
+    { id: "AKS/Misc/Fin.lean", label: "Misc/Fin.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Regular.lean", label: "Graph/Regular.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Square.lean", label: "Graph/Square.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Complete.lean", label: "Graph/Complete.lean", color: "#1a1e24" },

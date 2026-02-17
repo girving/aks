@@ -107,7 +107,7 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 
 **Modules with bottom-up dependency:**
 
-### `AKS/Fin.lean` — `Fin` Arithmetic Helpers
+### `AKS/Misc/Fin.lean` — `Fin` Arithmetic Helpers
 Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product indexing: `Fin.pair_lt`, `fin_encode_fst`, `fin_encode_snd`, `fin_div_add_mod`.
 
 ### `AKS/ComparatorNetwork.lean` — Comparator Network Theory
@@ -219,7 +219,7 @@ Assembles the spectral bound and builds the iterated construction:
 
 ### Data flow
 ```
-Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
+Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
                                → Graph/Complete.lean           ↓
                               → Halver/Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
                               → WalkBound.lean ──→ CertificateBridge.lean
@@ -235,7 +235,7 @@ Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.
 - Use `↦` (not `=>`) for lambda arrows: `fun x ↦ ...`
 - In markdown/comments, backtick-quote Lean identifiers and filenames: `` `Fin` ``, not `Fin`; `` `ZigZag.lean` ``, not `ZigZag.lean`
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
-- Move reusable helpers into their own files (e.g., `Fin` arithmetic → `AKS/Fin.lean`). Iterate in-file during development, extract before committing.
+- Move reusable helpers into their own files (e.g., `Fin` arithmetic → `AKS/Misc/Fin.lean`). Iterate in-file during development, extract before committing.
 - Split files beyond ~300 lines. Smaller files = faster incremental checking (imports are precompiled; only the current file re-elaborates from the change point).
 - **Use parent module + subdirectory for cohesive subsystems.** Lean 4 allows `AKS/Name.lean` (parent module) and `AKS/Name/*.lean` (child modules) to coexist. The parent re-exports or assembles results; children hold the implementation. Example: `AKS/ZigZag.lean` imports `AKS.ZigZag.Operators`, `AKS.ZigZag.Spectral`, etc. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
@@ -304,7 +304,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`↑(Finset.univ)` ≠ `Set.univ` in `MapsTo` proofs.** `card_eq_sum_card_fiberwise` needs `(s : Set ι).MapsTo f ↑t`. The coercion `↑(Finset.univ)` is `Finset.univ.toSet`, not `Set.univ`. Use `Finset.mem_coe.mpr (Finset.mem_univ _)` to prove `x ∈ ↑univ`.
 
-**Matrix product entries via fiber decomposition.** Reduce entry-wise to Nat: partition LHS by intermediate vertex via `Finset.card_eq_sum_card_fiberwise`, biject each fiber via `Finset.card_nbij'` with div/mod encoding (`fin_encode_fst`/`fin_encode_snd`/`fin_div_add_mod` from `Fin.lean`). For ℝ-level: `simp only [adjMatrix_apply, sq, Matrix.mul_apply, div_mul_div_comm]` + `congr 1` reduces to Nat identity, then `exact_mod_cast`.
+**Matrix product entries via fiber decomposition.** Reduce entry-wise to Nat: partition LHS by intermediate vertex via `Finset.card_eq_sum_card_fiberwise`, biject each fiber via `Finset.card_nbij'` with div/mod encoding (`fin_encode_fst`/`fin_encode_snd`/`fin_div_add_mod` from `Misc/Fin.lean`). For ℝ-level: `simp only [adjMatrix_apply, sq, Matrix.mul_apply, div_mul_div_comm]` + `congr 1` reduces to Nat identity, then `exact_mod_cast`.
 
 **Connecting `eigenvalues₀` to `spectrum` and bridging `eigenvalues₀` ↔ `eigenvalues`.** For `hA.eigenvalues₀ j ∈ spectrum ℝ A`: `rw [hA.spectrum_real_eq_range_eigenvalues]`, construct witness via `Fintype.equivOfCardEq`. Key: `eigenvalues i = eigenvalues₀ (equiv.symm i)`. To lift from `eigenvalues j` to `eigenvalues₀ k`: prove `eigenvalues₀ k ∈ Set.range eigenvalues`, then `obtain ⟨j, hj⟩`. For sums: `change ∑ j, eigenvalues₀ (equiv.symm j) = _; exact Equiv.sum_comp _ _`.
 
