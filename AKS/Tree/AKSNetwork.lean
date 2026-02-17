@@ -13,7 +13,7 @@
 
 import AKS.Sort.ZeroOne
 import AKS.Sort.Depth
-import AKS.Halver
+import AKS.Halver.Defs
 import AKS.Halver.ExpanderToHalver
 import AKS.Tree.DamageStability
 import AKS.Tree.DamageImprovement
