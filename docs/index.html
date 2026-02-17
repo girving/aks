@@ -146,7 +146,7 @@ const PROOF_DATA = {
   repo: "https://github.com/girving/aks",
   nodes: [
     // ── Fin.lean ──
-    { id: "Fin.pair_lt", file: "AKS/Fin.lean", line: 13, status: "proved", kind: "theorem",
+    { id: "Fin.pair_lt", file: "AKS/Fin.lean", line: 14, status: "proved", kind: "theorem",
       sig: "Fin.pair_lt : j.val * d + i.val < n * d",
       desc: "Product encoding bound for Fin n x Fin d." },
 
@@ -228,22 +228,22 @@ const PROOF_DATA = {
       desc: "Size arithmetic for the AKS construction using Nat.log ≤ logb and log 2 > 1/2." },
 
     // ── Halver.lean ──
-    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 109, status: "definition", kind: "def",
+    { id: "IsEpsilonHalver", file: "AKS/Halver.lean", line: 84, status: "definition", kind: "def",
       sig: "IsEpsilonHalver (net : ComparatorNetwork n) (ε : ℝ) : Prop",
       desc: "ε-halver (AKS Section 3, permutation-based): for every permutation input, output is ε-halved — segment-wise bounds on displaced elements using rank." },
-    { id: "expander_gives_halver", file: "AKS/ExpanderToHalver.lean", line: 640, status: "proved", kind: "theorem",
+    { id: "expander_gives_halver", file: "AKS/Halver/ExpanderToHalver.lean", line: 640, status: "proved", kind: "theorem",
       sig: "expander_gives_halver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d",
       desc: "An expander with spectral gap ≤ β yields a β-halver (permutation-based). Proved via Tanner's vertex expansion bound + edge monotonicity + permutation counting." },
-    { id: "tanner_bound", file: "AKS/Tanner.lean", line: 216, status: "proved", kind: "theorem",
+    { id: "tanner_bound", file: "AKS/Halver/Tanner.lean", line: 216, status: "proved", kind: "theorem",
       sig: "tanner_bound (G : RegularGraph n d) (β : ℝ) (hβ : spectralGap G ≤ β) (T : Finset (Fin n)) :\n  |T|·n ≤ |N(T)|·(|T| + β²(n-|T|))",
       desc: "Tanner's vertex expansion bound: for any T in a d-regular graph with spectral gap ≤ β, |N(T)| ≥ |T|·n/(|T| + β²(n-|T|)). Proved via Cauchy-Schwarz on codegree distribution + orthogonal decomposition." },
-    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 150, status: "definition", kind: "def",
+    { id: "epsHalverMerge", file: "AKS/Halver.lean", line: 92, status: "definition", kind: "def",
       sig: "epsHalverMerge (n ε : ℝ) (k : ℕ) (halver : ComparatorNetwork n) : ComparatorNetwork n",
       desc: "Iterated halver merge: apply halver k times for geometric convergence." },
-    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 202, status: "definition", kind: "def",
+    { id: "IsEpsilonSorted", file: "AKS/Halver.lean", line: 144, status: "definition", kind: "def",
       sig: "IsEpsilonSorted (v : Fin n → Bool) (ε : ℝ) : Prop",
       desc: "ε-sortedness: at most ε·n elements are out of place." },
-    { id: "Monotone.bool_pattern", file: "AKS/Halver.lean", line: 216, status: "proved", kind: "lemma",
+    { id: "Monotone.bool_pattern", file: "AKS/Halver.lean", line: 158, status: "proved", kind: "lemma",
       sig: "Monotone.bool_pattern (w : Fin n → Bool) (hw : Monotone w) :\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w ⟨i, ·⟩ = false) ∧ (∀ i, k ≤ i → w ⟨i, ·⟩ = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: a prefix of falses followed by trues. Threshold found via Nat.find." },
     // NOTE: wrongness, halver_decreases_wrongness, halver_composition, halver_convergence
@@ -460,7 +460,7 @@ const PROOF_DATA = {
     { id: "monotone_bool_zeros_then_ones", file: "AKS/TreeSorting.lean", line: 1606, status: "proved", kind: "lemma",
       sig: "monotone_bool_zeros_then_ones : Monotone w →\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w i = false) ∧ (∀ i, k ≤ i → w i = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: threshold detected via Nat.find.", difficulty: "days" },
-    { id: "countOnes_le", file: "AKS/Halver.lean", line: 50, status: "proved", kind: "lemma",
+    { id: "countOnes_le", file: "AKS/Halver.lean", line: 30, status: "proved", kind: "lemma",
       sig: "countOnes_le : countOnes v ≤ n",
       desc: "Count of ones bounded by total elements (filter cardinality)." },
     { id: "countOnes_split", file: "AKS/TreeSorting.lean", line: 1563, status: "proved", kind: "lemma",
