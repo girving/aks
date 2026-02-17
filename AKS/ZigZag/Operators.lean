@@ -11,7 +11,7 @@
   Algebraic properties and spectral bounds are in `ZigZagSpectral.lean`.
 -/
 
-import AKS.RegularGraph
+import AKS.Graph.Regular
 
 open Matrix BigOperators Finset
 

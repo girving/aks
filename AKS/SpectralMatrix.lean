@@ -17,7 +17,7 @@
   ```
 -/
 
-import AKS.RegularGraph
+import AKS.Graph.Regular
 import Mathlib.LinearAlgebra.Matrix.PosDef
 
 open Matrix BigOperators Finset

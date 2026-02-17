@@ -7,7 +7,7 @@
   `(W - P)² = W² - P` (from `WP = PW = P`).
 -/
 
-import AKS.RegularGraph
+import AKS.Graph.Regular
 
 open Matrix BigOperators Finset
 

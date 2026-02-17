@@ -5,14 +5,14 @@
   product and its application to constructing explicit expander families.
 
   General regular graph theory (`RegularGraph`, spectral gap, squaring,
-  complete graph) lives in `RegularGraph.lean`. This file builds on it
+  complete graph) lives in `Graph/Regular.lean`. This file builds on it
   with the zig-zag product, spectral composition theorem, and the
   iterated construction that yields expanders at every size.
 -/
 
-import AKS.ZigZagSpectral
-import AKS.RVWBound
-import AKS.Square
+import AKS.ZigZag.Spectral
+import AKS.ZigZag.RVWBound
+import AKS.Graph.Square
 
 open Matrix BigOperators Finset
 
