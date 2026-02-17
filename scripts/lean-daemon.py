@@ -8,12 +8,20 @@ Architecture:
   - Waits for full file processing (via $/lean/fileProgress) before returning
   - Collects all diagnostics and returns them to the client
 
+Staleness:
+  `lake serve` resolves the module dependency graph at startup. When .lean files
+  are added, deleted, or moved, the running server can't resolve new module names,
+  causing indefinite hangs. To handle this, we snapshot the set of .lean files at
+  startup and compare before each check. If the file set changed, we automatically
+  restart `lake serve`. After a restart, the first check of each file is slow
+  (cold start, ~20-90s) as dependencies are re-elaborated.
+
 Usage:
   # Start daemon (blocks, run in background):
   python3 scripts/lean-daemon.py &
 
   # Check a file (from scripts/lean-check):
-  scripts/lean-check AKS/RegularGraph.lean
+  scripts/lean-check AKS/Graph/Regular.lean
 """
 
 import json
