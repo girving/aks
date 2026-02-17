@@ -7,6 +7,7 @@
 -/
 
 import Mathlib.Data.Fin.Basic
+import Mathlib.Data.Fintype.Card
 import Mathlib.Tactic.Ring
 
 /-- Encoding a pair `(j, i) : Fin n × Fin d` as `j * d + i` stays in bounds. -/
@@ -42,3 +43,11 @@ theorem fin_div_add_mod {n d : ℕ} (ij : Fin (n * d))
   apply Fin.ext
   show (ij.val / d) * d + ij.val % d = ij.val
   rw [Nat.mul_comm]; exact Nat.div_add_mod ij.val d
+
+
+/-! **Rank** -/
+
+/-- The rank of an element: the number of strictly smaller elements.
+    For `Fin n`, this equals the element's value. -/
+def rank {α : Type*} [Fintype α] [LinearOrder α] (a : α) : ℕ :=
+  (Finset.univ.filter (· < a)).card

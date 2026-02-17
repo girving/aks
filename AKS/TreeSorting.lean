@@ -1211,7 +1211,7 @@ def HasImprovedBound {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) 
 
 /-- DEPRECATED: Boolean-based ε-nearsorted definition. Does not track individual
     elements and cannot express the segment-wise bounds needed by AKS Section 8.
-    Replaced by `EpsilonNearsorted` in `Halver.lean` (permutation-based, AKS Section 4). -/
+    Replaced by `Nearsorted` in `Nearsort.lean` (permutation-based, AKS Section 4). -/
 def IsEpsilonNearsorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
   let sv := sortedVersion v
   ∀ k : ℕ, k ≤ n →

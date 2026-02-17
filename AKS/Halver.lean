@@ -1,41 +1,21 @@
 /-
   # ε-Halver Theory
 
-  Defines ε-halvers and the expander → halver bridge.
+  Defines ε-halvers and supporting infrastructure.
 
-  Key results:
+  Key definitions:
   • `countOnes`, `sortedVersion`: Boolean sequence sorting infrastructure
-  • `rank`, `EpsilonInitialHalved`, `EpsilonHalved`: permutation-based halver definitions
-  • `IsEpsilonHalver`: permutation-based ε-halver definition (AKS Section 3)
-  • `expander_gives_halver`: expanders yield ε-halvers (proved, in `ExpanderToHalver.lean`)
+  • `EpsilonInitialHalved`, `EpsilonHalved`, `IsEpsilonHalver`: permutation-based
+    halver definitions (AKS Section 3). Uses `rank` from `Fin.lean`.
+  • `epsHalverMerge`: iterated halver composition
   • `IsEpsilonSorted`, `Monotone.bool_pattern`: sortedness infrastructure
 
-  ## Proof strategy for `expander_gives_halver`
-
-  Given a d-regular graph G on m vertices with spectral gap ≤ β, the bipartite
-  comparator network (m·d comparators, depth d) is a β-halver. The proof:
-
-  1. **Construction**: `bipartiteComparators G` — compare position v with m + G.neighbor(v,p)
-  2. **Edge monotonicity** (proved): `exec_bipartite_edge_mono` — output[v] ≤ output[m+u]
-     for each edge (v, m+u)
-  3. **Counting**: for segment k ≤ m, let T = {bottom positions with output rank < k}.
-     Edge monotonicity forces N(T) ⊆ {top positions with rank < k}, so |N(T)| ≤ k - |T|.
-  4. **Tanner's bound** (needed, not yet formalized): |N(T)| ≥ |T|·m/(|T| + β²(m-|T|)).
-     This is strictly stronger than the expander mixing lemma for small sets.
-  5. **Contradiction**: if |T| > βk, Tanner gives |N(T)| > k - |T|, using only β < 2.
-
-  The expander mixing lemma alone is insufficient — it is tight at k = m and too
-  weak for intermediate k. Tanner's bound uses Cauchy-Schwarz on the codegree
-  distribution and is derived from the spectral gap independently.
-
-  The actual AKS correctness proof (geometric decrease of unsortedness)
-  uses the tree-based approach in `TreeSorting.lean`, not single-halver
-  composition.
+  The proof that expanders yield ε-halvers is in `ExpanderToHalver.lean`.
+  The tree-based AKS correctness proof is in `TreeSorting.lean`.
 -/
 
 import AKS.ComparatorNetwork
-import AKS.RegularGraph
-import AKS.Mixing
+import AKS.Fin
 
 open Finset BigOperators
 
@@ -73,11 +53,6 @@ lemma sortedVersion_monotone {n : ℕ} (v : Fin n → Bool) : Monotone (sortedVe
 
 /-! **ε-Halvers (Permutation-Based Definition)** -/
 
-/-- The rank of an element: the number of strictly smaller elements.
-    For `Fin n`, this equals the element's value. -/
-def rank {α : Type*} [Fintype α] [LinearOrder α] (a : α) : ℕ :=
-  (Finset.univ.filter (· < a)).card
-
 /-- Initial-segment halver property (AKS Section 3, permutation-based):
     for each initial segment `{0,...,k-1}` with `k ≤ n/2`, the number of
     positions from the bottom half (`rank pos ≥ n/2`) whose output element
@@ -109,39 +84,6 @@ def EpsilonHalved {α : Type*} [Fintype α] [LinearOrder α]
 def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
   ∀ (v : Equiv.Perm (Fin n)),
     EpsilonHalved (net.exec v) ε
-
-
-/-! **ε-Nearsortedness (Permutation-Based, AKS Section 4)** -/
-
-/-- Initial-segment nearsortedness (AKS Section 4, equation (i)):
-    for each initial segment S = {a | rank a < k}, at most ε·k elements
-    of S are missing from the image of the blown-up segment S^ε under w.
-
-    Concretely: |S \ w(S^ε)| ≤ ε·k, where S^ε = {a | rank a < k + ⌊εn⌋}.
-
-    This is the permutation-based analogue of `EpsilonInitialHalved`, working
-    on the full sequence rather than half. Uses `⌊εn⌋₊` (natural floor) for
-    the blow-up radius, matching the paper. -/
-def EpsilonInitialNearsorted {α : Type*} [Fintype α] [LinearOrder α]
-    (w : α → α) (ε : ℝ) : Prop :=
-  let n := Fintype.card α
-  ∀ k, k ≤ n →
-    let S  := Finset.univ.filter (fun a : α ↦ rank a < k)
-    let Sε := Finset.univ.filter (fun a : α ↦ rank a < k + ⌊ε * ↑n⌋₊)
-    ((S \ Sε.image w).card : ℝ) ≤ ε * ↑k
-
-/-- End-segment nearsortedness: dual of `EpsilonInitialNearsorted` via order reversal.
-    Captures the AKS condition (i) for end segments S = {k,...,m}. -/
-def EpsilonFinalNearsorted {α : Type*} [Fintype α] [LinearOrder α]
-    (w : α → α) (ε : ℝ) : Prop :=
-  EpsilonInitialNearsorted (α := αᵒᵈ) w ε
-
-/-- A permutation is ε-nearsorted if both initial and end segment bounds hold.
-    (AKS Section 4, equation (i)): for all initial segments S = {1,...,k}
-    and end segments S = {k,...,m}, |S \ πS^ε| ≤ ε|S|. -/
-def EpsilonNearsorted {α : Type*} [Fintype α] [LinearOrder α]
-    (w : α → α) (ε : ℝ) : Prop :=
-  EpsilonInitialNearsorted w ε ∧ EpsilonFinalNearsorted w ε
 
 
 /-- Merge two sorted halves using iterated ε-halvers.

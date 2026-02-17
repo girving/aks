@@ -10,9 +10,11 @@ import AKS.ComparatorNetwork
 import AKS.Depth
 import AKS.Fin
 import AKS.AKSNetwork
+import AKS.Nearsort
 import AKS.Halver
 import AKS.Tanner
 import AKS.ExpanderToHalver
+import AKS.HalverToNearsort
 import AKS.TreeSorting
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement
