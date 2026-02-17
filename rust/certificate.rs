@@ -1,3 +1,16 @@
+#!/usr/bin/env -S cargo +nightly -Zscript
+---cargo
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+faer = "0.24.0"
+rand = "0.8"
+rand_chacha = "0.3"
+rayon = "1"
+
+[profile.release]
+opt-level = 3
+---
+
 //! Compute a PSD certificate for a random d-regular graph.
 //!
 //! Generates a random d-regular graph on n vertices, computes
