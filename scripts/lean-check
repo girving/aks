@@ -232,12 +232,13 @@ def check_files(filepaths: list):
 
 
 def find_project_files():
-    """Find all project .lean files (excluding lake dependencies)."""
+    """Find all project .lean files (excluding lake dependencies and lakefile)."""
     import glob
     files = []
-    for pattern in ["AKS.lean", "AKS/**/*.lean"]:
+    for pattern in ["*.lean", "AKS/**/*.lean"]:
         files.extend(glob.glob(pattern, root_dir=PROJECT_ROOT, recursive=True))
-    return sorted(set(files))
+    # Exclude lakefile.lean — it's build config, not proof code
+    return sorted(f for f in set(files) if f != "lakefile.lean")
 
 
 def check_all():
