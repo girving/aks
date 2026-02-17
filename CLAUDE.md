@@ -241,6 +241,9 @@ Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
 - **Parameterize theorems over abstract bounds, not hard-coded constants.** Take spectral gap bounds (β, c, etc.) as parameters with hypotheses, not baked-in fractions. Chain `.trans` through hypotheses, not `norm_num`. Prefer explicit types/degrees (`D * D`) over `∃ d`, and concrete objects as parameters over axioms in statements. Motivation: we want explicit, computable, extractable constants.
 - **Avoid non-terminal `simp`** — use `simp only [specific, lemmas]` or `rw` instead. Non-terminal `simp` is fragile (new simp lemmas can break downstream tactics). Exception: acceptable if the alternative is much uglier, but document why.
+- **Don't create import-only re-export files.** A file that just imports its children (e.g., `AKS/Sort.lean` importing `Sort.Defs`, `Sort.Monotone`, etc.) adds indirection with no value. Import leaf modules directly from the root `AKS.lean` or from consuming files.
+- **Colocate files with their consumers, not their topic.** If a file has only one downstream user, move it into that subsystem's directory. E.g., `Mixing.lean` was used only by `Halver/Tanner.lean`, so it belongs in `AKS/Halver/`, not at the top level.
+- **`NpyReader.lean` has dead exports.** Only `bin_base85%` (elaborator) and `ensureCertificateData` are used. The NPY reading functions (`readNpyInt64`, `readBinI32File`, etc.) and `bin_array%` are unused leftovers from before the base-85 encoding approach.
 
 ## Key Lean/Mathlib Conventions
 
