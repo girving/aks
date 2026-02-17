@@ -8,7 +8,7 @@
   - `Random20736` — 12-regular on 20736 = 12⁴ vertices (production)
 
   Data files live in `data/{n}/` (binary, not committed). Regenerate with:
-    `cargo run --release -p compute-certificate -- <n> <d> <seed> <scale_exp>`
+    `cargo +nightly -Zscript rust/certificate.rs <n> <d> <seed> <scale_exp>`
 -/
 
 import AKS.Random20736

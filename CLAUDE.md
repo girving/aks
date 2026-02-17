@@ -89,7 +89,7 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 **Never increase precision or memory usage without explicit permission.** If the user asks for f32, use f32. If they ask for low memory, keep it low. Do not silently switch from f32 to f64 or allocate larger buffers "because the margin is better." OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.
 
-**Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'compute-certificate|lake build' | grep -v grep` and kill any stale ones before launching new heavy jobs.
+**Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'certificate|lake build' | grep -v grep` and kill any stale ones before launching new heavy jobs.
 
 ### Proof Visualization (`docs/index.html`)
 
