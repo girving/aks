@@ -131,7 +131,7 @@ The Ajtai–Komlós–Szemerédi construction and analysis:
 `parity_nearsort_has_improved_bound` (sorry): even-level nearsort → `HasImprovedBound`. Cherry-parity improvement property. Imports only `TreeSorting.lean`.
 
 ### `AKS/Halver.lean` — ε-Halver Theory
-ε-halvers and the expander → halver bridge. Imports `RegularGraph.lean` and `Mixing.lean`:
+ε-halvers and the expander → halver bridge. Imports `Graph/Regular.lean` and `Mixing.lean`:
 1. **Sorted version** — `countOnes`, `sortedVersion`, `sortedVersion_monotone`
 2. **ε-halvers** — `rank`, `EpsilonInitialHalved`, `EpsilonHalved`, `IsEpsilonHalver` (permutation-based, AKS Section 3), `epsHalverMerge`
 3. **Sortedness infrastructure** — `IsEpsilonSorted`, `Monotone.bool_pattern`
@@ -153,19 +153,19 @@ Proves `expander_gives_halver` via Tanner's bound. Imports `Halver.lean`, `Halve
 4. **Tanner-based proof** — `bipartite_epsilon_initial_halved`, `bipartite_epsilon_final_halved`
 5. **Main theorem** — `expander_gives_halver` (fully proved, 0 sorry)
 
-### `AKS/RegularGraph.lean` — Core Regular Graph Theory (~335 lines)
+### `AKS/Graph/Regular.lean` — Core Regular Graph Theory (~335 lines)
 Core definitions and spectral gap, independent of specific constructions:
 1. **Regular graphs and adjacency matrices** — `RegularGraph` (rotation map representation), `adjMatrix`, symmetry proofs
 2. **Walk and mean operators** — `walkCLM` (CLM-first), `meanCLM`, `walkFun`/`walkLM`/`meanFun`/`meanLM` (three-layer pattern)
 3. **Spectral gap** — `spectralGap` := `‖walkCLM - meanCLM‖` (operator norm), `spectralGap_nonneg`, `spectralGap_le_one`
 
-### `AKS/Square.lean` — Graph Squaring (~225 lines)
+### `AKS/Graph/Square.lean` — Graph Squaring (~225 lines)
 Graph squaring and the spectral gap squaring identity:
 1. **Graph squaring** — `G.square`, `adjMatrix_square_eq_sq`
 2. **CLM identities** — self-adjointness, idempotency, `WP = PW = P`
 3. **Spectral gap squaring** — `spectralGap_square`: λ(G²) = λ(G)²
 
-### `AKS/CompleteGraph.lean` — Complete Graph (~108 lines)
+### `AKS/Graph/Complete.lean` — Complete Graph (~108 lines)
 The complete graph as a concrete example:
 1. **Complete graph** — `completeGraph` via `Fin.succAbove`/`Fin.predAbove`
 2. **Spectral gap** — `spectralGap_complete`: λ(K_{n+1}) = 1/n
@@ -207,7 +207,7 @@ Operator theory importing `RVWInequality.lean`:
 3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
 
 ### `AKS/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
-Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `RegularGraph.lean`:
+Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `Graph/Regular.lean`:
 1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
 2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
 
@@ -219,8 +219,8 @@ Assembles the spectral bound and builds the iterated construction:
 
 ### Data flow
 ```
-Fin.lean → RegularGraph.lean → Square.lean ──────────────→ ZigZag.lean
-                              → CompleteGraph.lean              ↓
+Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
+                               → Graph/Complete.lean           ↓
                               → Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
                               → WalkBound.lean ──→ CertificateBridge.lean
                               → ZigZag/Operators.lean ──→     ↑
@@ -280,7 +280,7 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here (not in auto memory). This file is the single source of truth for accumulated lessons, so they persist across machines.
 
-**Extract defs from `where` blocks before proving properties.** Inline `where` blocks produce goals with fully-unfolded terms. Instead: extract as a standalone `private def` using `.1`/`.2` projections, prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` works cleanly. See `square_rot`/`square_rot_involution` in `RegularGraph.lean`.
+**Extract defs from `where` blocks before proving properties.** Inline `where` blocks produce goals with fully-unfolded terms. Instead: extract as a standalone `private def` using `.1`/`.2` projections, prove properties as separate theorems, plug both into the `where` block. Then `simp only [my_def, ...]` works cleanly. See `square_rot`/`square_rot_involution` in `Graph/Regular.lean`.
 
 **Generalize helper lemmas from the start.** Write `Fin` arithmetic helpers with the most general signature (e.g., `Fin n × Fin d`, not `Fin d × Fin d`). General versions cost nothing extra and prevent rework.
 
@@ -298,7 +298,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. Repeated `omega`/`simp` failures usually indicate the definitions need restructuring, not a cleverer tactic combination.
 
-**Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `RegularGraph.lean`.
+**Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `Graph/Regular.lean`.
 
 **Triangle inequality for `|·|` via `dist_triangle`.** Convert to metric API: `|μ| = ‖μ‖ = dist μ 0` (via `Real.norm_eq_abs`, `dist_zero_right`), then `dist_triangle μ c 0`. Use `Real.dist_eq` for `dist x y = |x - y|`.
 

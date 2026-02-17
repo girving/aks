@@ -12,7 +12,7 @@
   5. Final assembly
 -/
 
-import AKS.RegularGraph
+import AKS.Graph.Regular
 
 open Matrix BigOperators Finset
 

@@ -5,7 +5,7 @@
   and the proof that λ(K_{n+1}) = 1/n.
 -/
 
-import AKS.RegularGraph
+import AKS.Graph.Regular
 
 open Matrix BigOperators Finset
 

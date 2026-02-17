@@ -2,7 +2,7 @@
   # Zig-Zag Operator Properties
 
   Algebraic identities and spectral bounds for the zig-zag product
-  operators defined in `ZigZagOperators.lean`:
+  operators defined in `ZigZag/Operators.lean`:
   - `Q` = cluster mean projection
   - `B` = within-cluster walk
   - `Σ` = step permutation

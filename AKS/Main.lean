@@ -13,7 +13,7 @@
 
 import AKS.AKSNetwork
 import AKS.ZigZag
-import AKS.Square
+import AKS.Graph.Square
 
 open Real
 
