@@ -14,7 +14,7 @@ import AKS.Nearsort
 import AKS.Halver
 import AKS.Tanner
 import AKS.ExpanderToHalver
-import AKS.HalverToNearsort
+import AKS.Nearsort.HalverToNearsort
 import AKS.TreeSorting
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement

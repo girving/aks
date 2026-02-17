@@ -261,20 +261,22 @@ const PROOF_DATA = {
     // NOTE: wrongness, halver_decreases_wrongness, halver_composition, halver_convergence
     // have been deleted — superseded by tree-based approach in TreeSorting.lean
 
-    // ── HalverToNearsort.lean ──
-    { id: "halverAtLevel_size", file: "AKS/HalverToNearsort.lean", line: 171, status: "proved", kind: "theorem",
+    // ── Nearsort/Construction.lean ──
+    { id: "halverAtLevel_size", file: "AKS/Nearsort/Construction.lean", line: 100, status: "proved", kind: "theorem",
       sig: "halverAtLevel_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (level : ℕ) :\n  (halverAtLevel n halvers level).size ≤ n * d",
       desc: "Sub-interval halver sizes sum to at most n * d at each level. Uses chunks_times_halfChunk_le." },
-    { id: "halverNetwork_size", file: "AKS/HalverToNearsort.lean", line: 195, status: "proved", kind: "theorem",
+    { id: "halverNetwork_size", file: "AKS/Nearsort/Construction.lean", line: 124, status: "proved", kind: "theorem",
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
-    { id: "halverNetwork_initialNearsorted", file: "AKS/HalverToNearsort.lean", line: 256, status: "sorry", kind: "theorem",
+    // ── Nearsort/Correctness.lean ──
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 59, status: "sorry", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound via trajectory tracking: correctly-classified elements stay within blow-up radius, misclassified ≤ ε·depth·k by union bound.", difficulty: "weeks" },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/HalverToNearsort.lean", line: 269, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 72, status: "sorry", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via EpsilonFinalHalved and order reversal.", difficulty: "weeks" },
-    { id: "halver_family_gives_nearsort", file: "AKS/HalverToNearsort.lean", line: 292, status: "proved", kind: "theorem",
+    // ── Nearsort/HalverToNearsort.lean ──
+    { id: "halver_family_gives_nearsort", file: "AKS/Nearsort/HalverToNearsort.lean", line: 59, status: "proved", kind: "theorem",
       sig: "halver_family_gives_nearsort {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... :\n  ∃ (net : ComparatorNetwork n), Nearsort net (halverNearsortQuality ε depth) ∧\n    (net.size : ℝ) ≤ ↑depth * ↑d * ↑n",
       desc: "ε-halver family → δ-nearsort (AKS Section 4). Assembles halverNetwork_initialNearsorted, halverNetwork_finalNearsorted, and halverNetwork_size." },
 
@@ -622,8 +624,7 @@ const PROOF_DATA = {
     ["ComparatorNetwork", "exec_injective"],
     ["ComparatorNetwork", "shiftEmbed_exec_outside"],
 
-    // HalverToNearsort.lean — halver family → nearsort
-    ["IsEpsilonHalver", "per_level_error_bound"],
+    // Nearsort/ — halver family → nearsort
     ["IsEpsilonHalver", "halverNetwork_initialNearsorted"],
     ["IsEpsilonHalver", "halverNetwork_finalNearsorted"],
     ["exec_injective", "halverNetwork_initialNearsorted"],
@@ -829,7 +830,9 @@ const PROOF_DATA = {
     { id: "AKS/ComparatorNetwork.lean", label: "ComparatorNetwork.lean", color: "#1a1e24" },
     { id: "AKS/AKSNetwork.lean", label: "AKSNetwork.lean", color: "#1a1e24" },
     { id: "AKS/Halver.lean", label: "Halver.lean", color: "#1a1e24" },
-    { id: "AKS/HalverToNearsort.lean", label: "HalverToNearsort.lean", color: "#1a1e24" },
+    { id: "AKS/Nearsort/Construction.lean", label: "Nearsort/Construction.lean", color: "#1a1e24" },
+    { id: "AKS/Nearsort/Correctness.lean", label: "Nearsort/Correctness.lean", color: "#1a1e24" },
+    { id: "AKS/Nearsort/HalverToNearsort.lean", label: "Nearsort/HalverToNearsort.lean", color: "#1a1e24" },
     { id: "AKS/ZigZagOperators.lean", label: "ZigZagOperators.lean", color: "#1a1e24" },
     { id: "AKS/ZigZagSpectral.lean", label: "ZigZagSpectral.lean", color: "#1a1e24" },
     { id: "AKS/RVWBound.lean", label: "RVWBound.lean", color: "#1a1e24" },
