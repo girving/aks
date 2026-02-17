@@ -349,10 +349,10 @@ const PROOF_DATA = {
     { id: "rvw_quadratic_ineq", file: "AKS/RVWInequality.lean", line: 376, status: "proved", kind: "lemma",
       sig: "rvw_quadratic_ineq : (p+2q+r)² ≤ (1-μ₂²)μ₁|p+2q+r| + μ₂²",
       desc: "Core quadratic inequality for RVW bound. Proved via a-quadratic case analysis: disc ≤ 0 or vertex outside [0,1]." },
-    { id: "rayleigh_quotient_bound", file: "AKS/RVWBound.lean", line: 332, status: "sorry", kind: "lemma",
+    { id: "rayleigh_quotient_bound", file: "AKS/RVWBound.lean", line: 332, status: "retired", kind: "lemma",
       sig: "rayleigh_quotient_bound : ‖A‖ = sSup (range (fun x ↦ |⟨Ax, x⟩|))",
-      desc: "Rayleigh quotient characterization of self-adjoint operator norm.", difficulty: "weeks" },
-    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1110, status: "proved", kind: "theorem",
+      desc: "Rayleigh quotient characterization of self-adjoint operator norm. Deleted — was unused." },
+    { id: "rvw_operator_norm_bound", file: "AKS/RVWBound.lean", line: 1101, status: "proved", kind: "theorem",
       sig: "rvw_operator_norm_bound : ‖W - P‖ ≤ rvwBound lam₁ lam₂",
       desc: "Core RVW bound: abstract operator inequality from projection/contraction axioms. Uses hat/tilde decomposition, reflection Rayleigh quotients, and the RVW quadratic inequality." },
 
