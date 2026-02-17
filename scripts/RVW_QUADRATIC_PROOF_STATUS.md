@@ -42,11 +42,34 @@ The inequality G >= 0 CANNOT be proved by `nlinarith` using products of the avai
 
 **Conclusion**: The inequality inherently requires `Real.sqrt` reasoning. Every approach to eliminate sqrt leads to the same degree-8 polynomial inequality `D0^2 >= beta^2*F_min`, which is LP-infeasible. The S-lemma (Yakubovich) also reduces to this same condition. This is not a limitation of the hint search — the Positivstellensatz certificate literally does not exist in the product-of-linear-constraints form.
 
-### Numerical SOS (SDP) approach
+### Numerical SOS (SDP) approach — early attempts
 
 - SCS solver found a numerical certificate with ~2e-3 reconstruction error
 - Rationalization failed (error grew to 2e-2)
 - LP for exact rational weights on rounded terms: INFEASIBLE
+
+### MOSEK SOS results (Feb 2026)
+
+**Fixed (A,C) — 3-variable Putinar SOS in (p,q,r):**
+- `mosek_sos2.py`: Full Putinar SOS with 7 constraint multipliers (p, A-p, C+r, C-r, CS+, CS-, X)
+- **Degree 4 (sos_deg=2): only 2/10 test points feasible**
+- **Degree 6 (sos_deg=3): 9/10 test points FEASIBLE** — breakthrough result
+  - MOSEK precision: min eigenvalues ~1e-12 (excellent)
+  - Q₀: 20×20 PSD matrix with rank ~10; constraint multipliers 10×10
+  - All feasible cases pass numerical verification (100K random samples)
+  - Only failure: A=0.50, C=0.49 (very near tight manifold C ≈ B = 0.50)
+- `mosek_sos.py`: Earlier attempt in (s,t) boundary variables, 4/7 feasible — less effective
+
+**Universal 5-variable SOS in (A,C,p,q,r) — all FAILED:**
+- `mosek_universal.py`: Degree 4 INFEASIBLE, Degree 6 INFEASIBLE (8s solve)
+- `mosek_universal2.py`: Degree 8 — MOSEK status UNKNOWN after 840s
+  - PRSTATUS went negative (-0.98) = strong infeasibility signal
+  - Adding derived constraint (sumCS) did not help
+  - 27K PSD variables, 1287 equality constraints — size was not the issue
+- **Likely cause**: G = 0 on a 1D tight manifold in 5D space makes universal
+  Putinar certificate impossible or require extremely high degree. The tight
+  manifold forces σ₀ and all non-vanishing-constraint multipliers to vanish
+  along a curve, which is very constraining in 5 variables.
 
 ## Key Mathematical Facts (Numerically Verified)
 
@@ -120,20 +143,34 @@ For these cases, the proof requires either:
 - This status document: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
 - Analysis scripts: `/tmp/rvw_*.py` (various LP and numerical checks)
 
-## Recommended Next Steps
+## Recommended Next Steps (updated Feb 2026)
 
-1. **Try SOS via proper SDP solver** (e.g., DSOS/SDSOS in Julia or MATLAB).
-   The degree-8 polynomial D0^2 - beta^2*F_min may have an SOS certificate
-   that LP (product-of-linear-constraints) cannot find. If found, the certificate
-   can be verified in Lean via `nlinarith` with explicit SOS terms.
+### Path A: Extract exact certificate from fixed-(A,C) MOSEK solutions
+The 3-variable degree-6 Putinar SOS works for 9/10 test points. To get a Lean proof:
+1. Run MOSEK at many (A,C) grid points, extract Q₀ eigendecompositions
+2. Look for closed-form pattern in how eigenvectors depend on A,C
+3. If entries are polynomial/rational in A,C, construct a parametric certificate
+4. Verify the parametric identity symbolically → gives nlinarith hints
+**Risk**: Q₀ entries might not have nice closed forms in A,C.
 
-2. **Formalize the trigonometric proof** from RVW Section 4.2.
-   This avoids the polynomial certificate entirely but requires working with
-   `Real.cos`, `Real.sin`, `Real.arctan` in Lean/Mathlib.
+### Path B: 4-variable SOS in (A,C,s,t) boundary variables
+At the CS- boundary, substitute s=√(A-p), t=√(C-r), q=st. Then G becomes
+degree 6 in (A,C,s,t). Try MOSEK universal SOS in 4 variables — smaller than
+the 5-variable attempt. Basis size 35 (vs 56 for 5 vars at degree 3).
 
-3. **Try `polyrith`** on sub-goals (it uses Groebner bases, not just LP).
-   May succeed where `nlinarith` fails, though unlikely for degree-8 problems.
+### Path C: Trigonometric proof from RVW Section 4.2
+Formalize the paper's geometric proof. Laborious but guaranteed.
+Note: the paper only proves a *weaker* bound (Claim 4.4). We need the exact
+rvwBound formula, which requires adapting the argument.
 
-4. **Factor the degree-8 polynomial manually**.
-   D0^2 - beta^2*F has 99 terms. If it can be written as a sum of squares
-   of explicit polynomials (even with case splits), this would give a Lean proof.
+### Path D: Axiomatize and move on
+Leave the sorry and work on other parts of the project.
+
+## File Locations
+
+- Main Lean file: `AKS/RVWBound.lean` (line ~756 for the sorry)
+- Exploratory trig approach: `AKS/RVWBoundTrig.lean` (marked NOT USEFUL)
+- This status document: `scripts/RVW_QUADRATIC_PROOF_STATUS.md`
+- MOSEK SOS scripts: `scripts/rvw/mosek_sos.py`, `mosek_sos2.py`, `mosek_universal.py`, `mosek_universal2.py`
+- Rust numerical validator: `rust/rvw-sample/`
+- Analysis scripts: `scripts/rvw/` and `/tmp/rvw_*.py` (158 ephemeral scripts)

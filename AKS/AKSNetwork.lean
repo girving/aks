@@ -14,6 +14,7 @@
 import AKS.ComparatorNetwork
 import AKS.Depth
 import AKS.Halver
+import AKS.ExpanderToHalver
 import AKS.TreeDamageStability
 import AKS.TreeDamageImprovement
 import Mathlib.Analysis.SpecialFunctions.Log.Base
@@ -179,8 +180,10 @@ theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β 
     rcases Nat.eq_zero_or_pos m with rfl | hm
     · -- m = 0: empty network on 0 wires, Fin 0 is empty so everything is vacuous
       exact ⟨{ comparators := [] },
-        fun v => ⟨fun k hk => by simp at hk; subst hk; simp,
-                  fun k hk => by simp at hk; subst hk; simp⟩,
+        fun v => ⟨fun k hk => by
+                    simp at hk; subst hk; simp,
+                  fun k hk => by
+                    simp at hk; subst hk; simp⟩,
         by simp [ComparatorNetwork.size]⟩
     · obtain ⟨G, hG⟩ := hfamily m hm
       exact expander_gives_halver m d G β hG

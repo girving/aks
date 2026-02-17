@@ -1120,19 +1120,81 @@ lemma elementsAtTreeDist_anti {n t : ℕ} (v : Fin n → Bool) (J : Interval n) 
     simp only [Finset.mem_filter] at hi ⊢
     exact ⟨hi.1, hi.2.1, le_trans (Nat.le_succ r) hi.2.2⟩
 
-/-- Tree-distance-based bounded-damage property (V2).
-    Like `HasBoundedDamage` but using tree-distance-based element counting.
-    Takes `t` as a parameter — the damage bound is relative to tree level `t`.
+/-! **Permutation-Based Tree Distance Definitions (AKS Section 8)**
 
-    Applying the network increases element count at tree-distance ≥ `r`
-    by at most `ε` times count at tree-distance ≥ `(r-2)`. -/
+    The paper's Δ_r(J) and δ(J) track individual elements via permutations.
+    These definitions are the permutation-based analogues of `elementsAtTreeDist`
+    (which uses Bool and `sortedVersion`).
+
+    Key difference: `permElementsAtTreeDist` measures tree distance from position
+    `i`'s section to element `w(i)`'s HOME section (where it belongs in sorted
+    order), not distance to a global threshold.
+
+    See `docs/treesorting-audit.md` for detailed comparison with the paper. -/
+
+/-- Tree displacement of element at position `i` under function `w : Fin n → Fin n`.
+    Measures tree distance from position `i`'s section to element `w(i)`'s home section
+    at tree level `t`. In sorted order, element `e` belongs at position `e.val`,
+    so element `w(i)`'s home section is `sectionNode n t (w i)`.
+
+    When `w` is the identity (sorted), every element is at its home: distance 0.
+    When `w` is far from sorted, elements are displaced across the tree. -/
+def elementTreeDist (n t : ℕ) (w : Fin n → Fin n) (i : Fin n) : ℕ :=
+  treeDistance (sectionNode n t i) (sectionNode n t (w i))
+
+/-- Elements in interval `J` displaced at tree-distance ≥ `r` under permutation `w`.
+    Counts positions `i ∈ J` where the element `w(i)` has its home section at
+    tree distance ≥ `r` from `i`'s section.
+
+    This is the permutation-based analogue of `elementsAtTreeDist` (Bool-based).
+    Unlike the Bool version, it doesn't need a "wrong vs correct" filter — every
+    element with nonzero tree displacement is counted. -/
+def permElementsAtTreeDist (n t : ℕ) (w : Fin n → Fin n) (J : Interval n)
+    (r : ℕ) : Finset (Fin n) :=
+  if J.size = 0 then ∅
+  else J.toFinset.filter (fun i => r ≤ elementTreeDist n t w i)
+
+/-- `permElementsAtTreeDist` is a subset of `J.toFinset`. -/
+lemma permElementsAtTreeDist_subset {n t : ℕ} (w : Fin n → Fin n) (J : Interval n)
+    (r : ℕ) : permElementsAtTreeDist n t w J r ⊆ J.toFinset := by
+  unfold permElementsAtTreeDist
+  split_ifs
+  · exact Finset.empty_subset _
+  · exact Finset.filter_subset _ _
+
+/-- `permElementsAtTreeDist` is monotone decreasing in `r`. -/
+lemma permElementsAtTreeDist_anti {n t : ℕ} (w : Fin n → Fin n) (J : Interval n)
+    (r : ℕ) : permElementsAtTreeDist n t w J (r + 1) ⊆
+    permElementsAtTreeDist n t w J r := by
+  unfold permElementsAtTreeDist
+  split_ifs with h
+  · exact Finset.empty_subset _
+  · intro i hi
+    simp only [Finset.mem_filter] at hi ⊢
+    exact ⟨hi.1, le_trans (Nat.le_succ r) hi.2⟩
+
+/-- Foreign elements in interval `J`: positions `i ∈ J` where element `w(i)` doesn't
+    belong in `J` (i.e., `w(i)`'s home position is outside `J`'s range).
+    δ(J) = foreignCount / |J| in the paper's notation. -/
+def foreignElements {n : ℕ} (w : Fin n → Fin n) (J : Interval n) : Finset (Fin n) :=
+  J.toFinset.filter (fun i => w i ∉ J.toFinset)
+
+/-- Tree-distance-based bounded-damage property (permutation-based, AKS Lemma 2).
+    For every input and interval J, applying the network increases element count
+    at tree-distance ≥ `r` by at most `ε` times count at `r-2`.
+
+    Quantifies over `Fin n → Fin n` (element assignments). The paper works with
+    permutations, but `permElementsAtTreeDist` is well-defined for any function.
+    Quantifying over all functions makes composition seamless (no need to prove
+    that `net.exec` preserves permutations at the algebraic level). The sorry'd
+    lemmas (2a, 2b) may add bijectivity hypotheses if their proofs need it. -/
 def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
-  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
-    ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
-      (elementsAtTreeDist n t v J r).card +
-        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
+  ∀ (w : Fin n → Fin n) (J : Interval n) (r : ℕ),
+    ((permElementsAtTreeDist n t (net.exec w) J r).card : ℝ) ≤
+      (permElementsAtTreeDist n t w J r).card +
+        ε * (permElementsAtTreeDist n t w J (if r ≥ 2 then r - 2 else 0)).card
 
-/-- Tree-distance-based improved-bound property.
+/-- Tree-distance-based improved-bound property (permutation-based).
     Like `HasBoundedTreeDamage` but with an `r → r+1` shift: elements at
     tree-distance ≥ `r` after the network are bounded by elements at
     tree-distance ≥ `r+1` BEFORE, plus `ε` times count at `r-2`.
@@ -1142,17 +1204,14 @@ def HasBoundedTreeDamage {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : �
     to actually push elements closer to their sorted positions, which is what
     the cherry-parity structure of the AKS construction achieves. -/
 def HasImprovedBound {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
-  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
-    ((elementsAtTreeDist n t (net.exec v) J r).card : ℝ) ≤
-      (elementsAtTreeDist n t v J (r + 1)).card +
-        ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card
+  ∀ (w : Fin n → Fin n) (J : Interval n) (r : ℕ),
+    ((permElementsAtTreeDist n t (net.exec w) J r).card : ℝ) ≤
+      (permElementsAtTreeDist n t w J (r + 1)).card +
+        ε * (permElementsAtTreeDist n t w J (if r ≥ 2 then r - 2 else 0)).card
 
-/-- A Boolean sequence is ε-nearsorted if every initial segment `{0,...,k-1}`
-    and end segment `{k,...,n-1}` has at most `ε · |segment|` displaced elements
-    (positions where `v` differs from `sortedVersion v`).
-
-    (AKS Section 4) This is the output guarantee of the recursive nearsort,
-    and is stronger than simple ε-sortedness (which only counts total displacements). -/
+/-- DEPRECATED: Boolean-based ε-nearsorted definition. Does not track individual
+    elements and cannot express the segment-wise bounds needed by AKS Section 8.
+    Replaced by `Nearsorted` in `Nearsort.lean` (permutation-based, AKS Section 4). -/
 def IsEpsilonNearsorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
   let sv := sortedVersion v
   ∀ k : ℕ, k ≤ n →
@@ -1161,7 +1220,7 @@ def IsEpsilonNearsorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
     ((Finset.univ.filter (fun i : Fin n ↦
         k ≤ (i : ℕ) ∧ v i ≠ sv i)).card : ℝ) ≤ ε * (n - k)
 
-/-- V2: Combined zigzag bounded-damage with `r → r+1` distance shift.
+/-- Combined zigzag bounded-damage with `r → r+1` distance shift (permutation-based).
 
     The composition of zig-then-zag achieves an `r → r+1` distance shift:
     elements at tree-distance ≥ `r` after zigzag are bounded by elements at
@@ -1173,12 +1232,12 @@ def IsEpsilonNearsorted {n : ℕ} (v : Fin n → Bool) (ε : ℝ) : Prop :=
     by wrongness at distance `r+1` before the cycle. -/
 def HasBoundedZigzagDamage {n : ℕ}
     (zig_net zag_net : ComparatorNetwork n) (ε : ℝ) (t : ℕ) : Prop :=
-  ∀ (v : Fin n → Bool) (J : Interval n) (r : ℕ),
-    let v'' := zag_net.exec (zig_net.exec v)
-    ((elementsAtTreeDist n t v'' J r).card : ℝ) ≤
-      (elementsAtTreeDist n t v J (r + 1)).card +
-        2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
-        ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card
+  ∀ (w : Fin n → Fin n) (J : Interval n) (r : ℕ),
+    let w'' := zag_net.exec (zig_net.exec w)
+    ((permElementsAtTreeDist n t w'' J r).card : ℝ) ≤
+      (permElementsAtTreeDist n t w J (r + 1)).card +
+        2 * ε * (permElementsAtTreeDist n t w J (if r ≥ 2 then r - 2 else 0)).card +
+        ε * (permElementsAtTreeDist n t w J (if r ≥ 4 then r - 4 else 0)).card
 
 /-- **Lemma 3 (AKS Section 8):** Zigzag combination from improvement + stability.
 
@@ -1203,31 +1262,24 @@ lemma bounded_tree_damage_pair_gives_zigzag
     (hzig_stable : HasBoundedTreeDamage zig_net ε t)
     (hzag_stable : HasBoundedTreeDamage zag_net ε t) :
     HasBoundedZigzagDamage zig_net zag_net ε t := by
-  intro v J r
-  set v' := zig_net.exec v
+  intro w J r
+  set w' := zig_net.exec w
   -- Step 1: Zag stability
-  have h1 := hzag_stable v' J r
+  have h1 := hzag_stable w' J r
   -- Step 2: Zig improvement
-  have h2 := hzig_improve v J r
+  have h2 := hzig_improve w J r
   -- Step 3: Zig stability at (if r≥2 then r-2 else 0)
-  have h3 := hzig_stable v J (if r ≥ 2 then r - 2 else 0)
+  have h3 := hzig_stable w J (if r ≥ 2 then r - 2 else 0)
   -- ε² ≤ ε
   have hε_sq : ε * ε ≤ ε := by nlinarith
-  -- The nested conditional from h3: (if (if r≥2 then r-2 else 0) ≥ 2 then ... else 0)
-  -- Need: elementsAtTreeDist at nested conditional ≤ elementsAtTreeDist at (if r≥4 then r-4 else 0)
-  -- Case split on r to simplify all conditionals
-  -- Auxiliary: nested conditional in HasBoundedTreeDamage applied at (if r≥2 then r-2 else 0)
+  -- Nested conditional simplification: (if (if r≥2 then r-2 else 0) ≥ 2 then ... else 0)
   -- equals (if r≥4 then r-4 else 0)
-  have h_cond : elementsAtTreeDist n t v J
+  have h_cond : permElementsAtTreeDist n t w J
       (if (if r ≥ 2 then r - 2 else 0) ≥ 2 then (if r ≥ 2 then r - 2 else 0) - 2 else 0) =
-      elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0) := by
+      permElementsAtTreeDist n t w J (if r ≥ 4 then r - 4 else 0) := by
     congr 1; split_ifs <;> omega
   rw [h_cond] at h3
-  -- Now h1: |E(v'',r)| ≤ |E(v',r)| + ε·|E(v',r₂)|
-  -- h2: |E(v',r)| ≤ |E(v,r+1)| + ε·|E(v,r₂)|
-  -- h3: |E(v',r₂)| ≤ |E(v,r₂)| + ε·|E(v,r₄)|
-  -- Goal: |E(v'',r)| ≤ |E(v,r+1)| + 2ε·|E(v,r₂)| + ε·|E(v,r₄)|
-  have hE_nn : (0 : ℝ) ≤ ((elementsAtTreeDist n t v J
+  have hE_nn : (0 : ℝ) ≤ ((permElementsAtTreeDist n t w J
     (if r ≥ 4 then r - 4 else 0)).card : ℝ) := Nat.cast_nonneg _
   nlinarith
 
@@ -2413,9 +2465,9 @@ lemma network_disagreements_le {n : ℕ} (net : ComparatorNetwork n) (v w : Fin 
   3. ✅ monotone_bool_zeros_then_ones (PROVED)
   4a. ⚠️ parity_nearsort_has_bounded_tree_damage (sorry — parity nearsort → BoundedTreeDamage)
   4b. ⚠️ parity_nearsort_has_improved_bound (sorry — even-level nearsort → HasImprovedBound)
-  5. ✅ cherry_wrongness_after_nearsort_v2 (PROVED — direct from HasBoundedTreeDamage)
-  6. ✅ zig_step_bounded_increase_v2 (PROVED — scales by 8A ≥ 1)
-  7. ✅ zigzag_decreases_wrongness_v2 (PROVED — from HasBoundedZigzagDamage)
+  5. ⚠️ cherry_wrongness_after_nearsort_v2 (sorry — needs Bool↔permutation bridge)
+  6. ⚠️ zig_step_bounded_increase_v2 (sorry — needs Bool↔permutation bridge)
+  7. ⚠️ zigzag_decreases_wrongness_v2 (sorry — needs Bool↔permutation bridge)
      - ✅ bounded_tree_damage_pair_gives_zigzag (PROVED — from HasImprovedBound + HasBoundedTreeDamage)
   8. ✅ register_reassignment_increases_wrongness_v2 (PROVED)
   9. ⚠️ aks_tree_sorting (top-level assembly — halver family version)
@@ -2423,6 +2475,8 @@ lemma network_disagreements_le {n : ℕ} (net : ComparatorNetwork n) (v w : Fin 
   Remaining gaps (extracted to separate files for parallel work):
   - `parity_nearsort_has_bounded_tree_damage` → TreeDamageStability.lean (Lemma 2a)
   - `parity_nearsort_has_improved_bound` → TreeDamageImprovement.lean (Lemma 2b)
+  - `cherry_wrongness_after_nearsort_v2`, `zig_step_bounded_increase_v2`,
+    `zigzag_decreases_wrongness_v2` need Bool↔permutation bridge (Phase 3h)
   - `aks_tree_sorting` → AKSNetwork.lean (assembly)
 -/
 
@@ -2443,13 +2497,9 @@ lemma cherry_wrongness_after_nearsort_v2
     (_h_in_cherry : J = cherry.parent ∨ J = cherry.leftChild ∨ J = cherry.rightChild) :
     treeWrongnessV2 n t (net.exec v) J r ≤
       treeWrongnessV2 n t v J r + ε * treeWrongnessV2 n t v J (if r ≥ 2 then r - 2 else 0) := by
-  by_cases hJ : J.size = 0
-  · simp [treeWrongnessV2, hJ]
-  · unfold treeWrongnessV2; simp only [if_neg hJ]
-    have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
-    rw [← mul_div_assoc, ← add_div]
-    apply div_le_div_of_nonneg_right _ hJs.le
-    exact hnet v J r
+  -- TODO: Bridge between Bool-based `treeWrongnessV2`/`elementsAtTreeDist` and
+  -- permutation-based `HasBoundedTreeDamage`/`permElementsAtTreeDist`.
+  sorry
 
 /-! **The Four Key Lemmas (AKS Section 8)** -/
 
@@ -2531,32 +2581,9 @@ lemma zig_step_bounded_increase_v2
       8 * A * (treeWrongnessV2 n t v J r +
                if r ≥ 3 then ε * treeWrongnessV2 n t v J (r - 2)
                else ε) := by
-  subst h_zig
-  -- Step 1: HasBoundedTreeDamage gives tw_after ≤ tw + ε * tw(if r≥2 then r-2 else 0)
-  have hbd : treeWrongnessV2 n t (net.exec v) J r ≤
-      treeWrongnessV2 n t v J r + ε * treeWrongnessV2 n t v J (if r ≥ 2 then r - 2 else 0) := by
-    by_cases hJ : J.size = 0
-    · simp [treeWrongnessV2, hJ]
-    · unfold treeWrongnessV2; simp only [if_neg hJ]
-      have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
-      rw [← mul_div_assoc, ← add_div]
-      apply div_le_div_of_nonneg_right _ hJs.le
-      exact hnet v J r
-  -- Step 2: Scale up by 8*A ≥ 1
-  have hA : (1 : ℝ) ≤ 8 * A := by norm_num [A]
-  by_cases hr : r ≥ 3
-  · simp only [show r ≥ 2 from by omega, ↓reduceIte, hr] at hbd ⊢
-    have h_nn : 0 ≤ treeWrongnessV2 n t v J r + ε * treeWrongnessV2 n t v J (r - 2) :=
-      add_nonneg (treeWrongnessV2_nonneg (t := t) v J r)
-        (mul_nonneg hε_nn (treeWrongnessV2_nonneg (t := t) v J (r - 2)))
-    linarith [mul_le_mul_of_nonneg_right hA h_nn]
-  · push_neg at hr
-    simp only [show ¬(r ≥ 3) from by omega, ↓reduceIte] at ⊢
-    have h_tw_le : ε * treeWrongnessV2 n t v J (if r ≥ 2 then r - 2 else 0) ≤ ε :=
-      mul_le_of_le_one_right hε_nn (treeWrongnessV2_le_one (t := t) v J _)
-    have h_nn : 0 ≤ treeWrongnessV2 n t v J r + ε :=
-      add_nonneg (treeWrongnessV2_nonneg (t := t) v J r) hε_nn
-    linarith [mul_le_mul_of_nonneg_right hA h_nn]
+  -- TODO: Bridge between Bool-based `treeWrongnessV2`/`elementsAtTreeDist` and
+  -- permutation-based `HasBoundedTreeDamage`/`permElementsAtTreeDist`.
+  sorry
 
 /-- **Lemma 3: ZigZag Combined Step** (AKS Section 8)
 
@@ -2591,62 +2618,9 @@ lemma zigzag_decreases_wrongness_v2
     treeWrongnessV2 n t v'' J r ≤
       treeWrongnessV2 n t v J (r + 1) +
         3 * ε * treeWrongnessV2 n t v J (if r ≥ 4 then r - 4 else 0) := by
-  intro v''
-  -- HasBoundedZigzagDamage gives element-level bound. Divide by J.size to get
-  -- wrongness, then consolidate 2ε·tw(r-2) + ε·tw(r-4) ≤ 3ε·tw(r-4) via
-  -- anti-monotonicity of treeWrongnessV2.
-  by_cases hJ : J.size = 0
-  · simp [treeWrongnessV2, hJ]
-  · -- Step 1: HasBoundedZigzagDamage gives card-level bound
-    have hzz_card := hzz v J r
-    -- Step 2: Divide by J.size to get wrongness inequality
-    have hJs : (0 : ℝ) < ↑J.size := Nat.cast_pos.mpr (by omega)
-    -- Goal: tw(v'', r) ≤ tw(v, r+1) + 3ε·tw(v, if r≥4 then r-4 else 0)
-    -- From hzz_card: card(v'',r) ≤ card(v,r+1) + 2ε·card(v,if r≥2 then r-2 else 0) + ε·card(v,if r≥4 then r-4 else 0)
-    unfold treeWrongnessV2
-    simp only [if_neg hJ]
-    -- After dividing by J.size, need:
-    -- card(v'',r)/|J| ≤ card(v,r+1)/|J| + 3ε·card(v,if r≥4 then r-4 else 0)/|J|
-    rw [← mul_div_assoc, ← add_div]
-    apply div_le_div_of_nonneg_right _ hJs.le
-    -- Goal: card(v'',r) ≤ card(v,r+1) + 3ε·card(v,if r≥4 then r-4 else 0)
-    -- From hzz_card, we have card bound with 2ε·(r-2 term) + ε·(r-4 term)
-    -- Use anti-monotonicity: card(v, if r≥2 then r-2 else 0) ≤ card(v, if r≥4 then r-4 else 0)
-    have h_anti : ((elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card : ℝ) ≤
-        (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := by
-      apply Nat.cast_le.mpr
-      apply Finset.card_le_card
-      by_cases hr4 : r ≥ 4
-      · simp only [show r ≥ 2 from by omega, ↓reduceIte, hr4]
-        -- Need: elementsAtTreeDist(r-2) ⊆ elementsAtTreeDist(r-4)
-        -- r-2 ≥ r-4, so dist ≥ r-2 → dist ≥ r-4
-        unfold elementsAtTreeDist
-        rw [if_neg hJ, if_neg hJ]
-        intro i hi
-        simp only [Finset.mem_filter] at hi ⊢
-        exact ⟨hi.1, hi.2.1, by omega⟩
-      · push_neg at hr4
-        by_cases hr2 : r ≥ 2
-        · simp only [hr2, ↓reduceIte, show ¬(r ≥ 4) from by omega]
-          -- r ∈ {2, 3}: elementsAtTreeDist(r-2) ⊆ elementsAtTreeDist(0)
-          unfold elementsAtTreeDist
-          rw [if_neg hJ, if_neg hJ]
-          intro i hi
-          simp only [Finset.mem_filter] at hi ⊢
-          exact ⟨hi.1, hi.2.1, Nat.zero_le _⟩
-        · simp only [show ¬(r ≥ 2) from hr2, ↓reduceIte, show ¬(r ≥ 4) from by omega]
-          exact Finset.Subset.refl _
-    -- Consolidate: 2ε·card(r-2) + ε·card(r-4) ≤ 3ε·card(r-4)
-    calc ((elementsAtTreeDist n t v'' J r).card : ℝ)
-        ≤ (elementsAtTreeDist n t v J (r + 1)).card +
-          2 * ε * (elementsAtTreeDist n t v J (if r ≥ 2 then r - 2 else 0)).card +
-          ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := hzz_card
-      _ ≤ (elementsAtTreeDist n t v J (r + 1)).card +
-          2 * ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card +
-          ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := by
-          linarith [mul_le_mul_of_nonneg_left h_anti (by linarith : (0 : ℝ) ≤ 2 * ε)]
-      _ = (elementsAtTreeDist n t v J (r + 1)).card +
-          3 * ε * (elementsAtTreeDist n t v J (if r ≥ 4 then r - 4 else 0)).card := by ring
+  -- TODO: Bridge between Bool-based `treeWrongnessV2`/`elementsAtTreeDist` and
+  -- permutation-based `HasBoundedZigzagDamage`/`permElementsAtTreeDist`.
+  sorry
 
 /-- **Lemma 4: Displacement from Wrongness** (AKS page 8-9, Equation 4)
 
