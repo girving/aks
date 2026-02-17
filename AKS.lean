@@ -6,34 +6,36 @@
   • `AKS/Main.lean` — concrete instantiation with zig-zag expander family
 -/
 
-import AKS.Sort
+import AKS.Sort.Defs
+import AKS.Sort.Monotone
+import AKS.Sort.ZeroOne
+import AKS.Sort.Depth
 import AKS.Fin
-import AKS.AKSNetwork
+import AKS.Tree.AKSNetwork
 import AKS.Nearsort
-import AKS.Halver
+import AKS.Halver.Defs
 import AKS.Halver.Tanner
 import AKS.Halver.ExpanderToHalver
 import AKS.Nearsort.HalverToNearsort
-import AKS.TreeSorting
-import AKS.TreeDamageStability
-import AKS.TreeDamageImprovement
+import AKS.Tree.Sorting
+import AKS.Tree.DamageStability
+import AKS.Tree.DamageImprovement
 import AKS.Graph.Regular
 import AKS.Graph.Square
 import AKS.Graph.Complete
-import AKS.Mixing
+import AKS.Halver.Mixing
 import AKS.ZigZag.Operators
 import AKS.ZigZag.Spectral
 import AKS.ZigZag.RVWInequality
 import AKS.ZigZag.RVWBound
 import AKS.ZigZag
-import AKS.Random
 import AKS.Certificate
 import AKS.WalkBound
 import AKS.DiagDominant
 import AKS.SpectralMatrix
 import AKS.CertificateBridge
 import AKS.NpyReader
-import AKS.Random16
-import AKS.Random1728
-import AKS.Random20736
+import AKS.Random.Random16
+import AKS.Random.Random1728
+import AKS.Random.Random20736
 import AKS.Main

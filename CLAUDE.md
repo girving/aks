@@ -182,7 +182,7 @@ The complete graph as a concrete example:
 1. **Complete graph** — `completeGraph` via `Fin.succAbove`/`Fin.predAbove`
 2. **Spectral gap** — `spectralGap_complete`: λ(K_{n+1}) = 1/n
 
-### `AKS/Mixing.lean` — Expander Mixing Lemma
+### `AKS/Halver/Mixing.lean` — Expander Mixing Lemma
 Fully proved expander mixing lemma via indicator vectors + Cauchy-Schwarz + operator norm.
 
 ### `AKS/Random.lean` + `AKS/Random20736.lean` — Base Expander for Zig-Zag Construction
@@ -242,7 +242,7 @@ See `docs/separator-plan.md` for full design. Planned files:
 ```
 Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
                                → Graph/Complete.lean           ↓
-                              → Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
+                              → Halver/Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
                               → WalkBound.lean ──→ CertificateBridge.lean
                               → ZigZag/Operators.lean ──→     ↑
                                   ZigZag/Spectral.lean ─↗ ComparatorNetwork.lean ─→ AKSNetwork.lean

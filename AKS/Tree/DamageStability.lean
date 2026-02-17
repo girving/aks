@@ -17,7 +17,7 @@
   All three can be proved in parallel by different Claude Code instances.
 -/
 
-import AKS.TreeSorting
+import AKS.Tree.Sorting
 
 open Finset BigOperators
 

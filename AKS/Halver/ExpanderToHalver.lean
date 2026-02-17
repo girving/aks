@@ -10,9 +10,9 @@
   • `expander_gives_halver`: expanders yield ε-halvers (proved via Tanner's bound)
 -/
 
-import AKS.Halver
+import AKS.Halver.Defs
 import AKS.Halver.Tanner
-import AKS.TreeSorting
+import AKS.Tree.Sorting
 
 open Finset BigOperators
 

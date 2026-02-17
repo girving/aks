@@ -13,10 +13,10 @@
 
 import AKS.Sort.ZeroOne
 import AKS.Sort.Depth
-import AKS.Halver
+import AKS.Halver.Defs
 import AKS.Halver.ExpanderToHalver
-import AKS.TreeDamageStability
-import AKS.TreeDamageImprovement
+import AKS.Tree.DamageStability
+import AKS.Tree.DamageImprovement
 import Mathlib.Analysis.SpecialFunctions.Log.Base
 
 open Finset BigOperators Real
