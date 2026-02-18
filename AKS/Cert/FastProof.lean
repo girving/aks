@@ -14,7 +14,7 @@
      `(columnLists.map (fun cols => Task.spawn ... checkPSDColumns ...)).map Task.get`
   3. `Array.map_map` + Task transparency closes the gap
 -/
-import AKS.Certificate
+import CertCheck
 
 /-! **Task transparency** -/
 

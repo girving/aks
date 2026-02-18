@@ -1,7 +1,7 @@
 /-
   # Fast Certificate Checker
 
-  Optimized version of `checkCertificateSlow` from `CertChecker.lean`.
+  Optimized version of `checkCertificateSlow` from `CertCheck.lean`.
   Key optimization: pre-decode the base-85 rotation map into an `Array Nat`
   once, so `mulAdj` becomes pure array lookups (no base-85 in hot loop).
 
@@ -12,13 +12,13 @@
   n*(n+1)/2 with no repeats). Only the rotation map benefits from pre-decode
   because each `mulAdj` call re-reads all n*d entries (3456 calls total).
 
-  Superseded by `checkCertificateFast` in `CertChecker.lean`.
+  Superseded by `checkCertificateFast` in `CertCheck.lean`.
   so `native_decide` automatically uses the fast version. The proof should
   be straightforward since both compute the same result — the only difference
   is when the base-85 decode happens (per-access vs upfront).
 -/
 
-import AKS.Certificate
+import CertCheck
 
 
 /-! **Pre-decode rotation map** -/

@@ -8,7 +8,7 @@
   `neighbors[v*d+p] = destination vertex` (we only need the vertex, not the port).
 -/
 
-import AKS.Certificate
+import CertCheck
 
 
 /-! **Optimized mulAdj via pre-decoded array** -/

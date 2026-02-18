@@ -7,9 +7,9 @@
   Regenerate data: `cargo +nightly -Zscript rust/certificate.rs 1728 12 42 30 data/1728`
 -/
 
-import AKS.CertificateBridge
-import AKS.CertificateFastProof
-import AKS.NpyReader
+import AKS.Cert.Bridge
+import AKS.Cert.FastProof
+import AKS.Cert.Read
 
 namespace Random1728
 

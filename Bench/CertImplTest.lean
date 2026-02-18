@@ -1,8 +1,8 @@
 /-
   Test: new checkCertificateSlow (involution + PSD + columnNormBound) via native_decide.
 -/
-import AKS.Certificate
-import AKS.NpyReader
+import CertCheck
+import AKS.Cert.Read
 
 #eval ensureCertificateData 16 4
 #eval ensureCertificateData 1728 12

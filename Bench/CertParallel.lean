@@ -18,9 +18,9 @@
   truncated inner loop, sparse first mulAdj.
 -/
 
-import AKS.Certificate
-import AKS.CertificateFast
-import AKS.CertificateV7
+import CertCheck
+import Bench.CertFast
+import Bench.CertV7
 
 
 /-! **Chunk result type** -/

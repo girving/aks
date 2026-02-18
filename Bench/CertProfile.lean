@@ -8,9 +8,9 @@
   Run: `lake exe cert-profile`
 -/
 
-import AKS.Certificate
-import AKS.CertificateFast
-import AKS.NpyReader
+import CertCheck
+import Bench.CertFast
+import AKS.Cert.Read
 
 #eval ensureCertificateData 1728 12
 

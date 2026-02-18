@@ -7,11 +7,11 @@
   Run: `lake exe cert-bench`
 -/
 
-import AKS.Certificate
-import AKS.CertificateV2
-import AKS.CertificateParallel
-import AKS.CertificateV7
-import AKS.NpyReader
+import CertCheck
+import Bench.CertV2
+import Bench.CertParallel
+import Bench.CertV7
+import AKS.Cert.Read
 
 #eval ensureCertificateData 16 4
 #eval ensureCertificateData 1728 12

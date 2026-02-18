@@ -17,8 +17,8 @@
   Run: `lake exe cert-bench`
 -/
 
-import AKS.Certificate
-import AKS.CertificateFast
+import CertCheck
+import Bench.CertFast
 
 
 /-! **Optimized PSD check** -/

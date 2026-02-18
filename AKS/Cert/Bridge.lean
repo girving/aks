@@ -19,11 +19,11 @@
   computation to the formal real matrix via `hmatch`.
 -/
 
-import AKS.Certificate
-import AKS.ColumnNormBridge
-import AKS.WalkBound
-import AKS.SpectralMatrix
-import AKS.DiagDominant
+import CertCheck
+import AKS.Cert.ColumnNormBridge
+import AKS.Cert.WalkBound
+import AKS.Cert.SpectralMatrix
+import AKS.Cert.DiagDominant
 import Mathlib.LinearAlgebra.Matrix.Block
 
 open Matrix BigOperators Finset

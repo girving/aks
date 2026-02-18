@@ -7,8 +7,8 @@
   Run: `lake exe cert-test`
 -/
 
-import AKS.Certificate
-import AKS.NpyReader
+import CertCheck
+import AKS.Cert.Read
 
 /-- Encode a Nat as 5 base-85 bytes. -/
 def encodeBase85 (u : Nat) : ByteArray :=

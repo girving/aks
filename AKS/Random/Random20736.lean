@@ -11,9 +11,9 @@
   the PSD certificate check is sorry'd pending a machine with more RAM.
 -/
 
-import AKS.CertificateBridge
-import AKS.CertificateFastProof
-import AKS.NpyReader
+import AKS.Cert.Bridge
+import AKS.Cert.FastProof
+import AKS.Cert.Read
 
 namespace Random20736
 
