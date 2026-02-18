@@ -255,6 +255,23 @@ class LeanDaemon:
             "diagnostics": diagnostics,
         }
 
+    def close_file(self, filepath: str):
+        """Close a file to release its LSP worker process.
+
+        The Lean LSP server spawns a separate --worker process per open file.
+        Without closing, --all accumulates 50+ workers consuming 10+ GB RAM."""
+        abspath = (
+            os.path.join(PROJECT_ROOT, filepath)
+            if not filepath.startswith("/")
+            else filepath
+        )
+        uri = f"file://{abspath}"
+        if uri in self.opened_files:
+            self.conn.notify("textDocument/didClose", {
+                "textDocument": {"uri": uri},
+            })
+            del self.opened_files[uri]
+
     def restart_if_stale(self) -> bool:
         """Restart lake serve if the set of .lean files has changed.
 
@@ -311,7 +328,13 @@ def run_daemon():
                 with restart_lock:
                     daemon.restart_if_stale()
                 result = daemon.check_file(request["file"])
+                # Close file after check if requested (saves memory in --all mode)
+                if request.get("close_after"):
+                    daemon.close_file(request["file"])
                 response = json.dumps(result)
+            elif request.get("command") == "close":
+                daemon.close_file(request["file"])
+                response = json.dumps({"status": "closed"})
             elif request.get("command") == "ping":
                 response = json.dumps({"status": "ok"})
             elif request.get("command") == "shutdown":
