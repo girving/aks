@@ -142,9 +142,7 @@ private theorem aks_size_bound (m d : ℕ) (hm : 0 < m) (s : ℕ) (hs : s ≤ m 
     7. When displacement < 1/n: must be sorted (discrete) -/
 theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (d : ℕ)
     (hε : 0 < ε) (hε1 : ε < 1/2)
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (hhalver_size : ∀ m, (halvers m).size ≤ m * d) :
+    (family : HalverFamily ε d) :
     ∃ (net : ComparatorNetwork n),
       (net.size : ℝ) ≤ 200 * (↑d + 1) * ↑n * ↑(Nat.log 2 n) ∧
       ∀ (v : Fin n → Bool), Monotone (net.exec v) := by
@@ -159,7 +157,7 @@ theorem aks_tree_sorting {n : ℕ} (ε : ℝ) (d : ℕ)
     bounded by `β < 1/2`, there exist O(n log n) sorting networks for all sizes.
 
     The construction:
-    1. `expander_gives_halver`: expander at each size → β-halver family
+    1. `expanderHalver`: expander at each size → β-halver network (explicit def)
     2. `aks_tree_sorting`: recursive nearsort with halver family sorts in O(n log n)
 
     The spectral gap requirement `β < 1/2` comes from `aks_tree_sorting`. -/
@@ -173,27 +171,12 @@ theorem zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β 
   -- c = 400*(d+1): factor of 200 from aks_tree_sorting, factor of 2 for 1/log 2 < 2
   refine ⟨400 * (↑d + 1), by positivity, ?_⟩
   intro n hn
-  -- Build halver family: for each m, get a β-halver on 2*m wires from the expander at size m.
-  have halver_exists : ∀ m, ∃ (net : ComparatorNetwork (2 * m)),
-      IsEpsilonHalver net β ∧ net.size ≤ m * d := by
-    intro m
-    rcases Nat.eq_zero_or_pos m with rfl | hm
-    · -- m = 0: empty network on 0 wires, Fin 0 is empty so everything is vacuous
-      exact ⟨{ comparators := [] },
-        fun v => ⟨fun k hk => by
-                    simp at hk; subst hk; simp,
-                  fun k hk => by
-                    simp at hk; subst hk; simp⟩,
-        by simp [ComparatorNetwork.size]⟩
-    · obtain ⟨G, hG⟩ := hfamily m hm
-      exact expander_gives_halver m d G β hG
-  set halvers := fun m ↦ (halver_exists m).choose
-  have hhalvers_eps : ∀ m, IsEpsilonHalver (halvers m) β :=
-    fun m ↦ ((halver_exists m).choose_spec).1
-  have hhalvers_size : ∀ m, (halvers m).size ≤ m * d :=
-    fun m ↦ ((halver_exists m).choose_spec).2
+  -- Build halver family from expander family via expanderHalverFamily
+  let graphs := fun m (hm : m > 0) ↦ (hfamily m hm).choose
+  have hgaps := fun m (hm : m > 0) ↦ (hfamily m hm).choose_spec
+  let family := expanderHalverFamily β graphs hgaps
   -- Apply aks_tree_sorting with the halver family
-  obtain ⟨net, hsize, hmono⟩ := aks_tree_sorting β d hβ_pos hβ_half halvers hhalvers_eps hhalvers_size
+  obtain ⟨net, hsize, hmono⟩ := aks_tree_sorting β d hβ_pos hβ_half family
   refine ⟨net, ?_, ?_⟩
   · -- Correctness via 0-1 principle
     exact zero_one_principle net hmono

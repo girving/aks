@@ -15,6 +15,7 @@
 -/
 
 import AKS.Sort.Defs
+import AKS.Sort.Depth
 import AKS.Misc.Fin
 
 open Finset BigOperators
@@ -239,3 +240,31 @@ lemma isEpsilonSorted_one {n : ℕ} (v : Fin n → Bool) :
       _ = Fintype.card (Fin n) := by simp
       _ = n := by simp
       _ = 1 * n := by ring
+
+
+/-! **Halver Family** -/
+
+/-- A family of ε-halver networks indexed by half-size `m`, with depth bounded by `d`.
+    The network `net m` operates on `2 * m` wires. The depth bound is fundamental:
+    size ≤ m · d follows from depth ≤ d (each of d rounds has ≤ m comparators on
+    2m bipartite wires). -/
+structure HalverFamily (ε : ℝ) (d : ℕ) where
+  /-- The halver network for each half-size `m`. -/
+  net : (m : ℕ) → ComparatorNetwork (2 * m)
+  /-- Each network is an ε-halver. -/
+  isHalver : ∀ m, IsEpsilonHalver (net m) ε
+  /-- Each network has depth at most `d`. -/
+  depth_le : ∀ m, (net m).depth ≤ d
+
+/-- Depth ≤ d on 2m bipartite wires implies size ≤ m * d: each of the d depth
+    layers has at most m non-overlapping comparators on 2m wires. -/
+theorem HalverFamily.size_le {ε : ℝ} {d : ℕ} (family : HalverFamily ε d) (m : ℕ) :
+    (family.net m).size ≤ m * d := by
+  have h1 := size_le_half_n_mul_depth (family.net m)
+  have h2 := family.depth_le m
+  have h3 : 2 * (family.net m).size ≤ 2 * (m * d) :=
+    calc 2 * (family.net m).size
+        ≤ (2 * m) * (family.net m).depth := h1
+      _ ≤ (2 * m) * d := Nat.mul_le_mul_left _ h2
+      _ = 2 * (m * d) := by ring
+  omega
