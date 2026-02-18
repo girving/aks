@@ -91,6 +91,30 @@ def decodeNeighbors (rotBytes : ByteArray) (n d : Nat) : Array Nat :=
 def mulAdjPre (neighbors : Array Nat) (z : Array Int) (n d : Nat) : Array Int :=
   mulAdjWith (fun k => neighbors[k]!) z n d
 
+/-- Single entry of `mulAdj`: `(B·z)[i] = ∑_{p<d} z[neighbors[i*d+p]]`.
+    No array allocation — used to inline the second `mulAdj` in `psdColumnStep`. -/
+@[inline] def mulAdjEntry (neighbors : Array Nat) (z : Array Int)
+    (d i : Nat) : Int :=
+  Id.run do
+    let mut acc : Int := 0
+    for p in [:d] do acc := acc + z[neighbors[i * d + p]!]!
+    return acc
+
+
+/-- Scatter-based `mulAdj`: compute `B·z` by iterating over nonzero entries of `z`
+    (indices `0..nzCount-1`) and distributing contributions to neighbors.
+    Equivalent to `mulAdjPre` when `z[k] = 0` for `k ≥ nzCount`. -/
+@[inline] def scatterMulAdj (neighbors : Array Nat) (zCol : Array Int)
+    (n d nzCount : Nat) : Array Int :=
+  Id.run do
+    let mut bz := Array.replicate n (0 : Int)
+    for k in [:nzCount] do
+      let zk := zCol[k]!
+      for p in [:d] do
+        let w := neighbors[k * d + p]!
+        bz := bz.set! w (bz[w]! + zk)
+    return bz
+
 
 /-! **Diagonal positivity check** -/
 
@@ -124,10 +148,9 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
   }
 
 /-- Per-column PSD update: process column `j`, return updated state.
-    `doMulAdj` is the adjacency-vector product function (either `mulAdj` or
-    `mulAdjPre`-based). Factored out so that `checkPSDCertificate` and
-    `checkPSDColumns` share the exact same step function. -/
-@[inline] def psdColumnStep (doMulAdj : Array Int → Array Int)
+    Uses scatter-based `mulAdj` for the first `B·z` (O((j+1)·d) instead of O(n·d))
+    and `mulAdjEntry` for `(B²·z)[i]` inline (only for `i ≤ j`). -/
+@[inline] def psdColumnStep (neighbors : Array Nat) (d : Nat)
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
     (state : PSDChunkResult) (j : Nat) : PSDChunkResult :=
   let colStart := j * (j + 1) / 2
@@ -135,8 +158,7 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
     let mut arr := Array.replicate n (0 : Int)
     for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
     return arr
-  let bz := doMulAdj zCol
-  let b2z := doMulAdj bz
+  let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0
     for k in [:j+1] do s := s + zCol[k]!
@@ -145,8 +167,8 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
     let mut epsMax := state.epsMax
     let mut minDiag := state.minDiag
     let mut first := state.first
-    for i in [:n] do
-      let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+    for i in [:j+1] do
+      let pij := c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
       if i == j then
         if first then minDiag := pij; first := false
         else if pij < minDiag then minDiag := pij
@@ -162,7 +184,7 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
     `psdColumnStep`. -/
 def checkPSDColumns (neighbors : Array Nat) (certBytes : ByteArray)
     (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) : PSDChunkResult :=
-  let step := psdColumnStep (mulAdjPre neighbors · n d) certBytes n c₁ c₂ c₃
+  let step := psdColumnStep neighbors d certBytes n c₁ c₂ c₃
   Id.run do
     let mut state : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
     for j in columns do state := step state j
@@ -329,16 +351,28 @@ def checkPSDCertificatePar (rotBytes certBytes : ByteArray)
     let results := tasks.map Task.get
     checkPSDThreshold results n
 
-/-- Parallel certificate check: same result as `checkCertificateSlow` but splits
-    the O(n²d) PSD column loop across 4 dedicated OS threads via `Task.spawn`
-    with pre-decoded neighbors. Uses `checkColumnNormBound` directly (identical
-    to slow version). -/
+/-- Merged parallel certificate check: computes PSD columns once and uses the
+    shared result for both the Gershgorin threshold and column-norm bound.
+    Same result as `checkCertificateSlow` (proved in `AKS/Cert/FastProof.lean`).
+    Spawns dedicated OS threads for each chunk via `Task.spawn`. -/
 def checkCertificateFast (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   checkInvolution rotBytes n d &&
-  checkPSDCertificatePar rotBytes certBytes n d c₁ c₂ c₃ &&
-  checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃
+  if certBytes.size != n * (n + 1) / 2 * 5 then false
+  else allDiagPositive certBytes n &&
+    let neighbors := decodeNeighbors rotBytes n d
+    let columnLists := buildColumnLists n 64
+    let tasks := columnLists.map fun cols =>
+      Task.spawn (prio := .dedicated) fun () =>
+        checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
+    let results := tasks.map Task.get
+    let merged := results.foldl PSDChunkResult.merge
+      { epsMax := 0, minDiag := 0, first := true }
+    if merged.first then false
+    else
+      decide (merged.minDiag > merged.epsMax * (n * (n + 1) / 2)) &&
+      checkPerRow certBytes n merged.epsMax (merged.minDiag + merged.epsMax) n 0 0
 
 
