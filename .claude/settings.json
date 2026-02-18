@@ -18,6 +18,7 @@
       "Bash(git status)",
       "Bash(git status *)",
       "Bash(lake build)",
+      "Bash(lake exe cache get)",
       "Bash(lake clean)",
       "Bash(ls *)",
       "Bash(mkdir *)",
