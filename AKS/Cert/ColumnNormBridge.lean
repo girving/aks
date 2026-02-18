@@ -14,7 +14,7 @@
   and `Mathlib.Tactic` for `set`, `ring`, etc.
 -/
 
-import CertCheck
+import AKS.Cert.Defs
 import AKS.Misc.ForLoop
 import Mathlib.Tactic.Set
 

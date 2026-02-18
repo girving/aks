@@ -229,6 +229,7 @@ Abstract operator theory connecting walk bounds to spectral gap bounds. Imports 
 
 ### `AKS/Cert/` — Certificate Bridge Infrastructure
 Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
+- **`Defs.lean`** — proof-only pure recursive definitions (`adjMulPure`, `pEntryPure`, `kEntryPure`, etc.) (~100 lines)
 - **`Bridge.lean`** — main bridge theorem chaining all layers (~870 lines)
 - **`FastProof.lean`** — proves `checkCertificateFast = checkCertificateSlow` (~55 lines)
 - **`SpectralMatrix.lean`** — Layer 1: spectral matrix M PSD → walk bound (~186 lines)
@@ -240,7 +241,7 @@ Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
 Proves `for k in [:n] do` in `Id` monad equals `Nat.fold` + partition-fold lemmas.
 
 ### `Bench/` — Benchmarks, Tests, and Profiles
-Not part of the proof. Contains optimization variants (`CertFast`, `CertV2`, `CertV7`, `CertParallel`) and profiling tools. Run via `bench/run` or `lake exe cert-{bench,test,profile}`.
+Not part of the proof. Contains optimization variants (`CertFast`, `CertV2`, `CertV7`, `CertParallel`) and profiling tools. Run via `scripts/bench` or `lake exe cert-{bench,test,profile}`.
 
 ### `AKS/ZigZag.lean` — Expander Families (~115 lines)
 Assembles the spectral bound and builds the iterated construction:
@@ -274,7 +275,7 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
                                   ZigZag/Spectral.lean ─↗ Sort/*.lean ─→ Tree/AKSNetwork.lean
            Random/*.lean ──────────────────────────↗          ↑
            ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗  Halver/*.lean ─→ Halver/ExpanderToHalver.lean
-           CertCheck.lean ──→ Cert/Bridge.lean          Halver/Tanner.lean ─↗
+           CertCheck.lean ──→ Cert/Defs.lean ──→ Cert/Bridge.lean  Halver/Tanner.lean ─↗
                                                                     ↓
                                                          Separator/Defs.lean
                                                          Separator/FromHalver.lean

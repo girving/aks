@@ -12,7 +12,6 @@
 -/
 
 import AKS.Cert.Bridge
-import AKS.Cert.FastProof
 import AKS.Cert.Read
 
 namespace Random20736

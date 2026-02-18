@@ -19,7 +19,8 @@
   computation to the formal real matrix via `hmatch`.
 -/
 
-import CertCheck
+import AKS.Cert.Defs
+import AKS.Cert.FastProof
 import AKS.Cert.ColumnNormBridge
 import AKS.Cert.WalkBound
 import AKS.Cert.SpectralMatrix

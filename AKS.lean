@@ -29,12 +29,12 @@ import AKS.ZigZag.Spectral
 import AKS.ZigZag.RVWInequality
 import AKS.ZigZag.RVWBound
 import AKS.ZigZag
+import AKS.Cert.Defs
 import AKS.Cert.Read
 import AKS.Cert.WalkBound
 import AKS.Cert.DiagDominant
 import AKS.Cert.SpectralMatrix
 import AKS.Cert.Bridge
-import AKS.Cert.FastProof
 import AKS.Cert.ColumnNormBridge
 import AKS.Misc.ForLoop
 import AKS.Random.Random16
