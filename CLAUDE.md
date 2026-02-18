@@ -53,12 +53,11 @@ Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspe
 
 ```bash
 lake exe cache get    # Download prebuilt Mathlib oleans (run after lake clean or fresh clone)
-lake build CertCheck    # Build precompiled certificate checker (must run before lake build)
 lake build            # Full rebuild — slow, use only as fallback
 lake clean            # Clean build artifacts
 ```
 
-**After `lake clean` or a fresh clone, run `lake exe cache get` then `lake build CertCheck` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). The CertCheck build produces a precompiled shared library that the AKS lib loads via `--load-dynlib` for fast `native_decide` (130s → 2s). Without it, `lake build` fails on files that need the shared lib. The `lean-check` daemon handles this automatically.
+**After `lake clean` or a fresh clone, run `lake exe cache get` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). Lake automatically builds the CertCheck shared library (`libaks_CertCheck.so`) and passes `--load-dynlib` to modules that import it, thanks to `precompileModules := true` on the CertCheck lean_lib. The `lean-check` daemon also pre-builds `CertCheck:shared` on startup.
 
 ### Python Scripts
 
@@ -105,7 +104,7 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 **Never increase precision or memory usage without explicit permission.** If the user asks for f32, use f32. If they ask for low memory, keep it low. Do not silently switch from f32 to f64 or allocate larger buffers "because the margin is better." OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.
 
-**Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'certificate|lake build' | grep -v grep` and kill any stale ones before launching new heavy jobs.
+**Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'certificate|lake|lean' | grep -v grep` and kill stale ones with `pkill -f lean` / `pkill -f lake` before launching new heavy jobs.
 
 ### Proof Visualization (`docs/index.html`)
 

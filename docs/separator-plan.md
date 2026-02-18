@@ -62,15 +62,52 @@ Subject to constraints (Seiferas Section 5):
 
 Seiferas's preview: λ = ε = 1/99, A = 10, ν = 0.65.
 
+**Note:** The preview ν = 0.65 barely violates C3 (4λA + 5/(2A) = 0.6540 > 0.65).
+Floor effects make it work in practice, but the Lean formalization should use
+ν ≥ 0.655 or parameterize over abstract ν with C3 as a hypothesis.
+
 All theorems are parameterized over abstract A, ν, λ, ε with constraint
 hypotheses (following the "parameterize over abstract bounds" style rule).
+
+## Rust Simulation Results (`rust/test-bags.rs`)
+
+Comprehensive testing of the bag-tree construction has validated the definitions
+and revealed important corrections to the plan. Key findings:
+
+### Validated
+- **Invariant holds** with perfect separator for all tested n (8 to 16384)
+- **Convergence rate**: stages = `⌈log(2A)/log(1/ν)⌉ · log₂(n)` ≈ 7·log₂(n)
+  for Seiferas preview params. Each doubling of n adds exactly 7 stages.
+- **Capacity sublemmas**: `items_from_below ≤ 4λbA + 2` (ratio ≤ 0.99),
+  `items_from_above ≤ b/(2A)` (ratio = 1.00 exactly), `total ≤ νb` (ratio ≤ 0.68)
+- **Uniform size** (Clause 2) always holds perfectly
+- **j-stranger monotonicity**: (j+1)-strange → j-strange confirmed
+  (divergence at level ℓ-j propagates down: `a/2 ≠ b/2 → a ≠ b`)
+
+### Corrections to Original Plan
+1. **Parity convention (BUG)**: Original plan had `(t + level) % 2 = 0 → empty`.
+   Correct is `(t + level) % 2 = 1 → empty` (or equivalently,
+   `(t + level) % 2 ≠ 0 → empty`). At t=0, root (level 0) is nonempty,
+   so (0+0)%2 = 0 must mean "potentially nonempty", not "empty".
+2. **Convergence threshold**: The iteration stops when leaf capacity
+   `n·ν^t·A^(maxLevel)` drops below `1/λ` (not below 1). The invariant
+   only needs to hold until this threshold is reached.
+3. **Deep-level dynamics**: At deep levels, capacity `n·ν^t·A^d` is initially
+   huge relative to actual items. The kickback `⌊λb⌋` exceeds items, so
+   everything gets kicked to parent. Items propagate to deeper levels only
+   as capacities shrink. The "wave front" moves at rate ~7 levels per
+   `log₂(n)` stages.
+4. **Stranger bounds at small bags**: When capacity b < 1/(λ·ε^(j-1)), the
+   stranger bound is < 1, requiring ZERO j-strangers (integers). This is
+   achievable because small bags (2-4 items) are perfectly sorted by any
+   comparator network. The ε error only matters for large bags.
 
 ## File Structure
 
 ```
 Separator/Defs.lean          — already exists (IsSeparator, IsApproxSep)
-Separator/Family.lean        — SeparatorFamily structure
-Separator/FromHalver.lean    — halver → separator computable construction
+Separator/Family.lean        — SeparatorFamily structure (already exists)
+Separator/FromHalver.lean    — halver → separator computable construction (partially exists)
 
 Bags/Defs.lean               — bag tree, register assignment, j-strangers
 Bags/Invariant.lean          — four-clause invariant, maintenance lemmas
@@ -101,30 +138,16 @@ Halver/Defs.lean ────→ Separator/Defs.lean
 
 ### Phase S1: `Separator/Family.lean` — SeparatorFamily Structure
 
-```lean
-/-- A family of (γ, ε)-separator networks, one per input size,
-    with depth bounded by d. Analogous to `HalverFamily`. -/
-structure SeparatorFamily (γ ε : ℝ) (d : ℕ) where
-  /-- The separator network for each input size n. -/
-  net : (n : ℕ) → ComparatorNetwork n
-  /-- Each network is a (γ, ε)-separator. -/
-  isSep : ∀ n, IsSeparator (net n) γ ε
-  /-- Each network has depth at most d. -/
-  depth_le : ∀ n, (net n).depth ≤ d
-```
-
-Derived:
-```lean
-theorem SeparatorFamily.size_le (family : SeparatorFamily γ ε d) (n : ℕ) :
-    (family.net n).size ≤ n / 2 * d
-```
-
-**Risk**: LOW.
+Already implemented. Contains `SeparatorFamily` structure with `net`, `isSep`,
+`depth_le` fields and `twice_size_le` derived theorem.
 
 ### Phase S2: `Separator/FromHalver.lean` — Halver → Separator
 
 **Goal**: Given a `HalverFamily ε d`, build a `SeparatorFamily γ ε' d'`
 where γ = 1/2^t, ε' = 2·t·ε, d' = t·d (Seiferas Section 6, Lemma 1).
+
+**Status**: `halver_isSeparator_half` proved. Three theorems sorry'd:
+`separator_halving_step`, `halverToSeparator_isSeparator`, `halverToSeparator_depth_le`.
 
 #### Construction (computable)
 
@@ -149,9 +172,7 @@ theorem halver_isSeparator_half {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ)
     IsEpsilonHalver net ε → IsSeparator net (1/2) ε
 ```
 
-**Risk**: LOW–MEDIUM. Comparing `EpsilonInitialHalved` and `SepInitial` at
-γ = 1/2. The rank-based formulations should align; floor/ceiling details
-may require bridging lemmas.
+**Status**: PROVED.
 
 #### Sublemma S2b: Induction step
 
@@ -221,32 +242,46 @@ def halverToSeparatorFamily (family : HalverFamily ε d) (t : ℕ)
 Definitions for the binary bag tree and stranger counting (Seiferas Sections 2–3).
 
 ```lean
-/-- Register range for bag (level, idx): positions
-    [idx · ⌊n/2^level⌋, (idx+1) · ⌊n/2^level⌋). -/
-def bagInterval (n level idx : ℕ) : Finset (Fin n)
+/-- The bag tree has levels 0 (root) to maxLevel (pairs).
+    maxLevel = Nat.log 2 n - 1 for n a power of 2. -/
+def maxLevel (n : ℕ) : ℕ := Nat.log 2 n - 1
 
-/-- The bag index that position i is native to at a given level. -/
-def nativeBagIdx (n level : ℕ) (i : Fin n) : ℕ :=
-  i.val / (n / 2 ^ level)
+/-- Size of each bag's native interval at a given level: n / 2^level. -/
+def bagSize (n level : ℕ) : ℕ := n / 2 ^ level
 
-/-- An item with sorted position p is j-strange at bag (level, idx) if
-    its native path diverges from (level, idx)'s ancestry at least j
-    levels above. j=1: parent differs (from sibling). j≥2: further. -/
-def isJStranger (n : ℕ) (sortedPos : Fin n) (level idx j : ℕ) : Prop :=
-  j ≥ 1 ∧ nativeBagIdx n (level - j) sortedPos ≠ idx / 2^j
+/-- The bag index that an item with sorted rank r is native to at a given level.
+    nativeBagIdx(n, level, r) = r / (n / 2^level). -/
+def nativeBagIdx (n level : ℕ) (r : ℕ) : ℕ :=
+  r / bagSize n level
 
-/-- Count of j-strangers in a bag's current register set. -/
+/-- An item with sorted rank r is j-strange at bag (level, idx) if
+    its native path diverges from (level, idx)'s ancestry at level (level - j).
+
+    Key properties (validated by Rust simulation):
+    - (j+1)-strange → j-strange (divergence propagates down the tree:
+      native(ℓ)/2 ≠ ancestor(ℓ)/2 implies native(ℓ) ≠ ancestor(ℓ))
+    - j > level → not j-strange (can't diverge above root)
+    - 0-strange is vacuously false (j ≥ 1 required) -/
+def isJStranger (n : ℕ) (rank : ℕ) (level idx j : ℕ) : Prop :=
+  j ≥ 1 ∧ j ≤ level ∧ nativeBagIdx n (level - j) rank ≠ idx / 2^j
+
+/-- Count of j-strangers among items in a bag.
+    `perm` maps register positions to sorted ranks. -/
 def jStrangerCount (n : ℕ) (perm : Fin n → Fin n)
     (regs : Finset (Fin n)) (level idx j : ℕ) : ℕ :=
-  (regs.filter (fun i ↦ isJStranger n (perm i) level idx j)).card
+  (regs.filter (fun i ↦ isJStranger n (perm i).val level idx j)).card
 ```
+
+**Changes from original plan:**
+- Added `j ≤ level` guard to `isJStranger` (prevents nonsense when j > level)
+- `nativeBagIdx` takes `ℕ` rank rather than `Fin n` (simpler, avoids coercion)
 
 Basic lemmas:
 ```lean
-theorem bagInterval_partition ...     -- bags at one level partition [0, n)
-theorem bagInterval_disjoint ...      -- bags at same level are disjoint
-theorem jStranger_antitone ...        -- (j+1)-strange → j-strange
-theorem stranger_geometric_sum ...    -- ∑_{j≥1} λε^{j-1}b = λb/(1-ε) (useful later)
+theorem jStranger_antitone ...         -- (j+1)-strange → j-strange
+theorem not_jStranger_of_gt_level ...  -- j > level → ¬isJStranger
+theorem bagInterval_partition ...      -- bags at one level partition [0, n)
+theorem bagInterval_disjoint ...       -- bags at same level are disjoint
 ```
 
 **Risk**: LOW.
@@ -258,25 +293,52 @@ Define the invariant and prove it is maintained by one stage (Seiferas Section 5
 #### Invariant definition
 
 ```lean
-/-- Seiferas's four-clause invariant (Section 4). -/
+/-- Seiferas's four-clause invariant (Section 4).
+
+    **Parity convention (CORRECTED):** `(t + level) % 2 ≠ 0 → empty`.
+    At t=0, root (level 0) is nonempty: (0+0)%2 = 0, so NOT required to be empty. ✓
+    Odd levels at t=0 are empty: (0+1)%2 = 1 ≠ 0, so required to be empty. ✓
+
+    **Convergence:** The invariant holds for stages t = 0, 1, ..., T where
+    T is the last stage before leaf capacity `n·ν^T·A^maxLevel < 1/λ`. -/
 structure SeifInvariant (n : ℕ) (A ν λ ε : ℝ) (t : ℕ)
     (perm : Fin n → Fin n)
     (bagItems : ℕ → ℕ → Finset (Fin n)) where
-  /-- (1) Alternating levels empty: levels with same parity as t are empty. -/
+  /-- (1) Alternating levels empty: levels where (t + level) is odd are empty.
+      CORRECTED from original plan which had the parity reversed. -/
   alternating_empty : ∀ level idx,
-    (t + level) % 2 = 0 → (bagItems level idx) = ∅
+    (t + level) % 2 ≠ 0 → (bagItems level idx) = ∅
   /-- (2) Uniform: all bags at a given active level have equal size. -/
   uniform_size : ∀ level idx₁ idx₂,
     idx₁ < 2^level → idx₂ < 2^level →
     (bagItems level idx₁).card = (bagItems level idx₂).card
   /-- (3) Capacity: items in bag ≤ n·ν^t·A^level. -/
   capacity_bound : ∀ level idx,
-    ((bagItems level idx).card : ℝ) ≤ ↑n * ν^t * A^(level : ℤ)
+    ((bagItems level idx).card : ℝ) ≤ ↑n * ν^t * A^level
   /-- (4) Strangers: j-strangers ≤ λ·ε^(j-1)·capacity, ∀ j ≥ 1. -/
   stranger_bound : ∀ level idx j, j ≥ 1 →
     (jStrangerCount n perm (bagItems level idx) level idx j : ℝ) ≤
-    λ * ε^(j-1) * (↑n * ν^t * A^(level : ℤ))
+    λ * ε^(j-1) * (↑n * ν^t * A^level)
 ```
+
+**Changes from original plan:**
+- **Parity FIXED**: `(t + level) % 2 ≠ 0 → empty` (was `= 0`, which is wrong)
+- Capacity uses `A^level` (ℕ exponent) not `A^(level : ℤ)` — level is always ≥ 0
+
+#### Rebagging procedure (one stage)
+
+For each nonempty bag B at (level, idx) with capacity b = n·ν^t·A^level:
+1. Apply separator to B's registers (approximately sorts by rank)
+2. If has parent: kick `⌊λb⌋` smallest + `⌊λb⌋` largest to parent (level-1, idx/2)
+3. If remainder is odd and has parent: kick one more to parent
+4. If has children: split remainder evenly — first half to (level+1, 2·idx),
+   second half to (level+1, 2·idx+1)
+5. B becomes empty
+
+**Special cases:**
+- **Root (level 0)**: No parent, no kickback. All items split to children.
+- **Leaves (level = maxLevel)**: No children. All items go to parent.
+  Feasibility: items ≤ 2⌊λb⌋ + 1 (guaranteed when b ≥ 1/λ).
 
 #### Clause maintenance sublemmas
 
@@ -285,21 +347,24 @@ structure SeifInvariant (n : ℕ) (A ν λ ε : ℝ) (t : ℕ)
 theorem alternating_empty_maintained (inv : SeifInvariant ...) :
     <clause 1 at t+1>
 ```
-**Risk**: LOW. Direct from rebagging definition.
+**Risk**: LOW. Direct from rebagging definition: active bags (parity t%2) become
+empty, inactive bags (parity (t+1)%2) receive items.
 
 **B2b. Clause (2) — Uniform size**
 ```lean
 theorem uniform_size_maintained (inv : SeifInvariant ...) :
     <clause 2 at t+1>
 ```
-**Risk**: LOW. By symmetry of construction.
+**Risk**: LOW. By symmetry of construction + uniform input sizes.
 
 **B2c. Clause (3) — Capacity**
 ```lean
 /-- Capacity maintained when ν ≥ 4·λ·A + 5/(2·A).
-    Items from children (kicked up): ≤ 2·λ·A · current_capacity
-    Items from parent (sent down): ≤ 1/(2·A) · current_capacity
-    Floor errors: contribute +5/(2·A) slack. -/
+    Items from children (kicked up): ≤ 4⌊λbA⌋ + 2 ≤ 4λbA + 2
+    Items from parent (sent down): ≤ b/(2A)
+    Total: ≤ b(4λA + 1/(2A)) + 2 ≤ b(4λA + 5/(2A)) when b ≥ A.
+    For b < A: upper bags have capacity < 1 (empty), so items_from_above = 0,
+    and the constraint relaxes to ν ≥ 4λA (weaker). -/
 theorem capacity_maintained
     (inv : SeifInvariant n A ν λ ε t perm bagItems)
     (hν : ν ≥ 4 * λ * A + 5 / (2 * A)) :
@@ -307,16 +372,17 @@ theorem capacity_maintained
 ```
 **Risk**: MEDIUM. Counting items from above/below with floor error terms.
 
-Sublemmas:
+Sublemmas (validated by Rust: items_from_below/bound ≤ 0.99, items_from_above/bound = 1.00):
 ```lean
 theorem items_from_parent_le ...     -- parent sends ≤ b/(2A) to each child
-theorem items_from_children_le ...   -- each child kicks ≤ λ·b·A items up
+theorem items_from_children_le ...   -- two children kick ≤ 4⌊λbA⌋ + 2 items up
 ```
 
 **B2d. Clause (4), j > 1**
 ```lean
 /-- j-stranger bound for j ≥ 2: sources are (j+1)-strangers from children
     kicked up + (j-1)-strangers from parent sent down.
+    Total: ≤ 2bAλε^j + ε(b/A)λε^{j-2} = λε^{j-1}b(2Aε + 1/A)
     Constraint: 2·A·ε + 1/A ≤ ν. -/
 theorem stranger_bound_maintained_j_gt_1
     (inv : SeifInvariant ...) (hν : 2 * A * ε + 1 / A ≤ ν) (hj : j ≥ 2) :
@@ -393,6 +459,14 @@ def separatorSortingNetwork (n : ℕ) (sep : SeparatorFamily γ ε d_sep)
 theorem separatorSortingNetwork_depth_le :
     (separatorSortingNetwork n sep numStages).depth ≤ numStages * d_sep
 
+/-- Convergence: after T stages where n·ν^T·A^maxLevel < 1/λ,
+    all items are within bounded subtrees of their native leaves.
+    T = O(log n) since T ≈ log₂(n) · log(2A)/log(1/ν). -/
+theorem separatorSortingNetwork_converges
+    (hparams : <parameter constraints>)
+    (hstages : numStages ≥ <T expression>) :
+    <all bags have ≤ 1 item, or all strangers = 0>
+
 /-- After O(log n) stages, the network sorts (invariant → zero strangers → sorted). -/
 theorem separatorSortingNetwork_sorts
     (hparams : <parameter constraints>)
@@ -412,13 +486,13 @@ theorem separatorSortingNetwork_depth_bound :
 
 | Phase | Risk | Notes |
 |-------|------|-------|
-| S1. Family structure | LOW | Definition |
-| S2a. Halver is separator | LOW–MEDIUM | Definition comparison |
+| S1. Family structure | **DONE** | Already implemented |
+| S2a. Halver is separator | **DONE** | `halver_isSeparator_half` proved |
 | S2b. Halving refines separation | MEDIUM | Rank/floor bookkeeping |
 | S2c–e. Assembly + bundle | LOW | Induction + definition |
-| B1. Bag/stranger defs | LOW | Definitions |
+| B1. Bag/stranger defs | LOW | Definitions, validated by Rust |
 | B2a–b. Clauses 1–2 | LOW | Direct from construction |
-| B2c. Clause 3 (capacity) | MEDIUM | Floor arithmetic |
+| B2c. Clause 3 (capacity) | MEDIUM | Floor arithmetic, Rust-validated bounds |
 | B2d. Clause 4, j>1 | MEDIUM | Combinatorial counting |
 | B2e. Clause 4, j=1 | **HIGH** | Critical bottleneck |
 | B3. Stage depth | MEDIUM | Disjointness proof |
@@ -441,5 +515,5 @@ Everything else is LOW–MEDIUM risk.
 - `Nearsort/Defs.lean`: ε-nearsort definitions
 
 ### New
-- `Separator/Family.lean`, `Separator/FromHalver.lean`
+- `Separator/Family.lean`, `Separator/FromHalver.lean` (already exist, partially proved)
 - `Bags/Defs.lean`, `Bags/Invariant.lean`, `Bags/Stage.lean`, `Bags/TreeSort.lean`

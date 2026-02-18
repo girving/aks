@@ -14,14 +14,8 @@ lean_lib «CertCheck» where
 
 @[default_target]
 lean_lib «AKS» where
-  moreLeanArgs := #[
-    s!"--load-dynlib=.lake/build/lib/{nameToSharedLib "aks_CertCheck"}"
-  ]
 
 lean_lib «Bench» where
-  moreLeanArgs := #[
-    s!"--load-dynlib=.lake/build/lib/{nameToSharedLib "aks_CertCheck"}"
-  ]
 
 lean_exe «cert-bench» where
   root := `Bench.CertBench
