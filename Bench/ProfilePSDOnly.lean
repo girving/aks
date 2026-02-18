@@ -2,8 +2,8 @@
   Profile just checkPSDCertificate (not checkInvolution) via native_decide.
 -/
 
-import AKS.Certificate
-import AKS.NpyReader
+import CertCheck
+import AKS.Cert.Read
 
 namespace ProfilePSDOnly
 

@@ -10,12 +10,12 @@
   uses recursive functions. Under the involution hypothesis (which is checked
   by `checkCertificateSlow`), both compute exactly the same values.
 
-  Imports `CertChecker` (definitions), `AKS/ForLoop` (loop characterization),
+  Imports `CertCheck` (definitions), `AKS/Misc/ForLoop` (loop characterization),
   and `Mathlib.Tactic` for `set`, `ring`, etc.
 -/
 
-import CertChecker
-import AKS.ForLoop
+import AKS.Cert.Defs
+import AKS.Misc.ForLoop
 import Mathlib.Tactic.Set
 
 universe u

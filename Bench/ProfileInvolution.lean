@@ -3,8 +3,8 @@
   This isolates whether involution checking or PSD checking is the bottleneck.
 -/
 
-import AKS.CertificateBridge
-import AKS.NpyReader
+import AKS.Cert.Bridge
+import AKS.Cert.Read
 
 namespace ProfileInvolution
 

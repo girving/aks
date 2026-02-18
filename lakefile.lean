@@ -9,23 +9,28 @@ package «aks» where
 
 require "leanprover-community" / "mathlib" @ git "v4.27.0"
 
-lean_lib «CertChecker» where
+lean_lib «CertCheck» where
   precompileModules := true
 
 @[default_target]
 lean_lib «AKS» where
   moreLeanArgs := #[
-    s!"--load-dynlib=.lake/build/lib/{nameToSharedLib "aks_CertChecker"}"
+    s!"--load-dynlib=.lake/build/lib/{nameToSharedLib "aks_CertCheck"}"
+  ]
+
+lean_lib «Bench» where
+  moreLeanArgs := #[
+    s!"--load-dynlib=.lake/build/lib/{nameToSharedLib "aks_CertCheck"}"
   ]
 
 lean_exe «cert-bench» where
-  root := `AKS.CertificateBench
+  root := `Bench.CertBench
 
 lean_exe «cert-test» where
-  root := `AKS.CertificateTest
+  root := `Bench.CertTest
 
 lean_exe «cert-profile» where
-  root := `AKS.CertificateProfile
+  root := `Bench.CertProfile
 
 /-- Generate certificate data for all graph sizes.
     Usage: `lake run gen-cert` -/

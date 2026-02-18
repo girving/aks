@@ -3,8 +3,8 @@
   This tests whether the kernel evaluator is faster than the native_decide pipeline.
 -/
 
-import AKS.Certificate
-import AKS.NpyReader
+import CertCheck
+import AKS.Cert.Read
 
 namespace ProfileDecideKernel
 
