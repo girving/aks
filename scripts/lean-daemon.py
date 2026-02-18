@@ -174,16 +174,27 @@ class LeanDaemon:
     def start(self):
         """Start lake serve and initialize LSP."""
         # Ensure CertCheck shared lib is built before starting LSP.
-        # The AKS lib passes --load-dynlib for it, so it must exist.
+        # Lake needs it for modules that import CertCheck (precompileModules).
         print(f"[lean-daemon] Building CertCheck shared lib...", flush=True)
         subprocess.run(
-            ["lake", "build", "CertCheck"],
+            ["lake", "build", "CertCheck:shared"],
             cwd=PROJECT_ROOT,
             capture_output=True,
         )
+        # Pass --plugin to the LSP server so workers get precompiled CertCheck
+        # code for fast native_decide. Two Lake/Lean bugs make this necessary:
+        # 1. Lake classifies single-root precompiled libs as "plugins" which
+        #    LSP workers ignore (they only load "dynlibs" from setup-file JSON)
+        # 2. --load-dynlib forwarding is broken: the server forwards it as
+        #    -l<path> but 'l' is missing from the C++ getopt option string,
+        #    so workers reject it. --plugin forwards as -p<path> which works.
+        certcheck_lib = os.path.join(
+            PROJECT_ROOT, ".lake", "build", "lib", "libaks_CertCheck.so")
+        serve_args = ["lake", "serve", "--",
+                      f"--plugin={certcheck_lib}"]
         print(f"[lean-daemon] Starting lake serve in {PROJECT_ROOT}...", flush=True)
         proc = subprocess.Popen(
-            ["lake", "serve"],
+            serve_args,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

@@ -53,12 +53,11 @@ Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspe
 
 ```bash
 lake exe cache get    # Download prebuilt Mathlib oleans (run after lake clean or fresh clone)
-lake build CertCheck    # Build precompiled certificate checker (must run before lake build)
 lake build            # Full rebuild — slow, use only as fallback
 lake clean            # Clean build artifacts
 ```
 
-**After `lake clean` or a fresh clone, run `lake exe cache get` then `lake build CertCheck` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). The CertCheck build produces a precompiled shared library that the AKS lib loads via `--load-dynlib` for fast `native_decide` (130s → 2s). Without it, `lake build` fails on files that need the shared lib. The `lean-check` daemon handles this automatically.
+**After `lake clean` or a fresh clone, run `lake exe cache get` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). Lake automatically builds the CertCheck shared library (`libaks_CertCheck.so`) and passes `--load-dynlib` to modules that import it, thanks to `precompileModules := true` on the CertCheck lean_lib. The `lean-check` daemon also pre-builds `CertCheck:shared` on startup.
 
 ### Python Scripts
 
