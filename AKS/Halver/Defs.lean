@@ -260,4 +260,11 @@ structure HalverFamily (ε : ℝ) (d : ℕ) where
     layers has at most m non-overlapping comparators on 2m wires. -/
 theorem HalverFamily.size_le {ε : ℝ} {d : ℕ} (family : HalverFamily ε d) (m : ℕ) :
     (family.net m).size ≤ m * d := by
-  sorry
+  have h1 := size_le_half_n_mul_depth (family.net m)
+  have h2 := family.depth_le m
+  have h3 : 2 * (family.net m).size ≤ 2 * (m * d) :=
+    calc 2 * (family.net m).size
+        ≤ (2 * m) * (family.net m).depth := h1
+      _ ≤ (2 * m) * d := Nat.mul_le_mul_left _ h2
+      _ = 2 * (m * d) := by ring
+  omega
