@@ -5,7 +5,7 @@
 //! 1. halverAtLevel_depth_le: depth of halvers at one tree level ≤ d
 //! 2. halverToSeparator_depth_le: depth of iterated halver network ≤ t * d
 //! 3. separator_halving_step / halverToSeparator_isSeparator:
-//!    iterated halving gives (1/2^t, 2*t*ε)-separation
+//!    iterated halving gives (1/2^t, t*ε)-separation (requires 2^t | n)
 //!
 //! Usage: cargo +nightly -Zscript rust/test-separator.rs
 
@@ -620,7 +620,7 @@ fn main() {
         for t in 1..=6 {
             let net = halver_network(n, &halver_fn, t);
             let gamma = 1.0 / (1u64 << t) as f64;
-            let sep_eps = 2.0 * t as f64 * eps_bound;
+            let sep_eps = t as f64 * eps_bound;  // t*ε (Seiferas Lemma 1)
 
             let mut init_violations = 0;
             let mut final_violations = 0;
@@ -692,7 +692,7 @@ fn main() {
         println!("  Using ε_bound = {eps_bound:.4} (max ε across sizes × 1.2)");
 
         // Test separator property for t = 1..6
-        println!("\n  --- Separator (1/2^t, 2*t*ε)-correctness ---");
+        println!("\n  --- Separator (1/2^t, t*ε)-correctness ---");
 
         let mut rng_state: u64 = 314159265;
         let mut rand_next = || -> u64 {
@@ -713,7 +713,7 @@ fn main() {
         for t in 1..=6 {
             let net = halver_network(base_n, &halver_fn, t);
             let gamma = 1.0 / (1u64 << t) as f64;
-            let sep_eps = 2.0 * t as f64 * eps_bound;
+            let sep_eps = t as f64 * eps_bound;  // t*ε (Seiferas Lemma 1)
 
             let trials = 500;
             let mut init_violations = 0;
@@ -759,5 +759,265 @@ fn main() {
         println!();
     }
 
-    println!("=== All tests complete ===");
+    // ══════════════════════════════════════════════════════
+    // Part C: Test separator_halving_step individually
+    // ══════════════════════════════════════════════════════
+    println!("══════════════════════════════════════════════════════");
+    println!("Part C: separator_halving_step (per-step test)");
+    println!("══════════════════════════════════════════════════════\n");
+
+    // Test the INDIVIDUAL step: given (γ, ε')-sep net, append one level → (γ/2, ε'+?ε₁)-sep?
+    // Test both aligned (γ = 1/2^level) and misaligned cases.
+    for &(base_n, deg) in &[(256, 4), (512, 6)] {
+        let base_m = base_n / 2;
+        println!("=== n={base_n}, degree={deg} ===");
+
+        let halver_fn = |half_m: usize| -> ComparatorNetwork {
+            synthetic_halver(half_m, deg, 42 + half_m as u64 * 1000 + deg as u64)
+        };
+
+        // Measure max ε across all sub-sizes
+        let mut max_eps = 0.0f64;
+        let mut sub_m = base_m;
+        while sub_m >= 4 {
+            let eps = measure_epsilon(&halver_fn(sub_m), 2000, 55555 + sub_m as u64);
+            max_eps = max_eps.max(eps);
+            sub_m /= 2;
+        }
+        let eps = max_eps * 1.2;
+        println!("  ε_bound = {eps:.4}");
+
+        let mut rng_state: u64 = 271828182;
+        let mut rand_next = || -> u64 {
+            rng_state ^= rng_state << 13;
+            rng_state ^= rng_state >> 7;
+            rng_state ^= rng_state << 17;
+            rng_state
+        };
+        let mut random_perm = |size: usize| -> Vec<usize> {
+            let mut perm: Vec<usize> = (0..size).collect();
+            for i in (1..size).rev() {
+                let j = (rand_next() as usize) % (i + 1);
+                perm.swap(i, j);
+            }
+            perm
+        };
+
+        // Test aligned: γ = 1/2^t, append level t → should give (1/2^(t+1), ε' + c*ε₁)
+        println!("\n  --- Aligned: γ = 1/2^t, level = t ---");
+        for t in 0..=5 {
+            // Build net for t levels (gives (1/2^t, ?)-sep)
+            let base_net_comps: Vec<Comparator> = (0..t).flat_map(|l| {
+                halver_at_level(base_n, &halver_fn, l).comparators
+            }).collect();
+            // Append level t
+            let level_comps = halver_at_level(base_n, &halver_fn, t).comparators;
+            let full_comps: Vec<Comparator> = base_net_comps.iter().chain(level_comps.iter()).copied().collect();
+            let full_net = ComparatorNetwork { n: base_n, comparators: full_comps };
+
+            let new_gamma = 1.0 / (1u64 << (t + 1)) as f64;
+            let tight_eps = (t as f64 + 1.0) * eps;       // (t+1)*ε — if step adds ε
+            let loose_eps = 2.0 * (t as f64 + 1.0) * eps; // 2(t+1)*ε — original claim
+
+            let trials = 1000;
+            let mut tight_viol = 0;
+            let mut loose_viol = 0;
+
+            for _ in 0..trials {
+                let mut perm = random_perm(base_n);
+                full_net.exec(&mut perm);
+                let tf = check_sep_initial(&perm, base_n, new_gamma, tight_eps).is_some()
+                    || check_sep_final(&perm, base_n, new_gamma, tight_eps).is_some();
+                let lf = check_sep_initial(&perm, base_n, new_gamma, loose_eps).is_some()
+                    || check_sep_final(&perm, base_n, new_gamma, loose_eps).is_some();
+                if tf { tight_viol += 1; }
+                if lf { loose_viol += 1; }
+            }
+            println!(
+                "    t={t}→{}: γ=1/{:<4}  (t+1)*ε={tight_eps:.4} viol={tight_viol}/{trials}  2(t+1)*ε={loose_eps:.4} viol={loose_viol}/{trials}",
+                t + 1, 1u64 << (t + 1)
+            );
+        }
+
+        // Test MISALIGNED with PERFECT halvers (sorting network, ε = 0)
+        println!("\n  --- Misaligned: perfect halvers (ε=0), γ=1/2, various levels ---");
+        {
+            // Build a perfect halver: odd-even transposition sort on 2*m wires
+            let perfect_halver_fn = |half_m: usize| -> ComparatorNetwork {
+                if half_m == 0 { return ComparatorNetwork { n: 0, comparators: vec![] }; }
+                let nn = 2 * half_m;
+                let mut comps = Vec::new();
+                for _pass in 0..nn {
+                    let mut i = 0;
+                    while i + 1 < nn { comps.push(Comparator { i, j: i + 1 }); i += 2; }
+                    i = 1;
+                    while i + 1 < nn { comps.push(Comparator { i, j: i + 1 }); i += 2; }
+                }
+                ComparatorNetwork { n: nn, comparators: comps }
+            };
+            // Verify ε = 0
+            let test_eps = measure_epsilon(&perfect_halver_fn(base_m), 500, 11111);
+            println!("    perfect halver ε = {test_eps:.6} (should be 0)");
+
+            // Base net: level 0 → perfect (1/2, 0)-sep
+            let base_net = halver_at_level(base_n, &perfect_halver_fn, 0);
+            for append_level in [1, 2, 3, 4, 5] {
+                let level_comps = halver_at_level(base_n, &perfect_halver_fn, append_level).comparators;
+                let full_comps: Vec<Comparator> = base_net.comparators.iter().chain(level_comps.iter()).copied().collect();
+                let full_net = ComparatorNetwork { n: base_n, comparators: full_comps };
+
+                // Old claim: (1/4, 0 + 2*0) = (1/4, 0)-sep
+                let new_gamma = 0.25;
+                let sep_eps = 0.0;
+
+                let trials = 1000;
+                let mut violations = 0;
+                for _ in 0..trials {
+                    let mut perm = random_perm(base_n);
+                    full_net.exec(&mut perm);
+                    if check_sep_initial(&perm, base_n, new_gamma, sep_eps).is_some()
+                        || check_sep_final(&perm, base_n, new_gamma, sep_eps).is_some() {
+                        violations += 1;
+                    }
+                }
+                let chunk_m = base_n / (1 << append_level) / 2;
+                println!(
+                    "    level={append_level} (chunk_m={chunk_m:>3}): (1/4, 0)-sep viol={violations}/{trials} {}",
+                    if violations == 0 { "OK" } else if append_level == 1 { "OK (aligned)" }
+                    else { "FAIL (misaligned!)" }
+                );
+            }
+        }
+        println!();
+    }
+
+    // ══════════════════════════════════════════════════════
+    // Part D: Odd chunk size bug (confirmed counterexample)
+    // ══════════════════════════════════════════════════════
+    println!("══════════════════════════════════════════════════════");
+    println!("Part D: Odd chunk size bug (divisibility hypothesis)");
+    println!("══════════════════════════════════════════════════════\n");
+
+    {
+        // The halverAtLevel construction doesn't cover the last position of each
+        // chunk when chunkSize is odd (2*halfChunk < chunkSize). This leaves a
+        // "stranded" position that can hold a small value, violating the separator bound.
+        //
+        // The fix: add hypothesis 2 | (n / 2^t) to separator_halving_step,
+        // and 2^t | n to halverToSeparator_isSeparator.
+
+        // Perfect halver (ε = 0): sorting network on 2*m wires
+        let perfect_halver_fn = |half_m: usize| -> ComparatorNetwork {
+            if half_m == 0 { return ComparatorNetwork { n: 0, comparators: vec![] }; }
+            let nn = 2 * half_m;
+            let mut comps = Vec::new();
+            for _pass in 0..nn {
+                let mut i = 0;
+                while i + 1 < nn { comps.push(Comparator { i, j: i + 1 }); i += 2; }
+                i = 1;
+                while i + 1 < nn { comps.push(Comparator { i, j: i + 1 }); i += 2; }
+            }
+            ComparatorNetwork { n: nn, comparators: comps }
+        };
+
+        println!("  --- Odd n, t=0: should FAIL (chunkSize odd) ---");
+        for n in [3, 5, 7, 9, 11] {
+            let net = halver_at_level(n, &perfect_halver_fn, 0);
+            let chunk_size = n;
+            let half_chunk = chunk_size / 2;
+
+            // Craft w₁ with value 0 at uncovered position
+            let uncovered = 2 * half_chunk;
+            let mut w1: Vec<usize> = (0..n).collect();
+            w1.swap(0, uncovered);
+            // Apply halver
+            net.exec(&mut w1);
+            let viol = check_sep_initial(&w1, n, 0.5, 0.0);
+            let status = if viol.is_some() { "FAIL (expected)" } else { "OK (unexpected!)" };
+            println!("    n={n}: chunk={chunk_size}, 2*half={}, uncovered={uncovered} → {status}",
+                2 * half_chunk);
+        }
+
+        println!("\n  --- Even n, t=0: should PASS (chunkSize even, 2 | n) ---");
+        for n in [2, 4, 6, 8, 10, 12, 16, 32] {
+            let net = halver_at_level(n, &perfect_halver_fn, 0);
+            let mut found = false;
+            let mut rng: u64 = 42 + n as u64;
+            for _ in 0..10000 {
+                let mut perm: Vec<usize> = (0..n).collect();
+                for i in (1..n).rev() {
+                    rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                    let j = rng as usize % (i + 1);
+                    perm.swap(i, j);
+                }
+                net.exec(&mut perm);
+                if check_sep_initial(&perm, n, 0.5, 0.0).is_some()
+                    || check_sep_final(&perm, n, 0.5, 0.0).is_some() {
+                    found = true;
+                    break;
+                }
+            }
+            println!("    n={n}: 2|{n}={} → {}", n % 2 == 0,
+                if found { "FAIL" } else { "OK" });
+        }
+
+        println!("\n  --- Higher levels: 2^t | n → OK, otherwise may fail ---");
+        for &(n, t) in &[(12, 2), (24, 3), (48, 4), (10, 1), (14, 1), (6, 1)] {
+            let chunk_size = n / (1 << t);
+            let even_chunk = chunk_size % 2 == 0;
+            let divides = n % (1 << (t + 1)) == 0;
+
+            // Build iterated net for t+1 levels
+            let halver_fn_ref = &perfect_halver_fn;
+            let net = halver_network(n, halver_fn_ref, t + 1);
+            let gamma = 1.0 / (1u64 << (t + 1)) as f64;
+
+            let mut found = false;
+            // Try all permutations for small n, random for larger
+            if n <= 12 {
+                let mut perm: Vec<usize> = (0..n).collect();
+                loop {
+                    let mut v = perm.clone();
+                    net.exec(&mut v);
+                    if check_sep_initial(&v, n, gamma, 0.0).is_some() {
+                        found = true;
+                        break;
+                    }
+                    if !next_permutation(&mut perm) { break; }
+                }
+            } else {
+                let mut rng: u64 = 42 + n as u64 + t as u64 * 100;
+                for _ in 0..50000 {
+                    let mut perm: Vec<usize> = (0..n).collect();
+                    for i in (1..n).rev() {
+                        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                        let j = rng as usize % (i + 1);
+                        perm.swap(i, j);
+                    }
+                    net.exec(&mut perm);
+                    if check_sep_initial(&perm, n, gamma, 0.0).is_some() {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            println!("    n={n}, t={t}: chunk={chunk_size}, even={even_chunk}, 2^(t+1)|n={divides} → {}",
+                if found { "FAIL" } else { "OK" });
+        }
+    }
+
+    println!("\n=== All tests complete ===");
+}
+
+fn next_permutation(arr: &mut Vec<usize>) -> bool {
+    let n = arr.len();
+    if n <= 1 { return false; }
+    let mut i = n - 1;
+    while i > 0 && arr[i - 1] >= arr[i] { i -= 1; }
+    if i == 0 { return false; }
+    let mut j = n - 1;
+    while arr[j] <= arr[i - 1] { j -= 1; }
+    arr.swap(i - 1, j);
+    arr[i..].reverse();
+    true
 }
