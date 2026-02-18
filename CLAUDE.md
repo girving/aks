@@ -24,7 +24,7 @@ The project explores two parallel approaches for the tree-based correctness proo
 
 1. **AKS original** (`TreeSorting.lean`, `Nearsort.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
 
-2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (λ,ε)-separators + outsider counting with Seiferas's single potential function. Planned but not yet implemented. See `docs/separator-plan.md` for the full design.
+2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (γ,ε)-separators + outsider counting with Seiferas's single potential function. Definitions in place; downstream files not yet implemented. See `docs/separator-plan.md` for the full design.
 
 Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
 
@@ -229,14 +229,21 @@ Assembles the spectral bound and builds the iterated construction:
 2. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
 3. **Main result** — `explicit_expanders_exist_zigzag`
 
-### `AKS/Separator/` — Separator-Based Tree Sorting (Planned)
-Paterson/Seiferas alternative to `TreeSorting.lean`. Not yet implemented.
+### `AKS/Separator/Defs.lean` — (γ, ε)-Separator Definitions (~50 lines)
+ε-approximate γ-separation (Seiferas 2009, Section 6). Alternative to the
+ε-nearsort path in `Nearsort.lean`; both paths share `IsEpsilonHalver`.
+1. **`SepInitial`**, **`SepFinal`** — one-sided separation (initial/final via `αᵒᵈ`)
+2. **`IsApproxSep`** — both-sided ε-approximate γ-separation
+3. **`IsSeparator`** — network-level property (quantified over permutations)
+For γ = 1/2 this reduces to `IsEpsilonHalver`. Uses Seiferas's two-parameter
+(γ, ε) formulation, not Paterson's three-parameter (λ, ε, ε₀).
+
+### `AKS/Separator/` — Remaining Files (Planned)
 See `docs/separator-plan.md` for full design. Planned files:
-1. **`Defs.lean`** — `IsSeparator`, `SeparatorProperty` (Paterson Section 3)
-2. **`FromHalver.lean`** — `halver_gives_separator` (Paterson Section 4)
-3. **`Outsider.lean`** — `outsiderCount`, block assignment (Paterson Section 5)
-4. **`Potential.lean`** — Seiferas potential function and decrease lemma (Seiferas Section 7)
-5. **`TreeSort.lean`** — assembly: separators → sorting network
+1. **`FromHalver.lean`** — `halver_gives_separator` (Paterson Section 4)
+2. **`Outsider.lean`** — `outsiderCount`, block assignment (Paterson Section 5)
+3. **`Potential.lean`** — Seiferas potential function and decrease lemma (Seiferas Section 7)
+4. **`TreeSort.lean`** — assembly: separators → sorting network
 
 ### Data flow
 ```

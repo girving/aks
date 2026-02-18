@@ -222,7 +222,7 @@ const PROOF_DATA = {
     { id: "exec_injective", file: "AKS/Sort/Defs.lean", line: 97, status: "proved", kind: "theorem",
       sig: "ComparatorNetwork.exec_injective (net : ComparatorNetwork n) {v : Fin n → α}\n  (hv : Function.Injective v) : Function.Injective (net.exec v)",
       desc: "Executing a comparator network preserves injectivity. Induction on comparator list." },
-    { id: "shiftEmbed_exec_outside", file: "AKS/Sort/Defs.lean", line: 122, status: "proved", kind: "theorem",
+    { id: "shiftEmbed_exec_outside", file: "AKS/Sort/Defs.lean", line: 129, status: "proved", kind: "theorem",
       sig: "ComparatorNetwork.shiftEmbed_exec_outside (net : ComparatorNetwork m)\n  (n offset : ℕ) (h : offset + m ≤ n) (v : Fin n → α) (j : Fin n)\n  (hj : j.val < offset ∨ offset + m ≤ j.val) :\n  (net.shiftEmbed n offset h).exec v j = v j",
       desc: "A shifted+embedded network does not modify positions outside its range." },
     // ── Tree/AKSNetwork.lean — iterated halver helpers ──
@@ -269,10 +269,10 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 142, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 167, status: "sorry", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound via trajectory tracking: correctly-classified elements stay within blow-up radius, misclassified ≤ ε·depth·k by union bound.", difficulty: "weeks" },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 173, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 198, status: "sorry", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via EpsilonFinalHalved and order reversal.", difficulty: "weeks" },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -521,6 +521,14 @@ const PROOF_DATA = {
     { id: "bounded_tree_damage_pair_gives_zigzag", file: "AKS/Tree/Sorting.lean", line: 1258, status: "proved", kind: "lemma",
       sig: "bounded_tree_damage_pair_gives_zigzag :\n  HasImprovedBound zig ε t → HasBoundedTreeDamage zig ε t →\n  HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t",
       desc: "Lemma 3 (AKS Section 8): PROVED. Algebraic — combines zig improvement + zig/zag stability, uses ε²≤ε. Previously FALSE (Phase 3e)." },
+
+    // ── Separator/Defs.lean (Paterson/Seiferas path, parallel to Tree/) ──
+    { id: "SepInitial", file: "AKS/Separator/Defs.lean", line: 29, status: "definition", kind: "def",
+      sig: "SepInitial {α : Type*} [Fintype α] [LinearOrder α]\n  (w : α → α) (γ ε : ℝ) : Prop",
+      desc: "ε-approximate γ-separation, initial direction (Seiferas 2009, Section 6). For each γ' ≤ γ, at most ε·γ'·n of the ⌊γ'n⌋ smallest values are outside the first ⌊γn⌋ positions." },
+    { id: "IsSeparator", file: "AKS/Separator/Defs.lean", line: 48, status: "definition", kind: "def",
+      sig: "IsSeparator {n : ℕ} (net : ComparatorNetwork n)\n  (γ ε : ℝ) : Prop",
+      desc: "Network-level (γ, ε)-separator: for every permutation input, the output satisfies ε-approximate γ-separation (both directions). For γ = 1/2, equivalent to IsEpsilonHalver." },
 
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
@@ -850,6 +858,7 @@ const PROOF_DATA = {
     { id: "AKS/Tree/Sorting.lean", label: "Tree/Sorting.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageStability.lean", label: "Tree/DamageStability.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageImprovement.lean", label: "Tree/DamageImprovement.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/Defs.lean", label: "Separator/Defs.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]
 };
