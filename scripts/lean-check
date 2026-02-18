@@ -206,12 +206,17 @@ def format_diagnostic(d: dict) -> str:
         return "\n".join(result)
 
 
-def check_file(filepath: str):
+def check_file(filepath: str, show_progress: bool = False):
     """Check a single file. Returns (output_lines, error_count)."""
+    if show_progress:
+        print(f"  ...  {filepath}", end="", flush=True)
     lines = []
     t0 = time.time()
     result = send_command({"command": "check", "file": filepath})
     wall_time = time.time() - t0
+    if show_progress:
+        # Clear the progress line with carriage return
+        print(f"\r\033[2K", end="", flush=True)
 
     if "error" in result:
         lines.append(f"Error: {result['error']}")
@@ -247,9 +252,12 @@ def check_files(filepaths: list):
             sys.exit(2)
 
     if len(filepaths) == 1:
-        lines, errs = check_file(filepaths[0])
+        lines, errs = check_file(filepaths[0], show_progress=True)
         print("\n".join(lines))
         sys.exit(1 if errs else 0)
+
+    # Show which files are being checked in parallel
+    print(f"Checking: {', '.join(filepaths)}", flush=True)
 
     from concurrent.futures import ThreadPoolExecutor
 
@@ -300,12 +308,17 @@ def check_all():
     total_warnings = 0
     failed_files = []
 
-    for filepath in files:
+    for i, filepath in enumerate(files):
+        # Show current file being checked
+        progress = f"[{i+1}/{len(files)}]"
+        print(f"  ...  {filepath} {progress}", end="", flush=True)
         t0 = time.time()
         # close_after=True releases the LSP worker after each file,
         # preventing memory accumulation (each worker uses 100-3000 MB)
         result = send_command({"command": "check", "file": filepath, "close_after": True})
         wall_time = time.time() - t0
+        # Clear progress line before printing result
+        print(f"\r\033[2K", end="", flush=True)
 
         if "error" in result:
             print(f"  FAIL  {filepath}: {result['error']}")

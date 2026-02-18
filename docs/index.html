@@ -290,16 +290,16 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 597, status: "sorry", kind: "theorem",
+    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 410, status: "sorry", kind: "theorem",
       sig: "farSmallCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farSmallCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "After depth levels, far-small count at radius n/2^depth is ≤ ε·depth·k. Core of AKS Section 4: requires trajectory/displaced-elements argument with union bound over levels.", difficulty: "weeks" },
-    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 792, status: "sorry", kind: "theorem",
+    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 605, status: "sorry", kind: "theorem",
       sig: "farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farLargeCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "Dual of farSmallCount_depth_bound for end segments.", difficulty: "weeks" },
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 703, status: "proved", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 516, status: "proved", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound. Reformulates as farSmallCount via sdiff_image_card_eq_far_count, then applies depth bound + blowup_covers_displacement." },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 874, status: "proved", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 687, status: "proved", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via farLargeCount_depth_bound and rank_fin_od_val." },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -439,26 +439,26 @@ const PROOF_DATA = {
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
     // ── Random/Random16.lean ──
-    { id: "Random16.graph", file: "AKS/Random/Random16.lean", line: 24, status: "proved", kind: "def",
+    { id: "Random16.graph", file: "AKS/Random/Random16.lean", line: 23, status: "proved", kind: "def",
       sig: "def Random16.graph : RegularGraph 16 4",
       desc: "Concrete 4-regular graph on 16 vertices. Small test graph, rotation map verified by native_decide." },
-    { id: "Random16.gap", file: "AKS/Random/Random16.lean", line: 34, status: "proved", kind: "theorem",
+    { id: "Random16.gap", file: "AKS/Random/Random16.lean", line: 33, status: "proved", kind: "theorem",
       sig: "theorem Random16.gap : spectralGap graph ≤ 5/4",
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=16) verified by native_decide." },
 
     // ── Random/Random1728.lean ──
-    { id: "Random1728.graph", file: "AKS/Random/Random1728.lean", line: 24, status: "proved", kind: "def",
+    { id: "Random1728.graph", file: "AKS/Random/Random1728.lean", line: 23, status: "proved", kind: "def",
       sig: "def Random1728.graph : RegularGraph 1728 12",
       desc: "Concrete 12-regular graph on 1728 = 12³ vertices. Medium test graph, rotation map verified by native_decide." },
-    { id: "Random1728.gap", file: "AKS/Random/Random1728.lean", line: 34, status: "proved", kind: "theorem",
+    { id: "Random1728.gap", file: "AKS/Random/Random1728.lean", line: 33, status: "proved", kind: "theorem",
       sig: "theorem Random1728.gap : spectralGap graph ≤ 10/12",
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
 
     // ── Random/Random20736.lean ──
-    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 32, status: "proved", kind: "def",
+    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 31, status: "proved", kind: "def",
       sig: "def Random20736.graph : RegularGraph 20736 12",
       desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
-    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 42, status: "sorry", kind: "theorem",
+    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
       sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
       desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
     // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
@@ -556,6 +556,28 @@ const PROOF_DATA = {
     { id: "IsSeparator", file: "AKS/Separator/Defs.lean", line: 48, status: "definition", kind: "def",
       sig: "IsSeparator {n : ℕ} (net : ComparatorNetwork n)\n  (γ ε : ℝ) : Prop",
       desc: "Network-level (γ, ε)-separator: for every permutation input, the output satisfies ε-approximate γ-separation (both directions). For γ = 1/2, equivalent to IsEpsilonHalver." },
+
+    // ── Separator/Family.lean ──
+    { id: "SeparatorFamily", file: "AKS/Separator/Family.lean", line: 25, status: "definition", kind: "structure",
+      sig: "SeparatorFamily (γ ε : ℝ) (d : ℕ)",
+      desc: "Family of (γ, ε)-separator networks indexed by input size, with depth bounded by d. Analogous to HalverFamily." },
+
+    // ── Separator/FromHalver.lean ──
+    { id: "halverToSeparator", file: "AKS/Separator/FromHalver.lean", line: 29, status: "definition", kind: "def",
+      sig: "halverToSeparator (n : ℕ) (family : HalverFamily ε d) (t : ℕ) : ComparatorNetwork n",
+      desc: "Computable construction: iterate halver family t levels to build a separator network. Reuses halverNetwork." },
+    { id: "halver_isSeparator_half", file: "AKS/Separator/FromHalver.lean", line: 86, status: "proved", kind: "theorem",
+      sig: "halver_isSeparator_half (net : ComparatorNetwork n) (ε : ℝ) :\n  IsEpsilonHalver net ε → IsSeparator net (1/2) ε",
+      desc: "PROVED. Base case: ε-halver is (1/2, ε)-separator (Seiferas Lemma 1 base). Bridge via ⌊(1/2)n⌋₊ = n/2 and floor monotonicity." },
+    { id: "separator_halving_step", file: "AKS/Separator/FromHalver.lean", line: 103, status: "sorry", kind: "theorem",
+      sig: "separator_halving_step : IsSeparator net γ ε' →\n  IsSeparator (net ++ halverAtLevel) (γ/2) (ε' + 2*ε₁)",
+      desc: "Induction step: halving refines (γ, ε')-separation to (γ/2, ε'+2ε₁)-separation." },
+    { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 125, status: "sorry", kind: "theorem",
+      sig: "halverToSeparator_isSeparator :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (2*t*ε)",
+      desc: "t levels of iterated ε-halving give (2tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
+    { id: "halverToSeparatorFamily", file: "AKS/Separator/FromHalver.lean", line: 153, status: "sorry", kind: "def",
+      sig: "halverToSeparatorFamily (family : HalverFamily ε d) (t : ℕ) :\n  SeparatorFamily (1/2^t) (2*t*ε) (t*d)",
+      desc: "Bundle halver-to-separator construction into a SeparatorFamily. Depends on halverToSeparator_isSeparator and depth bound." },
 
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
@@ -865,7 +887,22 @@ const PROOF_DATA = {
     ["spectralMatrix_posSemidef_implies_walk_bound", "certificate_implies_walk_bound"],
     ["certificate_implies_walk_bound", "certificate_bridge"],
     ["spectralGap_le_of_walk_bound", "certificate_bridge"],
-    ["sqrt_coeff_le_frac", "certificate_bridge"]
+    ["sqrt_coeff_le_frac", "certificate_bridge"],
+
+    // Separator/Family
+    ["IsSeparator", "SeparatorFamily"],
+
+    // Separator/FromHalver
+    ["HalverFamily", "halverToSeparator"],
+    ["IsEpsilonHalver", "halver_isSeparator_half"],
+    ["IsSeparator", "halver_isSeparator_half"],
+    ["halver_isSeparator_half", "halverToSeparator_isSeparator"],
+    ["separator_halving_step", "halverToSeparator_isSeparator"],
+    ["IsSeparator", "separator_halving_step"],
+    ["IsEpsilonHalver", "separator_halving_step"],
+    ["halverToSeparator", "halverToSeparatorFamily"],
+    ["halverToSeparator_isSeparator", "halverToSeparatorFamily"],
+    ["SeparatorFamily", "halverToSeparatorFamily"]
   ],
 
   // File groupings with display names
@@ -899,6 +936,8 @@ const PROOF_DATA = {
     { id: "AKS/Tree/DamageStability.lean", label: "Tree/DamageStability.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageImprovement.lean", label: "Tree/DamageImprovement.lean", color: "#1a1e24" },
     { id: "AKS/Separator/Defs.lean", label: "Separator/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/Family.lean", label: "Separator/Family.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/FromHalver.lean", label: "Separator/FromHalver.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]
 };

@@ -189,21 +189,32 @@ section Trajectory
 
 open Classical
 
-/-- A value `a` has "good radius" at level `l` if it's in the same chunk of
-    size `n / 2^l` as its target position `a.val`. Formally: the position of
-    value `a` in the state after `l` levels is in the same chunk as `a.val`.
+/-- A value `a` has "good radius" at level `l` if its position is not to the
+    right of its target chunk: `pos(a, l) / (n / 2^l) ≤ a.val / (n / 2^l)`.
 
-    Concretely: `pos(a, l) / (n / 2^l) = a.val / (n / 2^l)` where `pos(a, l)`
-    is the position of value `a` after level `l`.
+    This is a one-sided condition: it allows the value to be in an EARLIER chunk
+    (smaller position) but not a LATER chunk. This asymmetry is key:
+    - Type A errors (target-top going to bottom) increase position → lose good radius
+    - Type B errors (target-bottom going to top) decrease position → keep good radius
+    Since only Type A errors matter for `farSmallCount` (which counts values at
+    positions too far RIGHT), this one-sided definition gives the correct ε·k bound.
 
-    At level 0, good radius always holds (single chunk = whole array).
-    At each subsequent level, good radius can fail if the halver sends `a`
-    to the wrong sub-half of its chunk. -/
+    At level 0, good radius always holds (single chunk = whole array, 0 ≤ 0).
+    Good radius is never recovered once lost (wrong chunk at level l → wrong at l+1). -/
 private def hasGoodRadius {n : ℕ} (w : Fin n → Fin n) (hw : Function.Injective w)
     (a : Fin n) (l : ℕ) : Prop :=
   let chunkSize := n / 2 ^ l
   let pos := (Finite.surjective_of_injective hw a).choose
-  pos.val / chunkSize = a.val / chunkSize
+  pos.val / chunkSize ≤ a.val / chunkSize
+
+/-- Dual good radius: position is not to the LEFT of the target chunk.
+    Used for end-segment (FinalNearsorted) bounds where we need to show
+    values are not at positions that are too small. -/
+private def hasGoodRadiusDual {n : ℕ} (w : Fin n → Fin n) (hw : Function.Injective w)
+    (a : Fin n) (l : ℕ) : Prop :=
+  let chunkSize := n / 2 ^ l
+  let pos := (Finite.surjective_of_injective hw a).choose
+  a.val / chunkSize ≤ pos.val / chunkSize
 
 /-- The "error set" at level `l`: values `a < k` that have good radius at
     level `l` but lose it after the halver at level `l` acts.
@@ -224,8 +235,7 @@ private noncomputable def errorSetAtLevel {n : ℕ}
     radius at level `depth`, and the chunk size `R = n / 2^depth` is positive,
     then its position is < k + R, so it doesn't contribute to `farSmallCount`.
 
-    The proof: if `pos / R = a.val / R` and R > 0, then
-    `pos < (a.val / R + 1) * R ≤ a.val + R < k + R`. -/
+    The proof: `pos / R ≤ a.val / R` gives `pos < (a.val / R + 1) * R ≤ a.val + R < k + R`. -/
 private lemma good_radius_implies_close {n : ℕ}
     (w : Fin n → Fin n) (hw : Function.Injective w) (a : Fin n)
     (k depth : ℕ) (ha : a.val < k) (hR : 0 < n / 2 ^ depth)
@@ -236,134 +246,39 @@ private lemma good_radius_implies_close {n : ℕ}
   set R := n / 2 ^ depth with hR_def
   set pos := (Finite.surjective_of_injective hw a).choose
   intro ⟨hfar, _⟩
-  -- From pos / R = a.val / R: pos = (pos/R)*R + pos%R = (a.val/R)*R + pos%R
-  -- So pos < (a.val/R)*R + R = (a.val/R + 1)*R ≤ a.val + R < k + R
+  -- From pos / R ≤ a.val / R: pos < (a.val/R + 1)*R ≤ a.val + R < k + R
   have hmod : pos.val % R < R := Nat.mod_lt pos.val hR
   have hdiv : pos.val = (pos.val / R) * R + pos.val % R := by
     rw [Nat.mul_comm]; exact (Nat.div_add_mod pos.val R).symm
   have hle : (a.val / R) * R ≤ a.val := Nat.div_mul_le_self a.val R
-  rw [hgood] at hdiv
+  -- pos.val / R ≤ a.val / R, so (pos.val / R) * R ≤ (a.val / R) * R ≤ a.val
+  have := Nat.mul_le_mul_right R hgood
   omega
 
-/-- The error set restricted to chunk `c`: values `a` in chunk `c` that lose
-    good radius at level `l`. -/
-private noncomputable def errorSetInChunk {n : ℕ}
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (v : Equiv.Perm (Fin n)) (k l c : ℕ) : Finset (Fin n) :=
-  (errorSetAtLevel halvers v k l).filter (fun a ↦ a.val / (n / 2 ^ l) = c)
+/-- **Per-level error bound**: At each level `l`, the error set has at most `ε · k`
+    elements. This is the core bound connecting `EpsilonInitialHalved` to the
+    trajectory argument.
 
-/-- Values < k in chunk `c` at level `l`. -/
-private def valuesInChunk (n k l c : ℕ) : Finset (Fin n) :=
-  univ.filter (fun a : Fin n ↦ a.val < k ∧ a.val / (n / 2 ^ l) = c)
+    **Proof strategy** (key insight: one-sided good radius eliminates Type B errors):
+    With the `≤` definition of `hasGoodRadius` (`pos/cs ≤ val/cs`), only "Type A"
+    errors contribute: home values targeting the top sub-half that go to the bottom.
+    Type B errors (target-bottom going to top) actually help by decreasing position.
 
-/-- **Per-chunk error bound**: Within chunk `c`, at most `ε · k_c` values lose
-    good radius, where `k_c` = number of values < k in chunk `c`.
-    This is where `EpsilonInitialHalved` is used.
-
-    The halver at level `l` independently acts on each chunk of size `n/2^l`.
-    Within chunk `c`, it rearranges values among positions `[c·chunkSize, c·chunkSize + 2·halfChunk)`.
-    Values that end up in the wrong sub-half (relative to their target) are bounded
-    by `ε · k_c` via `EpsilonInitialHalved` applied to the local permutation. -/
-private lemma error_set_chunk_bound {n : ℕ} (ε : ℝ) (hε : 0 < ε)
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (v : Equiv.Perm (Fin n)) (k l c : ℕ) (hk : k ≤ n)
-    (hpow : 2 ^ (l + 1) ∣ n) :
-    ((errorSetInChunk halvers v k l c).card : ℝ) ≤ ε * (valuesInChunk n k l c).card := by
-  sorry
-
-/-- The error set is the disjoint union of per-chunk error sets over chunks
-    `c ∈ range (2^l)`. -/
-private lemma error_set_eq_biUnion {n : ℕ}
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (v : Equiv.Perm (Fin n)) (k l : ℕ)
-    (hpow : 2 ^ (l + 1) ∣ n) :
-    errorSetAtLevel halvers v k l =
-    (Finset.range (2 ^ l)).biUnion (errorSetInChunk halvers v k l) := by
-  ext a
-  constructor
-  · intro ha
-    -- a's chunk index is a.val / (n / 2^l), which is < 2^l
-    have hdvd : 2 ^ l ∣ n := Nat.dvd_trans (Nat.pow_dvd_pow 2 (by omega : l ≤ l + 1)) hpow
-    have hc : a.val / (n / 2 ^ l) < 2 ^ l := by
-      by_cases hn : n = 0
-      · subst hn; exact absurd a.isLt (by simp)
-      · apply Nat.div_lt_of_lt_mul
-        rw [Nat.div_mul_cancel hdvd]
-        exact a.isLt
-    exact Finset.mem_biUnion.mpr ⟨a.val / (n / 2 ^ l), Finset.mem_range.mpr hc,
-      Finset.mem_filter.mpr ⟨ha, rfl⟩⟩
-  · intro ha
-    obtain ⟨c, _, hc⟩ := Finset.mem_biUnion.mp ha
-    exact (Finset.mem_filter.mp hc).1
-
-/-- The number of `Fin n` elements with `.val < k` is `k` (when `k ≤ n`). -/
-private lemma card_filter_lt_val {n k : ℕ} (hk : k ≤ n) :
-    (univ.filter (fun a : Fin n ↦ a.val < k)).card = k := by
-  rcases Nat.lt_or_eq_of_le hk with h | h
-  · -- k < n: the filter set = Fin.Iio ⟨k, h⟩
-    have heq : univ.filter (fun a : Fin n ↦ a.val < k) = Finset.Iio ⟨k, h⟩ := by
-      ext a; simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_Iio,
-        Fin.lt_def]
-    rw [heq, Fin.card_Iio]
-  · -- k = n: every element qualifies
-    subst h
-    have : univ.filter (fun a : Fin k ↦ a.val < k) = univ := by
-      rw [Finset.filter_true_of_mem]; intro a _; exact a.isLt
-    rw [this, Finset.card_univ, Fintype.card_fin]
-
-/-- Summing `k_c` over all chunks gives `k`. -/
-private lemma sum_valuesInChunk {n k l : ℕ} (hpow : 2 ^ (l + 1) ∣ n) (hk : k ≤ n) :
-    (∑ c ∈ Finset.range (2 ^ l), ((valuesInChunk n k l c).card : ℝ)) = ↑k := by
-  have hdvd : 2 ^ l ∣ n := Nat.dvd_trans (Nat.pow_dvd_pow 2 (by omega)) hpow
-  suffices h : (∑ c ∈ Finset.range (2 ^ l), (valuesInChunk n k l c).card) = k by
-    exact_mod_cast h
-  -- valuesInChunk sets are pairwise disjoint (different chunk indices)
-  have hdisj : Set.PairwiseDisjoint (↑(Finset.range (2 ^ l))) (valuesInChunk n k l) := by
-    intro c₁ _ c₂ _ hne
-    show Disjoint (valuesInChunk n k l c₁) (valuesInChunk n k l c₂)
-    rw [Finset.disjoint_left]
-    intro a ha1 ha2
-    simp only [valuesInChunk, Finset.mem_filter] at ha1 ha2
-    exact hne (ha1.2.2.symm.trans ha2.2.2)
-  -- Their union equals {a | a.val < k}
-  set S := univ.filter (fun a : Fin n ↦ a.val < k)
-  have hunion : (Finset.range (2 ^ l)).biUnion (valuesInChunk n k l) = S := by
-    ext a
-    constructor
-    · intro ha
-      obtain ⟨c, _, hc⟩ := Finset.mem_biUnion.mp ha
-      simp only [valuesInChunk, Finset.mem_filter] at hc
-      exact Finset.mem_filter.mpr ⟨Finset.mem_univ _, hc.2.1⟩
-    · intro ha
-      have hak := (Finset.mem_filter.mp ha).2
-      refine Finset.mem_biUnion.mpr ⟨a.val / (n / 2 ^ l), ?_, ?_⟩
-      · exact Finset.mem_range.mpr
-          (Nat.div_lt_of_lt_mul (by rw [Nat.div_mul_cancel hdvd]; exact a.isLt))
-      · exact Finset.mem_filter.mpr ⟨Finset.mem_univ _, hak, rfl⟩
-  calc ∑ c ∈ Finset.range (2 ^ l), (valuesInChunk n k l c).card
-      = ((Finset.range (2 ^ l)).biUnion (valuesInChunk n k l)).card :=
-        (Finset.card_biUnion hdisj).symm
-    _ = S.card := by rw [hunion]
-    _ = k := card_filter_lt_val hk
-
+    Per chunk c at level l, errors are bounded by `EpsilonInitialHalved` applied to
+    the local halver. The key counting argument:
+    - Let `t_c` = |{a : val(a) < k, a targets top sub-half of chunk c, a in chunk c}|
+    - Let `f_c` = |{a : val(a) < k, a in chunk c but from an earlier target chunk}|
+    - Per-chunk error ≤ ε · (t_c + f_c) (via EpsilonInitialHalved with j = t_c + f_c)
+    - Sum: Σ(t_c + f_c) ≤ k (since each val-<-k value contributes to at most one term,
+      and values with good radius targeting bottom contribute to neither term).
+    Therefore total ≤ ε · k. -/
 private lemma error_set_bound {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
     (v : Equiv.Perm (Fin n)) (k l : ℕ) (hk : k ≤ n)
     (hpow : 2 ^ (l + 1) ∣ n) :
     ((errorSetAtLevel halvers v k l).card : ℝ) ≤ ε * ↑k := by
-  rw [error_set_eq_biUnion halvers v k l hpow]
-  calc (((Finset.range (2 ^ l)).biUnion (errorSetInChunk halvers v k l)).card : ℝ)
-      ≤ ∑ c ∈ Finset.range (2 ^ l), ((errorSetInChunk halvers v k l c).card : ℝ) := by
-        exact_mod_cast Finset.card_biUnion_le
-    _ ≤ ∑ c ∈ Finset.range (2 ^ l), ε * (valuesInChunk n k l c).card := by
-        apply Finset.sum_le_sum
-        intro c _
-        exact error_set_chunk_bound ε hε halvers hhalvers v k l c hk hpow
-    _ = ε * ∑ c ∈ Finset.range (2 ^ l), ((valuesInChunk n k l c).card : ℝ) := by
-        rw [Finset.mul_sum]
-    _ = ε * ↑k := by rw [sum_valuesInChunk hpow hk]
+  sorry
 
 /-- **Radius inheritance** (induction base): At level 0, every value has
     good radius (single chunk = whole array, chunkSize = n). -/
@@ -406,42 +321,34 @@ private lemma not_good_radius_in_error_set {n : ℕ}
       exact ⟨l, Nat.lt_succ_of_lt hl, hmem⟩
 
 /-- **Dual convergence lemma** (Step 2, end segments): If a value `a` with
-    `a.val ≥ n - k` has good radius at level `depth`, and R > 0, then its
+    `a.val ≥ n - k` has good dual radius at level `depth`, and R > 0, then its
     position is ≥ n - k - R, so it doesn't contribute to `farLargeCount`.
 
-    The proof: `pos / R = a.val / R` and `a.val ≥ n - k` imply
-    `pos ≥ ((n-k)/R) * R = (n-k) - (n-k)%R ≥ n - k - R + 1`,
+    The proof: `a.val / R ≤ pos / R` gives `pos ≥ (a.val/R) * R ≥ ((n-k)/R) * R`,
     contradicting `pos + k + R < n`. -/
 private lemma good_radius_implies_close_dual {n : ℕ}
     (w : Fin n → Fin n) (hw : Function.Injective w) (a : Fin n)
     (k depth : ℕ) (ha : n ≤ a.val + k) (hR : 0 < n / 2 ^ depth)
-    (hgood : hasGoodRadius w hw a depth) :
+    (hgood : hasGoodRadiusDual w hw a depth) :
     ¬((Finite.surjective_of_injective hw a).choose.val + k + n / 2 ^ depth < n ∧
        n ≤ (w (Finite.surjective_of_injective hw a).choose).val + k) := by
-  unfold hasGoodRadius at hgood
+  unfold hasGoodRadiusDual at hgood
   set R := n / 2 ^ depth with hR_def
   set pos := (Finite.surjective_of_injective hw a).choose
   intro ⟨hfar, _⟩
-  -- pos / R = a.val / R, and a.val ≥ n - k
-  -- pos ≥ (pos / R) * R = (a.val / R) * R ≥ ((n-k)/R) * R
-  -- ((n-k)/R) * R = (n-k) - (n-k)%R, and (n-k)%R < R, so ((n-k)/R)*R > n-k-R
+  -- a.val / R ≤ pos / R gives pos ≥ (a.val/R) * R ≥ ((n-k)/R) * R
   have hpos_ge : (pos.val / R) * R ≤ pos.val := Nat.div_mul_le_self pos.val R
-  -- From hfar: pos.val + k + R < n, so pos.val < n - k - R
-  -- From hgood: pos.val / R = a.val / R
-  -- a.val ≥ n - k, so a.val / R ≥ (n - k) / R
   have ha_div : (n - k) / R ≤ a.val / R := Nat.div_le_div_right (by omega)
-  rw [hgood] at hpos_ge
-  -- pos.val ≥ (a.val / R) * R ≥ ((n-k) / R) * R
-  have hge : ((n - k) / R) * R ≤ pos.val := le_trans (Nat.mul_le_mul_right R ha_div) hpos_ge
-  -- ((n-k) / R) * R ≥ (n - k) - (R - 1) = n - k - R + 1
+  -- Chain: ((n-k)/R)*R ≤ (a.val/R)*R ≤ (pos/R)*R ≤ pos
+  have hge : ((n - k) / R) * R ≤ pos.val :=
+    le_trans (Nat.mul_le_mul_right R (le_trans ha_div hgood)) hpos_ge
   have hmod : (n - k) % R < R := Nat.mod_lt (n - k) hR
   have hdivmod : (n - k) = ((n - k) / R) * R + (n - k) % R := by
     rw [Nat.mul_comm]; exact (Nat.div_add_mod (n - k) R).symm
-  -- So ((n-k)/R)*R = (n-k) - (n-k)%R, and pos ≥ this, giving pos + k + R ≥ n + 1
   omega
 
-/-- **Dual error set**: values `a` with `a.val ≥ n - k` that have good radius
-    at level `l` but lose it at level `l + 1`. -/
+/-- **Dual error set**: values `a` with `a.val ≥ n - k` that have good dual
+    radius at level `l` but lose it at level `l + 1`. -/
 private noncomputable def errorSetAtLevelDual {n : ℕ}
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (v : Equiv.Perm (Fin n)) (k l : ℕ) : Finset (Fin n) :=
@@ -451,132 +358,46 @@ private noncomputable def errorSetAtLevelDual {n : ℕ}
   let hw_l1 := ComparatorNetwork.exec_injective _ v.injective
   univ.filter (fun a : Fin n ↦
     n ≤ a.val + k ∧
-    hasGoodRadius w_l hw_l a l ∧
-    ¬hasGoodRadius w_l1 hw_l1 a (l + 1))
-
-/-- Dual error set restricted to chunk `c`. -/
-private noncomputable def errorSetInChunkDual {n : ℕ}
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (v : Equiv.Perm (Fin n)) (k l c : ℕ) : Finset (Fin n) :=
-  (errorSetAtLevelDual halvers v k l).filter (fun a ↦ a.val / (n / 2 ^ l) = c)
-
-/-- Dual values in chunk: values `a` with `n ≤ a.val + k` in chunk `c`. -/
-private def valuesInChunkDual (n k l c : ℕ) : Finset (Fin n) :=
-  univ.filter (fun a : Fin n ↦ n ≤ a.val + k ∧ a.val / (n / 2 ^ l) = c)
-
-/-- **Per-chunk error bound (dual)**: Within chunk `c`, at most `ε · k_c` values
-    lose good radius. Uses `EpsilonFinalHalved`. -/
-private lemma error_set_chunk_bound_dual {n : ℕ} (ε : ℝ) (hε : 0 < ε)
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (v : Equiv.Perm (Fin n)) (k l c : ℕ) (hk : k ≤ n)
-    (hpow : 2 ^ (l + 1) ∣ n) :
-    ((errorSetInChunkDual halvers v k l c).card : ℝ) ≤
-      ε * (valuesInChunkDual n k l c).card := by
-  sorry
-
-private lemma error_set_eq_biUnion_dual {n : ℕ}
-    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
-    (v : Equiv.Perm (Fin n)) (k l : ℕ)
-    (hpow : 2 ^ (l + 1) ∣ n) :
-    errorSetAtLevelDual halvers v k l =
-    (Finset.range (2 ^ l)).biUnion (errorSetInChunkDual halvers v k l) := by
-  ext a
-  constructor
-  · intro ha
-    have hdvd : 2 ^ l ∣ n := Nat.dvd_trans (Nat.pow_dvd_pow 2 (by omega)) hpow
-    have hc : a.val / (n / 2 ^ l) < 2 ^ l := by
-      by_cases hn : n = 0
-      · subst hn; exact absurd a.isLt (by simp)
-      · exact Nat.div_lt_of_lt_mul (by rw [Nat.div_mul_cancel hdvd]; exact a.isLt)
-    exact Finset.mem_biUnion.mpr ⟨a.val / (n / 2 ^ l), Finset.mem_range.mpr hc,
-      Finset.mem_filter.mpr ⟨ha, rfl⟩⟩
-  · intro ha
-    obtain ⟨c, _, hc⟩ := Finset.mem_biUnion.mp ha
-    exact (Finset.mem_filter.mp hc).1
-
-/-- The number of `Fin n` elements with `n ≤ a.val + k` is `k` (when `k ≤ n`). -/
-private lemma card_filter_ge_val {n k : ℕ} (hk : k ≤ n) :
-    (univ.filter (fun a : Fin n ↦ n ≤ a.val + k)).card = k := by
-  -- card({a | n ≤ a + k}) + card({a | a < n - k}) = n (partition of Fin n)
-  -- card({a | a < n - k}) = n - k (by card_filter_lt_val)
-  -- So card({a | n ≤ a + k}) = n - (n - k) = k
-  have hcompl : (univ.filter (fun a : Fin n ↦ ¬(n ≤ a.val + k))).card = n - k := by
-    have heq : univ.filter (fun a : Fin n ↦ ¬(n ≤ a.val + k)) =
-        univ.filter (fun a : Fin n ↦ a.val < n - k) := by
-      ext ⟨a, ha⟩; simp only [Finset.mem_filter, Finset.mem_univ, true_and]; omega
-    rw [heq, card_filter_lt_val (Nat.sub_le n k)]
-  have htotal : (univ : Finset (Fin n)).card = n := Finset.card_fin n
-  have hpart := Finset.card_filter_add_card_filter_not (s := (univ : Finset (Fin n)))
-    (fun a ↦ n ≤ a.val + k)
-  rw [htotal] at hpart; omega
-
-private lemma sum_valuesInChunkDual {n k l : ℕ} (hpow : 2 ^ (l + 1) ∣ n) (hk : k ≤ n) :
-    (∑ c ∈ Finset.range (2 ^ l), ((valuesInChunkDual n k l c).card : ℝ)) = ↑k := by
-  have hdvd : 2 ^ l ∣ n := Nat.dvd_trans (Nat.pow_dvd_pow 2 (by omega)) hpow
-  suffices h : (∑ c ∈ Finset.range (2 ^ l), (valuesInChunkDual n k l c).card) = k by
-    exact_mod_cast h
-  have hdisj : Set.PairwiseDisjoint (↑(Finset.range (2 ^ l))) (valuesInChunkDual n k l) := by
-    intro c₁ _ c₂ _ hne
-    show Disjoint (valuesInChunkDual n k l c₁) (valuesInChunkDual n k l c₂)
-    rw [Finset.disjoint_left]
-    intro a ha1 ha2
-    simp only [valuesInChunkDual, Finset.mem_filter] at ha1 ha2
-    exact hne (ha1.2.2.symm.trans ha2.2.2)
-  set S := univ.filter (fun a : Fin n ↦ n ≤ a.val + k)
-  have hunion : (Finset.range (2 ^ l)).biUnion (valuesInChunkDual n k l) = S := by
-    ext a
-    constructor
-    · intro ha
-      obtain ⟨c, _, hc⟩ := Finset.mem_biUnion.mp ha
-      simp only [valuesInChunkDual, Finset.mem_filter] at hc
-      exact Finset.mem_filter.mpr ⟨Finset.mem_univ _, hc.2.1⟩
-    · intro ha
-      have hak := (Finset.mem_filter.mp ha).2
-      refine Finset.mem_biUnion.mpr ⟨a.val / (n / 2 ^ l), ?_, ?_⟩
-      · exact Finset.mem_range.mpr
-          (Nat.div_lt_of_lt_mul (by rw [Nat.div_mul_cancel hdvd]; exact a.isLt))
-      · exact Finset.mem_filter.mpr ⟨Finset.mem_univ _, hak, rfl⟩
-  calc ∑ c ∈ Finset.range (2 ^ l), (valuesInChunkDual n k l c).card
-      = ((Finset.range (2 ^ l)).biUnion (valuesInChunkDual n k l)).card :=
-        (Finset.card_biUnion hdisj).symm
-    _ = S.card := by rw [hunion]
-    _ = k := card_filter_ge_val hk
+    hasGoodRadiusDual w_l hw_l a l ∧
+    ¬hasGoodRadiusDual w_l1 hw_l1 a (l + 1))
 
 /-- **Per-level error bound (dual)**: At each level `l`, the dual error set
-    has at most `ε · k` elements. -/
+    has at most `ε · k` elements. Dual of `error_set_bound`.
+
+    Uses `EpsilonFinalHalved` (which is part of `IsEpsilonHalver`) with
+    `hasGoodRadiusDual` (`≥`): only Type A-dual errors (target-bottom going
+    to top, decreasing position) cause loss of dual good radius. -/
 private lemma error_set_bound_dual {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
     (v : Equiv.Perm (Fin n)) (k l : ℕ) (hk : k ≤ n)
     (hpow : 2 ^ (l + 1) ∣ n) :
     ((errorSetAtLevelDual halvers v k l).card : ℝ) ≤ ε * ↑k := by
-  rw [error_set_eq_biUnion_dual halvers v k l hpow]
-  calc (((Finset.range (2 ^ l)).biUnion (errorSetInChunkDual halvers v k l)).card : ℝ)
-      ≤ ∑ c ∈ Finset.range (2 ^ l), ((errorSetInChunkDual halvers v k l c).card : ℝ) := by
-        exact_mod_cast Finset.card_biUnion_le
-    _ ≤ ∑ c ∈ Finset.range (2 ^ l), ε * (valuesInChunkDual n k l c).card := by
-        apply Finset.sum_le_sum
-        intro c _
-        exact error_set_chunk_bound_dual ε hε halvers hhalvers v k l c hk hpow
-    _ = ε * ∑ c ∈ Finset.range (2 ^ l), ((valuesInChunkDual n k l c).card : ℝ) := by
-        rw [Finset.mul_sum]
-    _ = ε * ↑k := by rw [sum_valuesInChunkDual hpow hk]
+  sorry
 
-/-- **Dual error set coverage**: If `a.val ≥ n - k` and ¬goodRadius at depth,
+/-- At level 0, every value has good dual radius (0 ≤ 0). -/
+private lemma good_radius_base_dual {n : ℕ} (w : Fin n → Fin n)
+    (hw : Function.Injective w) (a : Fin n) :
+    hasGoodRadiusDual w hw a 0 := by
+  unfold hasGoodRadiusDual
+  simp only [pow_zero, Nat.div_one]
+  rw [Nat.div_eq_of_lt a.isLt,
+      Nat.div_eq_of_lt (Finite.surjective_of_injective hw a).choose.isLt]
+
+/-- **Dual error set coverage**: If `a.val ≥ n - k` and ¬goodRadiusDual at depth,
     then `a ∈ errorSetAtLevelDual` for some `l < depth`. -/
 private lemma not_good_radius_in_error_set_dual {n : ℕ}
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (v : Equiv.Perm (Fin n)) (a : Fin n)
     (k depth : ℕ) (ha : n ≤ a.val + k)
-    (hbad : ¬hasGoodRadius
+    (hbad : ¬hasGoodRadiusDual
       ((halverNetwork n halvers depth).exec (v : Fin n → Fin n))
       (ComparatorNetwork.exec_injective _ v.injective) a depth) :
     ∃ l, l < depth ∧ a ∈ errorSetAtLevelDual halvers v k l := by
   induction depth with
-  | zero => exact absurd (good_radius_base _ _ a) hbad
+  | zero => exact absurd (good_radius_base_dual _ _ a) hbad
   | succ d ih =>
-    by_cases hd : hasGoodRadius
+    by_cases hd : hasGoodRadiusDual
         ((halverNetwork n halvers d).exec (v : Fin n → Fin n))
         (ComparatorNetwork.exec_injective _ v.injective) a d
     · exact ⟨d, Nat.lt_succ_of_le le_rfl,
@@ -818,7 +639,7 @@ private lemma farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ)
     rw [Finset.mem_filter] at hp
     have hp_far : p.val + k + R < n := hp.2.1
     have ha_large : n ≤ a.val + k := by rw [← hpw]; exact hp.2.2
-    have hbad : ¬hasGoodRadius w hw_inj a depth := by
+    have hbad : ¬hasGoodRadiusDual w hw_inj a depth := by
       intro hgood
       apply good_radius_implies_close_dual w hw_inj a k depth ha_large hR_pos hgood
       have hsurj_eq : (Finite.surjective_of_injective hw_inj a).choose = p := by
