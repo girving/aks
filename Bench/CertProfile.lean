@@ -8,9 +8,9 @@
   Run: `lake exe cert-profile`
 -/
 
-import AKS.Certificate
-import AKS.CertificateFast
-import AKS.NpyReader
+import CertCheck
+import Bench.CertFast
+import AKS.Cert.Read
 
 #eval ensureCertificateData 1728 12
 
@@ -47,9 +47,9 @@ def main : IO UInt32 := do
 
   let n := 1728
   let d := 12
-  let c₁ : ℤ := 792
-  let c₂ : ℤ := 9
-  let c₃ : ℤ := 2
+  let c₁ : Int := 792
+  let c₂ : Int := 9
+  let c₃ : Int := 2
 
   -- Data sizes
   IO.println "--- Data sizes ---"
@@ -78,9 +78,9 @@ def main : IO UInt32 := do
   -- 3. Time a single mulAdj call
   IO.println "--- Single mulAdj (B*ones, n=1728, d=12) ---"
   timedP "mulAdj (ones)   " fun () => Id.run do
-    let zOnes := Array.replicate n (1 : ℤ)
+    let zOnes := Array.replicate n (1 : Int)
     let bz := mulAdj rotBytes zOnes n d
-    let mut s : ℤ := 0
+    let mut s : Int := 0
     for i in [:n] do s := s + bz[i]!
     return s!"sum={s}"
   IO.println ""
@@ -88,10 +88,10 @@ def main : IO UInt32 := do
   -- 4. Time B²*ones (two mulAdj calls)
   IO.println "--- Double mulAdj (B²*ones, n=1728, d=12) ---"
   timedP "B²*ones         " fun () => Id.run do
-    let zOnes := Array.replicate n (1 : ℤ)
+    let zOnes := Array.replicate n (1 : Int)
     let bz := mulAdj rotBytes zOnes n d
     let b2z := mulAdj rotBytes bz n d
-    let mut s : ℤ := 0
+    let mut s : Int := 0
     for i in [:n] do s := s + b2z[i]!
     return s!"sum={s}"
   IO.println ""
@@ -106,17 +106,17 @@ def main : IO UInt32 := do
   -- 6. Time checkPSD with diagnostics (forces evaluation of margin)
   IO.println "--- checkPSD with diagnostics ---"
   timedP "checkPSD (diag) " fun () => Id.run do
-    let mut epsMax : ℤ := 0
-    let mut minDiag : ℤ := 0
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
     let mut first := true
     for j in [:n] do
       let colStart := j * (j + 1) / 2
-      let mut zCol := Array.replicate n (0 : ℤ)
+      let mut zCol := Array.replicate n (0 : Int)
       for k in [:j+1] do
         zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
       let bz := mulAdj rotBytes zCol n d
       let b2z := mulAdj rotBytes bz n d
-      let mut colSum : ℤ := 0
+      let mut colSum : Int := 0
       for k in [:j+1] do
         colSum := colSum + zCol[k]!
       for i in [:n] do
@@ -152,7 +152,7 @@ def main : IO UInt32 := do
   timedP "decode all cert " fun () => Id.run do
     -- Time just decoding all n*(n+1)/2 cert entries
     let total := n * (n + 1) / 2
-    let mut s : ℤ := 0
+    let mut s : Int := 0
     for k in [:total] do
       s := s + decodeBase85Int certBytes k
     return s!"sum={s} (over {total} entries)"

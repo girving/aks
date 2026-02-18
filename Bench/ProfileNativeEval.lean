@@ -4,8 +4,8 @@
   which is closer to what native_decide experiences during elaboration.
 -/
 
-import AKS.Certificate
-import AKS.NpyReader
+import CertCheck
+import AKS.Cert.Read
 
 def rotData1728 : String := bin_base85% "data/1728/rot_map.bin"
 def certData1728 : String := bin_base85% "data/1728/cert_z.bin"
