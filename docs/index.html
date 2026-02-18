@@ -222,7 +222,7 @@ const PROOF_DATA = {
     { id: "exec_injective", file: "AKS/Sort/Defs.lean", line: 97, status: "proved", kind: "theorem",
       sig: "ComparatorNetwork.exec_injective (net : ComparatorNetwork n) {v : Fin n → α}\n  (hv : Function.Injective v) : Function.Injective (net.exec v)",
       desc: "Executing a comparator network preserves injectivity. Induction on comparator list." },
-    { id: "shiftEmbed_exec_outside", file: "AKS/Sort/Defs.lean", line: 122, status: "proved", kind: "theorem",
+    { id: "shiftEmbed_exec_outside", file: "AKS/Sort/Defs.lean", line: 129, status: "proved", kind: "theorem",
       sig: "ComparatorNetwork.shiftEmbed_exec_outside (net : ComparatorNetwork m)\n  (n offset : ℕ) (h : offset + m ≤ n) (v : Fin n → α) (j : Fin n)\n  (hj : j.val < offset ∨ offset + m ≤ j.val) :\n  (net.shiftEmbed n offset h).exec v j = v j",
       desc: "A shifted+embedded network does not modify positions outside its range." },
     // ── Tree/AKSNetwork.lean — iterated halver helpers ──
@@ -240,22 +240,40 @@ const PROOF_DATA = {
       desc: "Size arithmetic for the AKS construction using Nat.log ≤ logb and log 2 > 1/2." },
 
     // ── Halver.lean ──
-    { id: "IsEpsilonHalver", file: "AKS/Halver/Defs.lean", line: 84, status: "definition", kind: "def",
+    { id: "IsEpsilonHalver", file: "AKS/Halver/Defs.lean", line: 85, status: "definition", kind: "def",
       sig: "IsEpsilonHalver (net : ComparatorNetwork n) (ε : ℝ) : Prop",
       desc: "ε-halver (AKS Section 3, permutation-based): for every permutation input, output is ε-halved — segment-wise bounds on displaced elements using rank." },
-    { id: "expander_gives_halver", file: "AKS/Halver/ExpanderToHalver.lean", line: 640, status: "proved", kind: "theorem",
-      sig: "expander_gives_halver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d",
-      desc: "An expander with spectral gap ≤ β yields a β-halver (permutation-based). Proved via Tanner's vertex expansion bound + edge monotonicity + permutation counting." },
+    { id: "expanderHalver", file: "AKS/Halver/ExpanderToHalver.lean", line: 50, status: "proved", kind: "definition",
+      sig: "expanderHalver (G : RegularGraph m d) : ComparatorNetwork (2 * m)",
+      desc: "The bipartite halver comparator network from a d-regular expander. For each vertex v and port p, compares wire v with wire m + G.neighbor v p." },
+    { id: "expanderHalver_isEpsilonHalver", file: "AKS/Halver/ExpanderToHalver.lean", line: 648, status: "proved", kind: "theorem",
+      sig: "expanderHalver_isEpsilonHalver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  IsEpsilonHalver (expanderHalver G) β",
+      desc: "The expander halver is a β-halver. Proved via Tanner's vertex expansion bound + edge monotonicity + permutation counting." },
+    { id: "expanderHalver_size", file: "AKS/Halver/ExpanderToHalver.lean", line: 657, status: "proved", kind: "theorem",
+      sig: "expanderHalver_size (G : RegularGraph m d) : (expanderHalver G).size = m * d",
+      desc: "The expander halver has exactly m·d comparators (linear in m since d is constant)." },
+    { id: "exists_halver_depth_le", file: "AKS/Halver/ExpanderToHalver.lean", line: 668, status: "sorry", kind: "theorem",
+      sig: "exists_halver_depth_le (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d ∧ net.depth ≤ d",
+      desc: "A depth-d halver exists from any d-regular expander. Needs König's edge coloring theorem for bipartite graphs." },
+    { id: "HalverFamily", file: "AKS/Halver/Defs.lean", line: 251, status: "definition", kind: "def",
+      sig: "structure HalverFamily (ε : ℝ) (d : ℕ) where\n  net : (m : ℕ) → ComparatorNetwork (2 * m)\n  isHalver : ∀ m, IsEpsilonHalver (net m) ε\n  depth_le : ∀ m, (net m).depth ≤ d",
+      desc: "Family of ε-halver networks indexed by half-size m, with depth bounded by d. Bundles net + halver proof + depth bound." },
+    { id: "HalverFamily.size_le", file: "AKS/Halver/Defs.lean", line: 261, status: "sorry", kind: "theorem",
+      sig: "HalverFamily.size_le (family : HalverFamily ε d) (m : ℕ) :\n  (family.net m).size ≤ m * d",
+      desc: "Depth ≤ d on 2m bipartite wires implies size ≤ m * d." },
+    { id: "expanderHalverFamily", file: "AKS/Halver/ExpanderToHalver.lean", line: 677, status: "proved", kind: "def",
+      sig: "expanderHalverFamily {d : ℕ} (β : ℝ)\n  (graphs : ∀ m, m > 0 → RegularGraph m d)\n  (hgaps : ∀ m (hm : m > 0), spectralGap (graphs m hm) ≤ β) :\n  HalverFamily β d",
+      desc: "Builds a HalverFamily from an expander family via exists_halver_depth_le." },
     { id: "tanner_bound", file: "AKS/Halver/Tanner.lean", line: 216, status: "proved", kind: "theorem",
       sig: "tanner_bound (G : RegularGraph n d) (β : ℝ) (hβ : spectralGap G ≤ β) (T : Finset (Fin n)) :\n  |T|·n ≤ |N(T)|·(|T| + β²(n-|T|))",
       desc: "Tanner's vertex expansion bound: for any T in a d-regular graph with spectral gap ≤ β, |N(T)| ≥ |T|·n/(|T| + β²(n-|T|)). Proved via Cauchy-Schwarz on codegree distribution + orthogonal decomposition." },
-    { id: "epsHalverMerge", file: "AKS/Halver/Defs.lean", line: 92, status: "definition", kind: "def",
+    { id: "epsHalverMerge", file: "AKS/Halver/Defs.lean", line: 93, status: "definition", kind: "def",
       sig: "epsHalverMerge (n ε : ℝ) (k : ℕ) (halver : ComparatorNetwork n) : ComparatorNetwork n",
       desc: "Iterated halver merge: apply halver k times for geometric convergence." },
-    { id: "IsEpsilonSorted", file: "AKS/Halver/Defs.lean", line: 144, status: "definition", kind: "def",
+    { id: "IsEpsilonSorted", file: "AKS/Halver/Defs.lean", line: 145, status: "definition", kind: "def",
       sig: "IsEpsilonSorted (v : Fin n → Bool) (ε : ℝ) : Prop",
       desc: "ε-sortedness: at most ε·n elements are out of place." },
-    { id: "Monotone.bool_pattern", file: "AKS/Halver/Defs.lean", line: 158, status: "proved", kind: "lemma",
+    { id: "Monotone.bool_pattern", file: "AKS/Halver/Defs.lean", line: 159, status: "proved", kind: "lemma",
       sig: "Monotone.bool_pattern (w : Fin n → Bool) (hw : Monotone w) :\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w ⟨i, ·⟩ = false) ∧ (∀ i, k ≤ i → w ⟨i, ·⟩ = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: a prefix of falses followed by trues. Threshold found via Nat.find." },
     // NOTE: wrongness, halver_decreases_wrongness, halver_composition, halver_convergence
@@ -269,10 +287,10 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 142, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 167, status: "sorry", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound via trajectory tracking: correctly-classified elements stay within blow-up radius, misclassified ≤ ε·depth·k by union bound.", difficulty: "weeks" },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 173, status: "sorry", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 198, status: "sorry", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via EpsilonFinalHalved and order reversal.", difficulty: "weeks" },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -457,9 +475,9 @@ const PROOF_DATA = {
       desc: "Explicit expanders exist at every size via interpolation from the zig-zag family.", difficulty: "weeks" },
 
     // ── Tree/AKSNetwork.lean — top-level parameterized theorem ──
-    { id: "zigzag_implies_aks_network", file: "AKS/Tree/AKSNetwork.lean", line: 166, status: "proved", kind: "theorem",
+    { id: "zigzag_implies_aks_network", file: "AKS/Tree/AKSNetwork.lean", line: 164, status: "proved", kind: "theorem",
       sig: "zigzag_implies_aks_network {β : ℝ} (hβ_pos : 0 < β) (hβ_half : β < 1/2) :\n  (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ c > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ c·n·log n",
-      desc: "Parameterized AKS theorem: expander family → O(n log n) sorting networks. Builds halver family via Classical.choice, calls aks_tree_sorting." },
+      desc: "Parameterized AKS theorem: expander family → O(n log n) sorting networks. Builds HalverFamily via expanderHalverFamily, calls aks_tree_sorting." },
 
     // ── AKS/Main.lean — top-level assembly via iterated squaring ──
     { id: "squareIter", file: "AKS/Main.lean", line: 35, status: "definition", kind: "def",
@@ -491,7 +509,7 @@ const PROOF_DATA = {
     { id: "monotone_bool_zeros_then_ones", file: "AKS/Tree/Sorting.lean", line: 1606, status: "proved", kind: "lemma",
       sig: "monotone_bool_zeros_then_ones : Monotone w →\n  ∃ k, k ≤ n ∧ (∀ i, i < k → w i = false) ∧ (∀ i, k ≤ i → w i = true)",
       desc: "Monotone Boolean sequences have 0*1* pattern: threshold detected via Nat.find.", difficulty: "days" },
-    { id: "countOnes_le", file: "AKS/Halver/Defs.lean", line: 30, status: "proved", kind: "lemma",
+    { id: "countOnes_le", file: "AKS/Halver/Defs.lean", line: 31, status: "proved", kind: "lemma",
       sig: "countOnes_le : countOnes v ≤ n",
       desc: "Count of ones bounded by total elements (filter cardinality)." },
     { id: "countOnes_split", file: "AKS/Tree/Sorting.lean", line: 1563, status: "proved", kind: "lemma",
@@ -560,8 +578,8 @@ const PROOF_DATA = {
       sig: "zigzag_decreases_wrongness_v2 :\n  treeWrongnessV2 t v'' J r ≤ treeWrongnessV2 t v J (r+1) + 3ε·tw(r-4)",
       desc: "V2 Lemma 3: ZigZag combined step. Needs bridge between Bool-based treeWrongnessV2 and permutation-based HasBoundedZigzagDamage." },
     { id: "aks_tree_sorting", file: "AKS/Tree/AKSNetwork.lean", line: 143, status: "sorry", kind: "theorem", milestone: true,
-      sig: "aks_tree_sorting : (∀ m, IsEpsilonHalver (halvers m) ε) → ε < 1/2 →\n  ∃ net, net.size ≤ 200·(d+1)·n·log₂ n ∧ ∀ v, Monotone (net.exec v)",
-      desc: "Main theorem: halver family → O(n log n) sorting network. Uses recursiveNearsort with multi-level halvers.", difficulty: "months" }
+      sig: "aks_tree_sorting (ε : ℝ) (d : ℕ) (hε : 0 < ε) (hε1 : ε < 1/2)\n  (family : HalverFamily ε d) :\n  ∃ net, net.size ≤ 200·(d+1)·n·log₂ n ∧ ∀ v, Monotone (net.exec v)",
+      desc: "Main theorem: HalverFamily → O(n log n) sorting network. Uses recursiveNearsort with multi-level halvers.", difficulty: "months" }
   ],
 
   // Edges: [source, target] means "target depends on source" (arrow points from source to target)
@@ -611,8 +629,17 @@ const PROOF_DATA = {
     ["RegularGraph", "tanner_bound"],
     ["spectralGap", "tanner_bound"],
     ["expander_mixing_lemma", "tanner_bound"],
-    ["tanner_bound", "expander_gives_halver"],
-    ["IsEpsilonHalver", "expander_gives_halver"],
+    ["tanner_bound", "expanderHalver_isEpsilonHalver"],
+    ["IsEpsilonHalver", "expanderHalver_isEpsilonHalver"],
+    ["expanderHalver", "expanderHalver_isEpsilonHalver"],
+    ["expanderHalver", "expanderHalver_size"],
+    ["expanderHalver_isEpsilonHalver", "exists_halver_depth_le"],
+    ["expanderHalver_size", "exists_halver_depth_le"],
+    ["IsEpsilonHalver", "HalverFamily"],
+    ["ComparatorNetwork", "HalverFamily"],
+    ["HalverFamily", "HalverFamily.size_le"],
+    ["exists_halver_depth_le", "expanderHalverFamily"],
+    ["HalverFamily", "expanderHalverFamily"],
     ["IsEpsilonHalver", "epsHalverMerge"],
     ["ComparatorNetwork", "epsHalverMerge"],
     ["IsEpsilonSorted", "Monotone.bool_pattern"],
@@ -736,7 +763,10 @@ const PROOF_DATA = {
     // Top-level parameterized theorem (Tree/AKSNetwork.lean)
     ["zero_one_principle", "zigzag_implies_aks_network"],
     ["aks_tree_sorting", "zigzag_implies_aks_network"],
-    ["expander_gives_halver", "zigzag_implies_aks_network"],
+    ["expanderHalverFamily", "zigzag_implies_aks_network"],
+
+    // aks_tree_sorting depends on HalverFamily
+    ["HalverFamily", "aks_tree_sorting"],
 
     // Tree/Sorting — edges FROM main proof chain into Tree/Sorting
     ["IsEpsilonHalver", "halver_preserves_monotone"],
