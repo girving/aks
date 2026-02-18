@@ -290,16 +290,16 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 410, status: "sorry", kind: "theorem",
+    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 418, status: "sorry", kind: "theorem",
       sig: "farSmallCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farSmallCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "After depth levels, far-small count at radius n/2^depth is ≤ ε·depth·k. Core of AKS Section 4: requires trajectory/displaced-elements argument with union bound over levels.", difficulty: "weeks" },
-    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 605, status: "sorry", kind: "theorem",
+    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 613, status: "sorry", kind: "theorem",
       sig: "farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farLargeCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "Dual of farSmallCount_depth_bound for end segments.", difficulty: "weeks" },
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 516, status: "proved", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 524, status: "proved", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound. Reformulates as farSmallCount via sdiff_image_card_eq_far_count, then applies depth bound + blowup_covers_displacement." },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 687, status: "proved", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 695, status: "proved", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via farLargeCount_depth_bound and rank_fin_od_val." },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -569,15 +569,15 @@ const PROOF_DATA = {
     { id: "halver_isSeparator_half", file: "AKS/Separator/FromHalver.lean", line: 86, status: "proved", kind: "theorem",
       sig: "halver_isSeparator_half (net : ComparatorNetwork n) (ε : ℝ) :\n  IsEpsilonHalver net ε → IsSeparator net (1/2) ε",
       desc: "PROVED. Base case: ε-halver is (1/2, ε)-separator (Seiferas Lemma 1 base). Bridge via ⌊(1/2)n⌋₊ = n/2 and floor monotonicity." },
-    { id: "separator_halving_step", file: "AKS/Separator/FromHalver.lean", line: 103, status: "sorry", kind: "theorem",
-      sig: "separator_halving_step : IsSeparator net γ ε' →\n  IsSeparator (net ++ halverAtLevel) (γ/2) (ε' + 2*ε₁)",
-      desc: "Induction step: halving refines (γ, ε')-separation to (γ/2, ε'+2ε₁)-separation." },
-    { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 125, status: "sorry", kind: "theorem",
-      sig: "halverToSeparator_isSeparator :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (2*t*ε)",
-      desc: "t levels of iterated ε-halving give (2tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
-    { id: "halverToSeparatorFamily", file: "AKS/Separator/FromHalver.lean", line: 153, status: "sorry", kind: "def",
-      sig: "halverToSeparatorFamily (family : HalverFamily ε d) (t : ℕ) :\n  SeparatorFamily (1/2^t) (2*t*ε) (t*d)",
-      desc: "Bundle halver-to-separator construction into a SeparatorFamily. Depends on halverToSeparator_isSeparator and depth bound." },
+    { id: "separator_halving_step", file: "AKS/Separator/FromHalver.lean", line: 115, status: "sorry", kind: "theorem",
+      sig: "separator_halving_step (t : ℕ) (h_even : 2 ∣ n/2^t) :\n  IsSeparator net (1/2^t) ε' → IsSeparator (net ++ halverAtLevel) (1/2^(t+1)) (ε'+ε₁)",
+      desc: "Induction step: halving refines (1/2^t, ε')-separation to (1/2^(t+1), ε'+ε₁)-separation." },
+    { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 142, status: "sorry", kind: "theorem",
+      sig: "halverToSeparator_isSeparator (h_div : 2^t ∣ n) :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (t*ε)",
+      desc: "t levels of iterated ε-halving give (tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
+    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 173, status: "sorry", kind: "theorem",
+      sig: "halverToSeparator_props (n t : ℕ) (h_div : 2^t ∣ n) :\n  IsSeparator ... (1/2^t) (t*ε) ∧ depth ≤ t*d",
+      desc: "Bundle separator+depth properties for halver-to-separator construction. Requires divisibility 2^t | n." },
 
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
@@ -900,9 +900,9 @@ const PROOF_DATA = {
     ["separator_halving_step", "halverToSeparator_isSeparator"],
     ["IsSeparator", "separator_halving_step"],
     ["IsEpsilonHalver", "separator_halving_step"],
-    ["halverToSeparator", "halverToSeparatorFamily"],
-    ["halverToSeparator_isSeparator", "halverToSeparatorFamily"],
-    ["SeparatorFamily", "halverToSeparatorFamily"]
+    ["halverToSeparator", "halverToSeparator_props"],
+    ["halverToSeparator_isSeparator", "halverToSeparator_props"],
+    ["SeparatorFamily", "halverToSeparator_props"]
   ],
 
   // File groupings with display names

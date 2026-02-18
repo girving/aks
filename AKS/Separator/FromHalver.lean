@@ -10,8 +10,8 @@
 
   Key results:
   • `halver_isSeparator_half` — base case: ε-halver → (1/2, ε)-separator (proved)
-  • `separator_halving_step` — halving refines γ → γ/2
-  • `halverToSeparator_isSeparator` — t levels → (1/2^t, 2tε)-separation
+  • `separator_halving_step` — halving refines 1/2^t → 1/2^(t+1), error += ε₁
+  • `halverToSeparator_isSeparator` — t levels → (1/2^t, tε)-separation
   • `halverToSeparator_depth_le` — depth ≤ t · d
 -/
 
@@ -94,37 +94,55 @@ theorem halver_isSeparator_half {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ)
 
 /-! **Induction step** -/
 
-/-- Halving refines separation: applying ε₁-halvers to both halves of a
-    (γ, ε')-separated sequence gives (γ/2, ε' + 2·ε₁)-separation.
+/-- Halving refines separation: given (1/2^t, ε')-separation, applying
+    ε₁-halvers at level `t` gives (1/2^(t+1), ε' + ε₁)-separation.
 
-    Elements correctly in the γ-fringe stay correct. Elements that were
-    ε'-displaced gain at most ε₁ additional displacement from the halver.
+    Requires `2 ∣ n / 2^t` (chunk size is even) so that `2 * halfChunk`
+    covers the full chunk — without this, the last position of each chunk
+    is uncovered and can strand a small value (confirmed counterexample:
+    n=3, t=0 with perfect halvers).
+
+    The level must match the separation parameter (γ = 1/2^t aligns with
+    chunk size n/2^t at level t). Within each chunk, the halver pushes
+    the smaller half to the first half-chunk, creating the finer boundary.
+
+    Error analysis (SepInitial direction, γ' ≤ 1/2^(t+1)):
+    • Positions ≥ n/2^t (other chunks): unchanged from old separation → ≤ ε'·γ'·n
+    • Positions [n/2^(t+1), n/2^t) (second half of chunk 0): by the halver's
+      EpsilonInitialHalved, at most ε₁·a displaced, where a ≤ k = ⌊γ'n⌋.
+    Total: (ε' + ε₁)·γ'·n. SepFinal is symmetric.
     (Seiferas 2009, Section 6, proof of Lemma 1) -/
-theorem separator_halving_step {n : ℕ} {γ ε' ε₁ : ℝ}
+theorem separator_halving_step {n : ℕ} {ε' ε₁ : ℝ} (t : ℕ)
     {net : ComparatorNetwork n}
     {halvers : (m : ℕ) → ComparatorNetwork (2 * m)}
-    (_hγ : 0 < γ) (_hγ1 : γ ≤ 1)
-    (_hsep : IsSeparator net γ ε')
-    (_hhalver : ∀ m, IsEpsilonHalver (halvers m) ε₁)
-    (level : ℕ) :
+    (hsep : IsSeparator net (1 / 2 ^ t) ε')
+    (hhalver : ∀ m, IsEpsilonHalver (halvers m) ε₁)
+    (hε₁ : 0 ≤ ε₁)
+    (h_even : 2 ∣ n / 2 ^ t) :
     IsSeparator
-      { comparators := net.comparators ++ (halverAtLevel n halvers level).comparators }
-      (γ / 2)
-      (ε' + 2 * ε₁) := by
+      { comparators := net.comparators ++ (halverAtLevel n halvers t).comparators }
+      (1 / 2 ^ (t + 1))
+      (ε' + ε₁) := by
   sorry
 
 
 /-! **Iterated halving** -/
 
-/-- `t` levels of iterated ε-halving give (2·t·ε)-approximate (1/2^t)-separation.
+/-- `t` levels of iterated ε-halving give (t·ε)-approximate (1/2^t)-separation.
+
+    Requires `2 ^ t ∣ n` to ensure all chunk sizes at levels 0, ..., t-1
+    are even (needed by `separator_halving_step`). This is satisfied when
+    n is a power of 2 ≥ 2^t, as in the standard AKS construction.
 
     Proof: induction on `t` using `halver_isSeparator_half` (base) and
-    `separator_halving_step` (step). At each level, errors accumulate:
-    the halver introduces ε per application (initial + final), giving +2ε per level.
+    `separator_halving_step` (step). At each level, the halver introduces
+    ε error (one application of EpsilonInitialHalved + EpsilonFinalHalved),
+    giving +ε per level, total t·ε.
     (Seiferas 2009, Section 6, Lemma 1) -/
 theorem halverToSeparator_isSeparator {ε : ℝ} {d : ℕ}
-    (n : ℕ) (family : HalverFamily ε d) (t : ℕ) (hε : 0 ≤ ε) :
-    IsSeparator (halverToSeparator n family t) (1 / 2 ^ t) (2 * ↑t * ε) := by
+    (n : ℕ) (family : HalverFamily ε d) (t : ℕ) (hε : 0 ≤ ε)
+    (h_div : 2 ^ t ∣ n) :
+    IsSeparator (halverToSeparator n family t) (1 / 2 ^ t) (↑t * ε) := by
   sorry
 
 
@@ -148,11 +166,13 @@ theorem halverToSeparator_depth_le {ε : ℝ} {d : ℕ}
 
 /-! **Bundle into SeparatorFamily** -/
 
-/-- Build a `SeparatorFamily` from a `HalverFamily` with `t` iteration levels.
+/-- Separator property for a specific `n` with divisibility.
+    Use this instead of `SeparatorFamily` when the divisibility condition
+    `2 ^ t ∣ n` is not universally satisfied.
     (Seiferas 2009, Section 6, Lemma 1) -/
-def halverToSeparatorFamily {ε : ℝ} {d : ℕ} (family : HalverFamily ε d)
-    (t : ℕ) (hε : 0 ≤ ε) :
-    SeparatorFamily (1 / 2 ^ t) (2 * ↑t * ε) (t * d) where
-  net n := halverToSeparator n family t
-  isSep n := halverToSeparator_isSeparator n family t hε
-  depth_le n := halverToSeparator_depth_le n family t
+theorem halverToSeparator_props {ε : ℝ} {d : ℕ} (family : HalverFamily ε d)
+    (n t : ℕ) (hε : 0 ≤ ε) (h_div : 2 ^ t ∣ n) :
+    IsSeparator (halverToSeparator n family t) (1 / 2 ^ t) (↑t * ε) ∧
+    (halverToSeparator n family t).depth ≤ t * d :=
+  ⟨halverToSeparator_isSeparator n family t hε h_div,
+   halverToSeparator_depth_le n family t⟩
