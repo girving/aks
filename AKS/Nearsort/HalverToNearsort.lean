@@ -61,15 +61,16 @@ theorem halver_family_gives_nearsort {n : ℕ} (ε : ℝ) (depth d : ℕ)
     (hdepth : (1 : ℝ) ≤ ε * ↑depth * 2 ^ depth)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
-    (hhalver_size : ∀ m, (halvers m).size ≤ m * d) :
+    (hhalver_size : ∀ m, (halvers m).size ≤ m * d)
+    (hpow : 2 ^ depth ∣ n) :
     ∃ (net : ComparatorNetwork n),
       Nearsort net (halverNearsortQuality ε depth) ∧
         (net.size : ℝ) ≤ ↑depth * ↑d * ↑n := by
   refine ⟨halverNetwork n halvers depth, ?_, ?_⟩
   · -- Nearsort: for every permutation, output is nearsorted
     intro v
-    exact ⟨halverNetwork_initialNearsorted ε depth d hε hε1 hdepth halvers hhalvers hhalver_size v,
-           halverNetwork_finalNearsorted ε depth d hε hε1 hdepth halvers hhalvers hhalver_size v⟩
+    exact ⟨halverNetwork_initialNearsorted ε depth d hε hε1 hdepth halvers hhalvers hhalver_size hpow v,
+           halverNetwork_finalNearsorted ε depth d hε hε1 hdepth halvers hhalvers hhalver_size hpow v⟩
   · -- Size bound
     calc ((halverNetwork n halvers depth).size : ℝ)
         ≤ ↑(depth * (n * d)) := by
