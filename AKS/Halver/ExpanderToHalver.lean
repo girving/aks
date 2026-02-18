@@ -5,13 +5,15 @@
   constructs a β-halver comparator network of size m·d.
 
   Key results:
-  • `bipartiteComparators`: the bipartite comparator construction
-  • `exec_bipartite_edge_mono`: edge monotonicity (generalized to `LinearOrder`)
-  • `expander_gives_halver`: expanders yield ε-halvers (proved via Tanner's bound)
+  • `expanderHalver`: the bipartite halver comparator network
+  • `expanderHalver_isEpsilonHalver`: expanders yield ε-halvers (proved via Tanner's bound)
+  • `expanderHalver_size`: the network has exactly m·d comparators
+  • `exists_halver_depth_le`: depth ≤ d (sorry, needs König's edge coloring)
 -/
 
 import AKS.Halver.Defs
 import AKS.Halver.Tanner
+import AKS.Sort.Depth
 import AKS.Tree.Sorting
 
 open Finset BigOperators
@@ -42,6 +44,11 @@ private lemma bipartiteComparators_bipartite {m d : ℕ} (G : RegularGraph m d)
     true_and] at hc
   obtain ⟨v, p, rfl⟩ := hc
   exact ⟨v.isLt, Nat.le_add_right m _⟩
+
+/-- The halver comparator network from a d-regular expander.
+    For each vertex v and port p, compares wire v with wire m + G.neighbor v p. -/
+def expanderHalver {m d : ℕ} (G : RegularGraph m d) : ComparatorNetwork (2 * m) :=
+  ⟨bipartiteComparators G⟩
 
 
 /-! **Edge Monotonicity (Generalized to LinearOrder)** -/
@@ -128,7 +135,7 @@ private lemma mem_bipartiteComparators {m d : ℕ} (G : RegularGraph m d)
 
 /-- After executing bipartite comparators, for each (v, p), output satisfies
     w[v] ≤ w[m + G.neighbor v p]. -/
-theorem exec_bipartite_edge_mono {m d : ℕ} {α : Type*} [LinearOrder α]
+private theorem exec_bipartite_edge_mono {m d : ℕ} {α : Type*} [LinearOrder α]
     (G : RegularGraph m d)
     (w : Fin (2 * m) → α) (v : Fin m) (p : Fin d) :
     (bipartiteComparators G).foldl (fun acc c ↦ c.apply acc) w
@@ -634,16 +641,61 @@ private lemma bipartite_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
           exact_mod_cast hN_card
   exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
 
-/-- A d-regular expander with spectral gap ≤ β yields a β-halver of size m·d.
-    Construction: `bipartiteComparators G` (compare position v with m + G.neighbor(v,p)).
-    Proof: Tanner's vertex expansion bound + edge monotonicity + counting. -/
-theorem expander_gives_halver (m d : ℕ) (G : RegularGraph m d)
+/-! **Public API** -/
+
+/-- `expanderHalver G` is a β-halver when the spectral gap of G is at most β.
+    Proved via Tanner's vertex expansion bound + edge monotonicity + counting. -/
+theorem expanderHalver_isEpsilonHalver {m d : ℕ} (G : RegularGraph m d)
+    (β : ℝ) (hβ : spectralGap G ≤ β) :
+    IsEpsilonHalver (expanderHalver G) β := by
+  have hβ_nn : 0 ≤ β := le_trans (spectralGap_nonneg G) hβ
+  intro v
+  exact ⟨bipartite_epsilon_initial_halved G β hβ hβ_nn v,
+         bipartite_epsilon_final_halved G β hβ hβ_nn v⟩
+
+/-- The halver network has exactly m·d comparators. -/
+theorem expanderHalver_size {m d : ℕ} (G : RegularGraph m d) :
+    (expanderHalver G).size = m * d :=
+  bipartiteComparators_length G
+
+/-- For any d-regular graph G with spectral gap ≤ β, there exists a β-halver
+    of size m·d and depth at most d. The depth bound follows from König's edge
+    coloring theorem: the bipartite comparator multigraph has max degree d on
+    both sides, so it decomposes into d matchings (parallel layers). The halver
+    property is preserved under reordering because bipartite comparators maintain
+    edge monotonicity in any order (top wires only decrease, bottom wires only
+    increase after their comparator fires). -/
+theorem exists_halver_depth_le {m d : ℕ} (G : RegularGraph m d)
     (β : ℝ) (hβ : spectralGap G ≤ β) :
     ∃ (net : ComparatorNetwork (2 * m)),
-      IsEpsilonHalver net β ∧ net.size ≤ m * d := by
-  have hβ_nn : 0 ≤ β := le_trans (spectralGap_nonneg G) hβ
-  refine ⟨⟨bipartiteComparators G⟩, fun v => ⟨?_, ?_⟩, ?_⟩
-  · exact bipartite_epsilon_initial_halved G β hβ hβ_nn v
-  · exact bipartite_epsilon_final_halved G β hβ hβ_nn v
-  · show (bipartiteComparators G).length ≤ m * d
-    exact le_of_eq (bipartiteComparators_length G)
+      IsEpsilonHalver net β ∧ net.size ≤ m * d ∧ net.depth ≤ d := by
+  sorry
+
+/-- Build a `HalverFamily` from an expander family. For each half-size `m > 0`,
+    uses `exists_halver_depth_le` to choose a depth-optimal β-halver from the
+    d-regular expander at size `m`. For `m = 0`, uses the empty network. -/
+noncomputable def expanderHalverFamily {d : ℕ} (β : ℝ)
+    (graphs : ∀ m, m > 0 → RegularGraph m d)
+    (hgaps : ∀ m (hm : m > 0), spectralGap (graphs m hm) ≤ β) :
+    HalverFamily β d where
+  net m :=
+    if hm : m > 0 then (exists_halver_depth_le (graphs m hm) β (hgaps m hm)).choose
+    else ⟨[]⟩
+  isHalver m := by
+    show IsEpsilonHalver (if hm : m > 0 then _ else _) β
+    by_cases hm : m > 0
+    · rw [dif_pos hm]
+      exact (exists_halver_depth_le (graphs m hm) β (hgaps m hm)).choose_spec.1
+    · rw [dif_neg hm]
+      push_neg at hm; interval_cases m
+      intro v; constructor
+      · intro k hk; simp at hk; subst hk; simp
+      · intro k hk; simp at hk; subst hk; simp
+  depth_le m := by
+    show ComparatorNetwork.depth (if hm : m > 0 then _ else _) ≤ d
+    by_cases hm : m > 0
+    · rw [dif_pos hm]
+      exact (exists_halver_depth_le (graphs m hm) β (hgaps m hm)).choose_spec.2.2
+    · rw [dif_neg hm]
+      simp [ComparatorNetwork.depth]
+

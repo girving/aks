@@ -68,3 +68,30 @@ lemma rank_fin_val {n : ℕ} (i : Fin n) : rank i = i.val := by
   have : Finset.univ.filter (· < i) = Finset.Iio i := by
     ext x; simp [Finset.mem_Iio]
   rw [this, Fin.card_Iio]
+
+/-- The rank of a `Fin n` element in the order dual equals `n - 1 - i.val`. -/
+lemma rank_fin_od_val {n : ℕ} (i : Fin n) :
+    rank (α := (Fin n)ᵒᵈ) (OrderDual.toDual i) = n - 1 - i.val := by
+  unfold rank
+  -- In (Fin n)ᵒᵈ, b <_od a means a <_orig b, i.e., i < b
+  have hcard : (Finset.univ.filter (· < OrderDual.toDual i) : Finset (Fin n)ᵒᵈ).card =
+    (Finset.univ.filter (fun b : Fin n ↦ i < b)).card := by
+    apply Finset.card_nbij' (fun a ↦ OrderDual.ofDual a) (fun b ↦ OrderDual.toDual b)
+    · intro a ha
+      rw [Finset.mem_coe, Finset.mem_filter] at ha ⊢
+      exact ⟨Finset.mem_univ _, ha.2⟩
+    · intro b hb
+      rw [Finset.mem_coe, Finset.mem_filter] at hb ⊢
+      exact ⟨Finset.mem_univ _, hb.2⟩
+    · intro _ _; rfl
+    · intro _ _; rfl
+  rw [hcard]
+  have : Finset.univ.filter (fun b : Fin n ↦ i < b) = Finset.Ioi i := by
+    ext x; simp [Finset.mem_Ioi]
+  rw [this, Fin.card_Ioi]
+
+/-- `rank` on `(Fin n)ᵒᵈ` in terms of `.val`. Matches goals after unfolding
+    `FinalNearsorted` where the variable is already of type `(Fin n)ᵒᵈ`. -/
+@[simp] lemma rank_fin_od {n : ℕ} (a : (Fin n)ᵒᵈ) :
+    rank a = n - 1 - a.val :=
+  rank_fin_od_val (OrderDual.ofDual a)
