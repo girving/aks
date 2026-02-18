@@ -5,12 +5,13 @@
       "Edit(.claude/settings.json)",
       "Write(.claude/settings.json)",
       "Edit(AKS/Random/**)",
-      "Write(AKS/Random/**)"
+      "Write(AKS/Random/**)",
+      "Bash(git commit)",
+      "Bash(git commit *)"
     ],
     "allow": [
       "Bash(cat *)",
       "Bash(git add *)",
-      "Bash(git commit *)",
       "Bash(git diff *)",
       "Bash(git log *)",
       "Bash(git pull *)",
