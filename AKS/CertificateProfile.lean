@@ -135,16 +135,16 @@ def main : IO UInt32 := do
     return s!"ok={decide (minDiag > threshold)} minDiag={minDiag} epsMax={epsMax} threshold={threshold}"
   IO.println ""
 
-  -- 7. Time checkCertificate end-to-end (from String)
-  IO.println "--- checkCertificate (end-to-end, from String) ---"
-  timedP "checkCertificate" fun () =>
-    s!"ok={checkCertificate rotData1728p certData1728p n d c₁ c₂ c₃}"
+  -- 7. Time checkCertificateSlow end-to-end (from String)
+  IO.println "--- checkCertificateSlow (end-to-end, from String) ---"
+  timedP "checkCertificateSlow" fun () =>
+    s!"ok={checkCertificateSlow rotData1728p certData1728p n d c₁ c₂ c₃}"
   IO.println ""
 
   -- 8. Time the Fast version for comparison
-  IO.println "--- checkCertificateFast (V2 pre-decoded) ---"
+  IO.println "--- checkCertificateFastV1 (V2 pre-decoded) ---"
   timedP "fast version    " fun () =>
-    s!"ok={checkCertificateFast rotData1728p certData1728p n d c₁ c₂ c₃}"
+    s!"ok={checkCertificateFastV1 rotData1728p certData1728p n d c₁ c₂ c₃}"
   IO.println ""
 
   -- 9. Breakdown: decode vs compute
@@ -168,10 +168,10 @@ def main : IO UInt32 := do
   IO.println ""
 
   -- 10. Repeated runs for consistency
-  IO.println "--- Repeated runs (3x checkCertificate) ---"
+  IO.println "--- Repeated runs (3x checkCertificateSlow) ---"
   for i in [:3] do
     timedP s!"run {i}           " fun () =>
-      s!"ok={checkCertificate rotData1728p certData1728p n d c₁ c₂ c₃}"
+      s!"ok={checkCertificateSlow rotData1728p certData1728p n d c₁ c₂ c₃}"
   IO.println ""
 
   -- Analysis

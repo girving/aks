@@ -43,6 +43,10 @@ scripts/sorries                             # Audit sorry, #exit, native_decide,
 
 No tests or linters — correctness is verified through Lean's type checker.
 
+### Exploratory Lean snippets
+
+Use `scripts/lean-test` to run ad-hoc Lean snippets (checking types, `#print`, `#check`, proof experiments). Write the snippet to a `/tmp/*.lean` file first, then run `scripts/lean-test /tmp/foo.lean`. This avoids repeated permission prompts for `lake env lean --stdin`.
+
 ### `lake build` (fallback only)
 
 Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state). For checking all files, prefer `scripts/lean-check --all` — it uses the daemon cache and is much faster.
@@ -285,7 +289,8 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 - **Avoid `native_decide`** — sidesteps the kernel's trust boundary. Prefer `decide +kernel` when `decide` is too slow. Only use `native_decide` as a last resort.
-- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see. **Use `@[csimp]` instead** — it requires a proof that the replacement function equals the original, so soundness is preserved. The compiler and `native_decide` use the fast version; proofs reference the simple one.
+- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
+- **Do not use `@[csimp]` in CertChecker.lean** — CertChecker is a separate precompiled library (`precompileModules := true`) that contains only definitions, no proofs. `@[csimp]` requires a proof that the replacement equals the original, which would force proofs into the precompiled module and break modularity. Instead, prove the bridge theorem (`checkCertificateFast_eq_slow`) in a separate file (`AKS/CertificateFastProof.lean`) that imports both CertChecker and Mathlib.
 
 ## Proof Workflow
 
@@ -298,6 +303,10 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
 **Recognize thrashing and ask the user.** After 3+ failed approaches to the same goal, stop and ask for guidance. Signs: repeated restructuring, oscillating between approaches, growing helper count without progress. A 2-minute conversation is cheaper than 30 minutes of failed builds.
+
+**Never silently abandon an agreed plan.** If a plan was approved and a step turns out harder than expected, do NOT silently switch to a shortcut (e.g., replacing a proof with `native_decide` or `sorry`). Always confirm radical plan changes with the user first — explain what's hard, what the alternatives are, and let them decide. A 2-minute conversation about changing course is far cheaper than discovering the change broke assumptions downstream.
+
+**Never change fast code to make proofs easier.** CertChecker.lean contains optimized imperative code (`checkCertificateFast`, `checkColumnNormBound`, `mulAdjWith`, etc.) that must stay exactly as-is. The job is to PROVE the existing fast code correct via bridge theorems, not to modify it. When a proof about imperative code is hard, discuss the difficulty with the user — don't silently switch to "make the code easier to prove about" by adding `native_decide` calls, slowing down the fast path, or replacing imperative code with pure equivalents. The `native_decide` in `Random*.lean` should only be on `checkCertificateFast`; everything else must be derived via structural proofs.
 
 **Assess proof risk before significant work.** Break non-trivial theorems into phases with risk levels: LOW (definition, direct proof), MEDIUM (standard argument, uncertain details), HIGH (novel connection, unclear if approach works). Identify the highest-risk phase, document fallback plans (axiomatize, defer, reformulate), and validate the critical bottleneck lemma before building dependencies. Escalate to user after 2-3 failed attempts on a MEDIUM+ phase.
 

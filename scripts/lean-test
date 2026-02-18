@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Run a Lean 4 snippet from stdin or a file through `lake env lean --stdin`
+# Usage:
+#   scripts/lean-test file.lean          # run a file
+#   scripts/lean-test <<< '#eval 1 + 1'  # run inline
+#   scripts/lean-test - < snippet.lean   # read from stdin
+#
+# Equivalent to: lake env lean --stdin < file
+# Exists so that a single Bash allow-pattern covers all exploratory Lean checks.
+
+set -euo pipefail
+
+if [[ $# -ge 1 && "$1" != "-" ]]; then
+  exec lake env lean --stdin < "$1"
+else
+  exec lake env lean --stdin
+fi

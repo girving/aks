@@ -126,19 +126,19 @@ def main : IO UInt32 := do
   let b2one := mulAdj smallRot (mulAdj smallRot z1 4 2) 4 2
   failures := failures + (← check "B²·1 = [4,4,4,4]" (b2one == #[4, 4, 4, 4]))
 
-  -- checkCertificate end-to-end on n=16
+  -- checkCertificateSlow end-to-end on n=16
   IO.println ""
-  IO.println "--- checkCertificate (n=16) ---"
+  IO.println "--- checkCertificateSlow (n=16) ---"
 
   let rotData16 : String := bin_base85% "data/16/rot_map.bin"
   let certData16 : String := bin_base85% "data/16/cert_z.bin"
 
   failures := failures + (← check "n=16 certificate accepted"
-    (checkCertificate rotData16 certData16 16 4 216 9 1))
+    (checkCertificateSlow rotData16 certData16 16 4 216 9 1))
   failures := failures + (← check "n=16 involution valid"
     (checkInvolution rotData16.toUTF8 16 4))
   failures := failures + (← check "wrong coefficients rejected"
-    (!checkCertificate rotData16 certData16 16 4 1 1 1))
+    (!checkCertificateSlow rotData16 certData16 16 4 1 1 1))
 
   -- Corrupted cert data: zero out many entries to break PSD
   let certBytes16 := certData16.toUTF8
@@ -148,11 +148,11 @@ def main : IO UInt32 := do
     corruptBytes := corruptBytes.set! i 33
   let corruptCert := String.fromUTF8! corruptBytes
   failures := failures + (← check "corrupted certificate rejected"
-    (!checkCertificate rotData16 corruptCert 16 4 216 9 1))
+    (!checkCertificateSlow rotData16 corruptCert 16 4 216 9 1))
 
   -- Wrong n/d (should fail size check)
   failures := failures + (← check "wrong n rejected"
-    (!checkCertificate rotData16 certData16 17 4 216 9 1))
+    (!checkCertificateSlow rotData16 certData16 17 4 216 9 1))
 
   -- Summary
   IO.println ""

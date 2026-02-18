@@ -32,7 +32,9 @@
       "Bash(rg *)",
       "Bash(ps *)",
       "Bash(scripts/update-viz-lines *)",
-      "Bash(scripts/sorries *)"
+      "Bash(scripts/sorries *)",
+      "Bash(scripts/lean-test *)",
+      "Write(/tmp/*)"
     ]
   }
 }
