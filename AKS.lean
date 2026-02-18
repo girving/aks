@@ -10,7 +10,7 @@ import AKS.Sort.Defs
 import AKS.Sort.Monotone
 import AKS.Sort.ZeroOne
 import AKS.Sort.Depth
-import AKS.Fin
+import AKS.Misc.Fin
 import AKS.Tree.AKSNetwork
 import AKS.Nearsort
 import AKS.Halver.Defs

@@ -145,11 +145,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 const PROOF_DATA = {
   repo: "https://github.com/girving/aks",
   nodes: [
-    // ── Fin.lean ──
-    { id: "Fin.pair_lt", file: "AKS/Fin.lean", line: 15, status: "proved", kind: "theorem",
+    // ── Misc/Fin.lean ──
+    { id: "Fin.pair_lt", file: "AKS/Misc/Fin.lean", line: 15, status: "proved", kind: "theorem",
       sig: "Fin.pair_lt : j.val * d + i.val < n * d",
       desc: "Product encoding bound for Fin n x Fin d." },
-    { id: "rank_fin_val", file: "AKS/Fin.lean", line: 66, status: "proved", kind: "lemma",
+    { id: "rank_fin_val", file: "AKS/Misc/Fin.lean", line: 66, status: "proved", kind: "lemma",
       sig: "rank_fin_val {n : ℕ} (i : Fin n) : rank i = i.val",
       desc: "The rank of a Fin n element equals its value. Unfolds rank and uses Fin.card_Iio." },
 
@@ -528,6 +528,14 @@ const PROOF_DATA = {
       sig: "bounded_tree_damage_pair_gives_zigzag :\n  HasImprovedBound zig ε t → HasBoundedTreeDamage zig ε t →\n  HasBoundedTreeDamage zag ε t → HasBoundedZigzagDamage zig zag ε t",
       desc: "Lemma 3 (AKS Section 8): PROVED. Algebraic — combines zig improvement + zig/zag stability, uses ε²≤ε. Previously FALSE (Phase 3e)." },
 
+    // ── Separator/Defs.lean (Paterson/Seiferas path, parallel to Tree/) ──
+    { id: "SepInitial", file: "AKS/Separator/Defs.lean", line: 29, status: "definition", kind: "def",
+      sig: "SepInitial {α : Type*} [Fintype α] [LinearOrder α]\n  (w : α → α) (γ ε : ℝ) : Prop",
+      desc: "ε-approximate γ-separation, initial direction (Seiferas 2009, Section 6). For each γ' ≤ γ, at most ε·γ'·n of the ⌊γ'n⌋ smallest values are outside the first ⌊γn⌋ positions." },
+    { id: "IsSeparator", file: "AKS/Separator/Defs.lean", line: 48, status: "definition", kind: "def",
+      sig: "IsSeparator {n : ℕ} (net : ComparatorNetwork n)\n  (γ ε : ℝ) : Prop",
+      desc: "Network-level (γ, ε)-separator: for every permutation input, the output satisfies ε-approximate γ-separation (both directions). For γ = 1/2, equivalent to IsEpsilonHalver." },
+
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
       sig: "sectionIndex (n t i : ℕ) : ℕ",
@@ -828,7 +836,7 @@ const PROOF_DATA = {
 
   // File groupings with display names
   groups: [
-    { id: "AKS/Fin.lean", label: "Fin.lean", color: "#1a1e24" },
+    { id: "AKS/Misc/Fin.lean", label: "Misc/Fin.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Regular.lean", label: "Graph/Regular.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Square.lean", label: "Graph/Square.lean", color: "#1a1e24" },
     { id: "AKS/Graph/Complete.lean", label: "Graph/Complete.lean", color: "#1a1e24" },
@@ -856,6 +864,7 @@ const PROOF_DATA = {
     { id: "AKS/Tree/Sorting.lean", label: "Tree/Sorting.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageStability.lean", label: "Tree/DamageStability.lean", color: "#1a1e24" },
     { id: "AKS/Tree/DamageImprovement.lean", label: "Tree/DamageImprovement.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/Defs.lean", label: "Separator/Defs.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]
 };

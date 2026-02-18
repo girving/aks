@@ -8,7 +8,7 @@
   `Complete.lean`.
 -/
 
-import AKS.Fin
+import AKS.Misc.Fin
 import Mathlib.Analysis.Matrix.Spectrum
 import Mathlib.Analysis.Matrix.HermitianFunctionalCalculus
 import Mathlib.LinearAlgebra.Matrix.NonsingularInverse

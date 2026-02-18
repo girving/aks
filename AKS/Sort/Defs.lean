@@ -5,7 +5,7 @@
   embedding, injectivity preservation, and asymptotic notation.
 -/
 
-import AKS.Fin
+import AKS.Misc.Fin
 
 import Mathlib.Data.List.Sort
 import Mathlib.Data.List.Perm.Basic
