@@ -103,6 +103,14 @@ def benchBaseline (label : String) (rotStr certStr : String)
   timed "V2 full          " fun () =>
     s!"ok={checkCertificateV2 rotStr certStr n d c₁ c₂ c₃}"
 
+  -- Production fast path: checkCertificateFast (scatter + inline + truncate + parallel PSD)
+  timed "prod fast        " fun () =>
+    s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
+
+  -- Just checkColumnNormBound (sequential, uses optimized psdColumnStep)
+  timed "columnNormBound  " fun () =>
+    s!"ok={checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃}"
+
   -- V7: buffer reuse + truncated loop + sparse mulAdj + inlined B²z
   timed "V7 buf+trunc+spr " fun () =>
     s!"ok={checkCertificateV7 rotStr certStr n d c₁ c₂ c₃}"
