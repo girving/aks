@@ -189,21 +189,32 @@ section Trajectory
 
 open Classical
 
-/-- A value `a` has "good radius" at level `l` if it's in the same chunk of
-    size `n / 2^l` as its target position `a.val`. Formally: the position of
-    value `a` in the state after `l` levels is in the same chunk as `a.val`.
+/-- A value `a` has "good radius" at level `l` if its position is not to the
+    right of its target chunk: `pos(a, l) / (n / 2^l) ≤ a.val / (n / 2^l)`.
 
-    Concretely: `pos(a, l) / (n / 2^l) = a.val / (n / 2^l)` where `pos(a, l)`
-    is the position of value `a` after level `l`.
+    This is a one-sided condition: it allows the value to be in an EARLIER chunk
+    (smaller position) but not a LATER chunk. This asymmetry is key:
+    - Type A errors (target-top going to bottom) increase position → lose good radius
+    - Type B errors (target-bottom going to top) decrease position → keep good radius
+    Since only Type A errors matter for `farSmallCount` (which counts values at
+    positions too far RIGHT), this one-sided definition gives the correct ε·k bound.
 
-    At level 0, good radius always holds (single chunk = whole array).
-    At each subsequent level, good radius can fail if the halver sends `a`
-    to the wrong sub-half of its chunk. -/
+    At level 0, good radius always holds (single chunk = whole array, 0 ≤ 0).
+    Good radius is never recovered once lost (wrong chunk at level l → wrong at l+1). -/
 private def hasGoodRadius {n : ℕ} (w : Fin n → Fin n) (hw : Function.Injective w)
     (a : Fin n) (l : ℕ) : Prop :=
   let chunkSize := n / 2 ^ l
   let pos := (Finite.surjective_of_injective hw a).choose
-  pos.val / chunkSize = a.val / chunkSize
+  pos.val / chunkSize ≤ a.val / chunkSize
+
+/-- Dual good radius: position is not to the LEFT of the target chunk.
+    Used for end-segment (FinalNearsorted) bounds where we need to show
+    values are not at positions that are too small. -/
+private def hasGoodRadiusDual {n : ℕ} (w : Fin n → Fin n) (hw : Function.Injective w)
+    (a : Fin n) (l : ℕ) : Prop :=
+  let chunkSize := n / 2 ^ l
+  let pos := (Finite.surjective_of_injective hw a).choose
+  a.val / chunkSize ≤ pos.val / chunkSize
 
 /-- The "error set" at level `l`: values `a < k` that have good radius at
     level `l` but lose it after the halver at level `l` acts.
@@ -224,8 +235,7 @@ private noncomputable def errorSetAtLevel {n : ℕ}
     radius at level `depth`, and the chunk size `R = n / 2^depth` is positive,
     then its position is < k + R, so it doesn't contribute to `farSmallCount`.
 
-    The proof: if `pos / R = a.val / R` and R > 0, then
-    `pos < (a.val / R + 1) * R ≤ a.val + R < k + R`. -/
+    The proof: `pos / R ≤ a.val / R` gives `pos < (a.val / R + 1) * R ≤ a.val + R < k + R`. -/
 private lemma good_radius_implies_close {n : ℕ}
     (w : Fin n → Fin n) (hw : Function.Injective w) (a : Fin n)
     (k depth : ℕ) (ha : a.val < k) (hR : 0 < n / 2 ^ depth)
@@ -236,36 +246,32 @@ private lemma good_radius_implies_close {n : ℕ}
   set R := n / 2 ^ depth with hR_def
   set pos := (Finite.surjective_of_injective hw a).choose
   intro ⟨hfar, _⟩
-  -- From pos / R = a.val / R: pos = (pos/R)*R + pos%R = (a.val/R)*R + pos%R
-  -- So pos < (a.val/R)*R + R = (a.val/R + 1)*R ≤ a.val + R < k + R
+  -- From pos / R ≤ a.val / R: pos < (a.val/R + 1)*R ≤ a.val + R < k + R
   have hmod : pos.val % R < R := Nat.mod_lt pos.val hR
   have hdiv : pos.val = (pos.val / R) * R + pos.val % R := by
     rw [Nat.mul_comm]; exact (Nat.div_add_mod pos.val R).symm
   have hle : (a.val / R) * R ≤ a.val := Nat.div_mul_le_self a.val R
-  rw [hgood] at hdiv
+  -- pos.val / R ≤ a.val / R, so (pos.val / R) * R ≤ (a.val / R) * R ≤ a.val
+  have := Nat.mul_le_mul_right R hgood
   omega
 
 /-- **Per-level error bound**: At each level `l`, the error set has at most `ε · k`
     elements. This is the core bound connecting `EpsilonInitialHalved` to the
     trajectory argument.
 
-    **Proof strategy** (not yet formalized):
-    Within each chunk `c`, the halver acts on a local permutation obtained by ranking
-    the chunk's values. By `exec_comp_monotone`, the halver commutes with the monotone
-    threshold `decide(k ≤ ·)`, so local rank < k_c ↔ val < k (where k_c = number of
-    chunk values with val < k). By `EpsilonInitialHalved` with threshold k_c:
-    at most `ε * k_c` values with val < k go to bottom positions. Summing: ≤ ε * k.
+    **Proof strategy** (key insight: one-sided good radius eliminates Type B errors):
+    With the `≤` definition of `hasGoodRadius` (`pos/cs ≤ val/cs`), only "Type A"
+    errors contribute: home values targeting the top sub-half that go to the bottom.
+    Type B errors (target-bottom going to top) actually help by decreasing position.
 
-    **Open difficulty**: The error set counts values going to the "wrong sub-half"
-    (relative to their target at level l+1), not just "bottom positions". Foreign
-    values (from other chunks) distort local rankings, causing some correctly-placed
-    home values to have local rank on the wrong side of `halfChunk`. This means:
-    - "val < k at bottom" (bounded by ε·k) includes correctly-classified values
-    - "target-bottom val < k at top" (the other error source) needs `EpsilonFinalHalved`
-      with the half-chunk threshold, giving ε·halfChunk per chunk = ε·n/2 total.
-    An earlier per-chunk decomposition was FALSE: see commit history.
-    The tight aggregate bound likely requires a more careful argument connecting
-    both `EpsilonInitialHalved` and `EpsilonFinalHalved` simultaneously. -/
+    Per chunk c at level l, errors are bounded by `EpsilonInitialHalved` applied to
+    the local halver. The key counting argument:
+    - Let `t_c` = |{a : val(a) < k, a targets top sub-half of chunk c, a in chunk c}|
+    - Let `f_c` = |{a : val(a) < k, a in chunk c but from an earlier target chunk}|
+    - Per-chunk error ≤ ε · (t_c + f_c) (via EpsilonInitialHalved with j = t_c + f_c)
+    - Sum: Σ(t_c + f_c) ≤ k (since each val-<-k value contributes to at most one term,
+      and values with good radius targeting bottom contribute to neither term).
+    Therefore total ≤ ε · k. -/
 private lemma error_set_bound {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
@@ -315,42 +321,34 @@ private lemma not_good_radius_in_error_set {n : ℕ}
       exact ⟨l, Nat.lt_succ_of_lt hl, hmem⟩
 
 /-- **Dual convergence lemma** (Step 2, end segments): If a value `a` with
-    `a.val ≥ n - k` has good radius at level `depth`, and R > 0, then its
+    `a.val ≥ n - k` has good dual radius at level `depth`, and R > 0, then its
     position is ≥ n - k - R, so it doesn't contribute to `farLargeCount`.
 
-    The proof: `pos / R = a.val / R` and `a.val ≥ n - k` imply
-    `pos ≥ ((n-k)/R) * R = (n-k) - (n-k)%R ≥ n - k - R + 1`,
+    The proof: `a.val / R ≤ pos / R` gives `pos ≥ (a.val/R) * R ≥ ((n-k)/R) * R`,
     contradicting `pos + k + R < n`. -/
 private lemma good_radius_implies_close_dual {n : ℕ}
     (w : Fin n → Fin n) (hw : Function.Injective w) (a : Fin n)
     (k depth : ℕ) (ha : n ≤ a.val + k) (hR : 0 < n / 2 ^ depth)
-    (hgood : hasGoodRadius w hw a depth) :
+    (hgood : hasGoodRadiusDual w hw a depth) :
     ¬((Finite.surjective_of_injective hw a).choose.val + k + n / 2 ^ depth < n ∧
        n ≤ (w (Finite.surjective_of_injective hw a).choose).val + k) := by
-  unfold hasGoodRadius at hgood
+  unfold hasGoodRadiusDual at hgood
   set R := n / 2 ^ depth with hR_def
   set pos := (Finite.surjective_of_injective hw a).choose
   intro ⟨hfar, _⟩
-  -- pos / R = a.val / R, and a.val ≥ n - k
-  -- pos ≥ (pos / R) * R = (a.val / R) * R ≥ ((n-k)/R) * R
-  -- ((n-k)/R) * R = (n-k) - (n-k)%R, and (n-k)%R < R, so ((n-k)/R)*R > n-k-R
+  -- a.val / R ≤ pos / R gives pos ≥ (a.val/R) * R ≥ ((n-k)/R) * R
   have hpos_ge : (pos.val / R) * R ≤ pos.val := Nat.div_mul_le_self pos.val R
-  -- From hfar: pos.val + k + R < n, so pos.val < n - k - R
-  -- From hgood: pos.val / R = a.val / R
-  -- a.val ≥ n - k, so a.val / R ≥ (n - k) / R
   have ha_div : (n - k) / R ≤ a.val / R := Nat.div_le_div_right (by omega)
-  rw [hgood] at hpos_ge
-  -- pos.val ≥ (a.val / R) * R ≥ ((n-k) / R) * R
-  have hge : ((n - k) / R) * R ≤ pos.val := le_trans (Nat.mul_le_mul_right R ha_div) hpos_ge
-  -- ((n-k) / R) * R ≥ (n - k) - (R - 1) = n - k - R + 1
+  -- Chain: ((n-k)/R)*R ≤ (a.val/R)*R ≤ (pos/R)*R ≤ pos
+  have hge : ((n - k) / R) * R ≤ pos.val :=
+    le_trans (Nat.mul_le_mul_right R (le_trans ha_div hgood)) hpos_ge
   have hmod : (n - k) % R < R := Nat.mod_lt (n - k) hR
   have hdivmod : (n - k) = ((n - k) / R) * R + (n - k) % R := by
     rw [Nat.mul_comm]; exact (Nat.div_add_mod (n - k) R).symm
-  -- So ((n-k)/R)*R = (n-k) - (n-k)%R, and pos ≥ this, giving pos + k + R ≥ n + 1
   omega
 
-/-- **Dual error set**: values `a` with `a.val ≥ n - k` that have good radius
-    at level `l` but lose it at level `l + 1`. -/
+/-- **Dual error set**: values `a` with `a.val ≥ n - k` that have good dual
+    radius at level `l` but lose it at level `l + 1`. -/
 private noncomputable def errorSetAtLevelDual {n : ℕ}
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (v : Equiv.Perm (Fin n)) (k l : ℕ) : Finset (Fin n) :=
@@ -360,14 +358,15 @@ private noncomputable def errorSetAtLevelDual {n : ℕ}
   let hw_l1 := ComparatorNetwork.exec_injective _ v.injective
   univ.filter (fun a : Fin n ↦
     n ≤ a.val + k ∧
-    hasGoodRadius w_l hw_l a l ∧
-    ¬hasGoodRadius w_l1 hw_l1 a (l + 1))
+    hasGoodRadiusDual w_l hw_l a l ∧
+    ¬hasGoodRadiusDual w_l1 hw_l1 a (l + 1))
 
 /-- **Per-level error bound (dual)**: At each level `l`, the dual error set
     has at most `ε · k` elements. Dual of `error_set_bound`.
 
-    Uses `EpsilonFinalHalved` (which is part of `IsEpsilonHalver`).
-    See `error_set_bound` for documentation of proof strategy and open difficulties. -/
+    Uses `EpsilonFinalHalved` (which is part of `IsEpsilonHalver`) with
+    `hasGoodRadiusDual` (`≥`): only Type A-dual errors (target-bottom going
+    to top, decreasing position) cause loss of dual good radius. -/
 private lemma error_set_bound_dual {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
@@ -376,20 +375,29 @@ private lemma error_set_bound_dual {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     ((errorSetAtLevelDual halvers v k l).card : ℝ) ≤ ε * ↑k := by
   sorry
 
-/-- **Dual error set coverage**: If `a.val ≥ n - k` and ¬goodRadius at depth,
+/-- At level 0, every value has good dual radius (0 ≤ 0). -/
+private lemma good_radius_base_dual {n : ℕ} (w : Fin n → Fin n)
+    (hw : Function.Injective w) (a : Fin n) :
+    hasGoodRadiusDual w hw a 0 := by
+  unfold hasGoodRadiusDual
+  simp only [pow_zero, Nat.div_one]
+  rw [Nat.div_eq_of_lt a.isLt,
+      Nat.div_eq_of_lt (Finite.surjective_of_injective hw a).choose.isLt]
+
+/-- **Dual error set coverage**: If `a.val ≥ n - k` and ¬goodRadiusDual at depth,
     then `a ∈ errorSetAtLevelDual` for some `l < depth`. -/
 private lemma not_good_radius_in_error_set_dual {n : ℕ}
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (v : Equiv.Perm (Fin n)) (a : Fin n)
     (k depth : ℕ) (ha : n ≤ a.val + k)
-    (hbad : ¬hasGoodRadius
+    (hbad : ¬hasGoodRadiusDual
       ((halverNetwork n halvers depth).exec (v : Fin n → Fin n))
       (ComparatorNetwork.exec_injective _ v.injective) a depth) :
     ∃ l, l < depth ∧ a ∈ errorSetAtLevelDual halvers v k l := by
   induction depth with
-  | zero => exact absurd (good_radius_base _ _ a) hbad
+  | zero => exact absurd (good_radius_base_dual _ _ a) hbad
   | succ d ih =>
-    by_cases hd : hasGoodRadius
+    by_cases hd : hasGoodRadiusDual
         ((halverNetwork n halvers d).exec (v : Fin n → Fin n))
         (ComparatorNetwork.exec_injective _ v.injective) a d
     · exact ⟨d, Nat.lt_succ_of_le le_rfl,
@@ -631,7 +639,7 @@ private lemma farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ)
     rw [Finset.mem_filter] at hp
     have hp_far : p.val + k + R < n := hp.2.1
     have ha_large : n ≤ a.val + k := by rw [← hpw]; exact hp.2.2
-    have hbad : ¬hasGoodRadius w hw_inj a depth := by
+    have hbad : ¬hasGoodRadiusDual w hw_inj a depth := by
       intro hgood
       apply good_radius_implies_close_dual w hw_inj a k depth ha_large hR_pos hgood
       have hsurj_eq : (Finite.surjective_of_injective hw_inj a).choose = p := by
