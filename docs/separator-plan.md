@@ -102,6 +102,45 @@ and revealed important corrections to the plan. Key findings:
    achievable because small bags (2-4 items) are perfectly sorted by any
    comparator network. The ε error only matters for large bags.
 
+### S2b: Approximate separator validation (completed)
+
+Tested three separator models beyond perfect sort:
+
+1. **Adversarial deterministic** (`SepModel::Adversarial`): introduces exactly
+   ⌊ε·k⌋ errors — the maximum allowed by the separator definition. Uses
+   ⌊ε·half⌋ halving errors (items near midpoint swapped between children)
+   and ⌊ε·F⌋ fringe leakage (items near fringe boundary moved to middle).
+   For small bags (⌊ε·m/2⌋ = 0): zero errors, matching real separators.
+
+2. **Formal stochastic** (`SepModel::Formal`): independently displaces each
+   item with probability ε, shuffles displaced items. Good expected behavior
+   but violates separator definition for small quantiles (variance issue).
+
+3. **Random swap** (`SepModel::RandomSwap`): always swaps ≥ 1 pair. Badly
+   broken for small bags.
+
+**Results (n = 8 to 16384, Seiferas preview params):**
+
+| Model | Invariant pass rate | Convergence rate | Notes |
+|-------|-------------------|-----------------|-------|
+| Perfect | 100% | 7·log₂(n) | Baseline |
+| Adversarial | **100%** | 7·log₂(n) | Worst-case, same as perfect |
+| Formal | 79-100% (worse at large n) | 7·log₂(n) when passing | Failures are model artifacts |
+| RandomSwap | 0% for n ≥ 16 | N/A | Clause 4 fails immediately |
+
+**Key findings:**
+- The adversarial model passes both (λ,ε)-separation AND ε-halving checks 100%.
+- Invariant holds under worst-case separator errors for all tested sizes.
+- The ⌊·⌋ rounding is critical: for bags with m < 2/ε ≈ 198 items, ⌊ε·m/2⌋ = 0
+  means ZERO halving errors. This prevents stranger creation at deep levels where
+  the bound λ·ε^(j-1)·b < 1 requires zero strangers.
+- Formal model failures (1-21%) are stochastic variance at small quantiles, not
+  real invariant problems. The Bernoulli model can displace the single smallest
+  item with probability ε, exceeding the deterministic ⌊ε·1⌋ = 0 bound.
+- The separator's halving property (ε-halving) is a separate constraint from
+  (λ,ε)-separation — both are needed. The Lean formalization must track both
+  as hypotheses (see Seiferas Section 6: "neither quite implies the other").
+
 ## File Structure
 
 ```
@@ -237,9 +276,10 @@ def halverToSeparatorFamily (family : HalverFamily ε d) (t : ℕ)
 
 ## `Bags/` — Sorting via the Bag Tree
 
-### Phase B1: `Bags/Defs.lean` — Bag Definitions and j-Strangers
+### Phase B1: `Bags/Defs.lean` — Bag Definitions and j-Strangers (IMPLEMENTED)
 
 Definitions for the binary bag tree and stranger counting (Seiferas Sections 2–3).
+**Status**: All definitions and basic lemmas implemented. `isJStranger_antitone` sorry'd.
 
 ```lean
 /-- The bag tree has levels 0 (root) to maxLevel (pairs).
@@ -286,9 +326,11 @@ theorem bagInterval_disjoint ...       -- bags at same level are disjoint
 
 **Risk**: LOW.
 
-### Phase B2: `Bags/Invariant.lean` — Four-Clause Invariant
+### Phase B2: `Bags/Invariant.lean` — Four-Clause Invariant (IMPLEMENTED)
 
-Define the invariant and prove it is maintained by one stage (Seiferas Section 5).
+Invariant defined and maintenance theorems stated (Seiferas Section 5).
+**Status**: `SeifInvariant` structure, parameter constraints, `initialInvariant` proved.
+Maintenance theorems sorry'd. Critical bottleneck: `stranger_bound_maintained_eq1`.
 
 #### Invariant definition
 
@@ -425,7 +467,7 @@ theorem sibling_leakage_bound ...
 **Fallback**: Axiomatize B2e if the proof is too hard. The statement is
 directly from Seiferas Section 5 and can be verified against the paper.
 
-### Phase B3: `Bags/Stage.lean` — One-Stage Construction
+### Phase B3: `Bags/Stage.lean` — One-Stage Construction (IMPLEMENTED)
 
 ```lean
 /-- Apply separator to all active bags at stage t. Computable. -/
@@ -446,7 +488,7 @@ theorem separatorStage_depth_le :
 **Risk**: MEDIUM. The depth proof needs `active_bags_disjoint` →
 `depth_le_of_decomposition`.
 
-### Phase B4: `Bags/TreeSort.lean` — Assembly
+### Phase B4: `Bags/TreeSort.lean` — Assembly (IMPLEMENTED)
 
 ```lean
 /-- The full separator sorting network. Computable. -/
@@ -490,13 +532,13 @@ theorem separatorSortingNetwork_depth_bound :
 | S2a. Halver is separator | **DONE** | `halver_isSeparator_half` proved |
 | S2b. Halving refines separation | MEDIUM | Rank/floor bookkeeping |
 | S2c–e. Assembly + bundle | LOW | Induction + definition |
-| B1. Bag/stranger defs | LOW | Definitions, validated by Rust |
-| B2a–b. Clauses 1–2 | LOW | Direct from construction |
-| B2c. Clause 3 (capacity) | MEDIUM | Floor arithmetic, Rust-validated bounds |
-| B2d. Clause 4, j>1 | MEDIUM | Combinatorial counting |
-| B2e. Clause 4, j=1 | **HIGH** | Critical bottleneck |
-| B3. Stage depth | MEDIUM | Disjointness proof |
-| B4. Assembly | MEDIUM | Connecting pieces |
+| B1. Bag/stranger defs | **DONE** | `Bags/Defs.lean` implemented, Rust-validated |
+| B2a–b. Clauses 1–2 | **DONE** (structure) | `initialInvariant` proved, maintenance sorry'd |
+| B2c. Clause 3 (capacity) | MEDIUM | `capacity_maintained` sorry'd |
+| B2d. Clause 4, j>1 | MEDIUM | `stranger_bound_maintained_gt1` sorry'd |
+| B2e. Clause 4, j=1 | **HIGH** | `stranger_bound_maintained_eq1` sorry'd — critical bottleneck |
+| B3. Stage depth | **DONE** (structure) | `Stage.lean` implemented, sorry'd proofs |
+| B4. Assembly | **DONE** (structure) | `TreeSort.lean` implemented, `depth_bound` proved |
 
 **Critical path**: B2e (j=1 stranger bound) is the hardest lemma.
 Everything else is LOW–MEDIUM risk.

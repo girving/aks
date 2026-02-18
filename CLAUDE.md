@@ -262,12 +262,13 @@ See `docs/separator-plan.md` for full design. Planned files:
 1. **`Family.lean`** — `SeparatorFamily` structure (analogous to `HalverFamily`)
 2. **`FromHalver.lean`** — `halverToSeparator` computable construction (Seiferas Section 6)
 
-### `AKS/Bags/` — Bag-Tree Sorting (Planned)
+### `AKS/Bags/` — Bag-Tree Sorting (~450 lines)
 Seiferas's bag-based tree argument: separators → O(log n) depth sorting network.
-1. **`Defs.lean`** — bag tree, register assignment, j-strangers
-2. **`Invariant.lean`** — four-clause invariant maintenance (Seiferas Section 5)
-3. **`Stage.lean`** — one-stage network construction + depth bound
-4. **`TreeSort.lean`** — full sorting network, correctness, depth O(log n)
+All definitions validated by Rust simulation (`rust/test-bags.rs`).
+1. **`Defs.lean`** (~125 lines) — `bagSize`, `nativeBagIdx`, `isJStranger`, `jStrangerCount`. Basic lemmas proved. `isJStranger_antitone` sorry'd.
+2. **`Invariant.lean`** (~215 lines) — `SeifInvariant` (four-clause structure), `SatisfiesC3`/`SatisfiesC4_gt1`/`SatisfiesC4_eq1` (parameter constraints), `initialInvariant` (proved), maintenance theorems (sorry'd). Critical bottleneck: `stranger_bound_maintained_eq1` (j=1 case).
+3. **`Stage.lean`** (~55 lines) — `separatorStage`, `active_bags_disjoint` (sorry'd), `separatorStage_depth_le` (sorry'd).
+4. **`TreeSort.lean`** (~80 lines) — `separatorSortingNetwork`, `separatorSortingNetwork_depth_bound` (proved via calc), `separatorSortingNetwork_sorts` (sorry'd).
 
 ### Data flow
 ```

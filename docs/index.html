@@ -290,16 +290,16 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 410, status: "sorry", kind: "theorem",
+    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 418, status: "sorry", kind: "theorem",
       sig: "farSmallCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farSmallCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "After depth levels, far-small count at radius n/2^depth is ≤ ε·depth·k. Core of AKS Section 4: requires trajectory/displaced-elements argument with union bound over levels.", difficulty: "weeks" },
-    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 605, status: "sorry", kind: "theorem",
+    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 613, status: "sorry", kind: "theorem",
       sig: "farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farLargeCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "Dual of farSmallCount_depth_bound for end segments.", difficulty: "weeks" },
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 516, status: "proved", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 524, status: "proved", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound. Reformulates as farSmallCount via sdiff_image_card_eq_far_count, then applies depth bound + blowup_covers_displacement." },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 687, status: "proved", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 695, status: "proved", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via farLargeCount_depth_bound and rank_fin_od_val." },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -578,6 +578,68 @@ const PROOF_DATA = {
     { id: "halverToSeparatorFamily", file: "AKS/Separator/FromHalver.lean", line: 153, status: "sorry", kind: "def",
       sig: "halverToSeparatorFamily (family : HalverFamily ε d) (t : ℕ) :\n  SeparatorFamily (1/2^t) (2*t*ε) (t*d)",
       desc: "Bundle halver-to-separator construction into a SeparatorFamily. Depends on halverToSeparator_isSeparator and depth bound." },
+
+    // ── Bags/Defs.lean ──
+    { id: "bagSize", file: "AKS/Bags/Defs.lean", line: 27, status: "definition", kind: "def",
+      sig: "bagSize (n level : ℕ) : ℕ",
+      desc: "Size of each bag's native interval at level: n / 2^level. At root: n, at leaves: 2." },
+    { id: "nativeBagIdx", file: "AKS/Bags/Defs.lean", line: 31, status: "definition", kind: "def",
+      sig: "nativeBagIdx (n level : ℕ) (r : ℕ) : ℕ",
+      desc: "Bag index native to rank r at given level: r / bagSize. Maps sorted ranks to bag tree positions." },
+    { id: "isJStranger", file: "AKS/Bags/Defs.lean", line: 45, status: "definition", kind: "def",
+      sig: "isJStranger (n rank level idx j : ℕ) : Prop",
+      desc: "Item is j-strange if native path diverges from bag ancestry at level (level - j). Guards: j ≥ 1 and j ≤ level." },
+    { id: "jStrangerCount", file: "AKS/Bags/Defs.lean", line: 51, status: "definition", kind: "def",
+      sig: "jStrangerCount (n : ℕ) (perm : Fin n → Fin n)\n  (regs : Finset (Fin n)) (level idx j : ℕ) : ℕ",
+      desc: "Count of j-strangers among items in a bag. Key measure for the Seiferas invariant." },
+    { id: "isJStranger_antitone", file: "AKS/Bags/Defs.lean", line: 81, status: "sorry", kind: "theorem",
+      sig: "isJStranger_antitone : isJStranger n rank level idx (j+1) →\n  isJStranger n rank level idx j",
+      desc: "(j+1)-strange implies j-strange: divergence propagates via a/2 ≠ b/2 → a ≠ b. Requires n power of 2." },
+
+    // ── Bags/Invariant.lean ──
+    { id: "SeifInvariant", file: "AKS/Bags/Invariant.lean", line: 52, status: "definition", kind: "structure",
+      sig: "SeifInvariant (n : ℕ) (A ν lam ε : ℝ) (t : ℕ)\n  (perm : Fin n → Fin n) (bags : BagAssignment n) : Prop",
+      desc: "Seiferas four-clause invariant: (1) alternating empty, (2) uniform size, (3) capacity ≤ n·ν^t·A^level, (4) j-strangers ≤ lam·ε^(j-1)·capacity." },
+    { id: "initialInvariant", file: "AKS/Bags/Invariant.lean", line: 105, status: "proved", kind: "theorem",
+      sig: "initialInvariant (n : ℕ) (A ν lam ε : ℝ) (perm : Fin n → Fin n) :\n  SeifInvariant n A ν lam ε 0 perm (initialBags n)",
+      desc: "PROVED. Initial invariant holds at t=0: all items in root, zero strangers. Direct from definitions." },
+    { id: "capacity_maintained", file: "AKS/Bags/Invariant.lean", line: 171, status: "sorry", kind: "theorem",
+      sig: "capacity_maintained : SeifInvariant ... t ... →\n  bags'.card ≤ bagCapacity n A ν (t+1) level",
+      desc: "Clause (3) capacity maintained after one stage. Requires C3: ν ≥ 4·lam·A + 5/(2·A)." },
+    { id: "stranger_bound_maintained_gt1", file: "AKS/Bags/Invariant.lean", line: 182, status: "sorry", kind: "theorem",
+      sig: "stranger_bound_maintained_gt1 : j ≥ 2 →\n  jStrangerCount ≤ lam·ε^(j-1)·bagCapacity(t+1)",
+      desc: "Clause (4) for j ≥ 2: stranger bound maintained. Sources: (j+1)-strangers from children + (j-1)-strangers from parent." },
+    { id: "stranger_bound_maintained_eq1", file: "AKS/Bags/Invariant.lean", line: 196, status: "sorry", kind: "theorem",
+      sig: "stranger_bound_maintained_eq1 :\n  jStrangerCount ... 1 ≤ lam·bagCapacity(t+1)",
+      desc: "CRITICAL: 1-stranger bound maintained (Seiferas Section 5). Sibling leakage via geometric series in (2εA)²." },
+    { id: "invariant_maintained", file: "AKS/Bags/Invariant.lean", line: 207, status: "sorry", kind: "theorem",
+      sig: "invariant_maintained : SeifInvariant ... t ... →\n  SeifInvariant ... (t+1) ...",
+      desc: "Full invariant maintained after one stage. Assembles all clause maintenance sublemmas." },
+
+    // ── Bags/Stage.lean ──
+    { id: "separatorStage", file: "AKS/Bags/Stage.lean", line: 46, status: "definition", kind: "def",
+      sig: "separatorStage (n : ℕ) (sep : SeparatorFamily gam eps d_sep)\n  (stageIdx : ℕ) : ComparatorNetwork n",
+      desc: "One stage: apply separator to all active bags in parallel. Active bags have disjoint registers." },
+    { id: "active_bags_disjoint", file: "AKS/Bags/Stage.lean", line: 30, status: "sorry", kind: "theorem",
+      sig: "active_bags_disjoint : (l₁,i₁) ≠ (l₂,i₂) →\n  Disjoint (bags l₁ i₁) (bags l₂ i₂)",
+      desc: "Active bags have disjoint registers. Follows from alternating-empty invariant + bag partition." },
+    { id: "separatorStage_depth_le", file: "AKS/Bags/Stage.lean", line: 52, status: "sorry", kind: "theorem",
+      sig: "separatorStage_depth_le :\n  (separatorStage n sep t).depth ≤ d_sep",
+      desc: "One stage depth = separator depth, since all bags run in parallel (disjoint wires)." },
+
+    // ── Bags/TreeSort.lean ──
+    { id: "separatorSortingNetwork", file: "AKS/Bags/TreeSort.lean", line: 26, status: "definition", kind: "def",
+      sig: "separatorSortingNetwork (n : ℕ) (sep : SeparatorFamily gam eps d_sep)\n  (numStages : ℕ) : ComparatorNetwork n",
+      desc: "Full separator sorting network: concatenate numStages stages. Computable construction." },
+    { id: "separatorSortingNetwork_depth_le", file: "AKS/Bags/TreeSort.lean", line: 34, status: "sorry", kind: "theorem",
+      sig: "separatorSortingNetwork_depth_le :\n  depth ≤ numStages * d_sep",
+      desc: "Total depth ≤ numStages × separator depth. From per-stage depth bound." },
+    { id: "separatorSortingNetwork_sorts", file: "AKS/Bags/TreeSort.lean", line: 61, status: "sorry", kind: "theorem",
+      sig: "separatorSortingNetwork_sorts :\n  Monotone (net.exec v)",
+      desc: "Correctness: separator sorting network sorts all Boolean inputs. Via invariant convergence + zero strangers." },
+    { id: "separatorSortingNetwork_depth_bound", file: "AKS/Bags/TreeSort.lean", line: 73, status: "proved", kind: "theorem",
+      sig: "separatorSortingNetwork_depth_bound :\n  depth ≤ C * d_sep * Nat.log 2 n",
+      desc: "PROVED. O(log n) depth bound. Direct from depth_le + numStages = C·log₂(n)." },
 
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
@@ -902,7 +964,37 @@ const PROOF_DATA = {
     ["IsEpsilonHalver", "separator_halving_step"],
     ["halverToSeparator", "halverToSeparatorFamily"],
     ["halverToSeparator_isSeparator", "halverToSeparatorFamily"],
-    ["SeparatorFamily", "halverToSeparatorFamily"]
+    ["SeparatorFamily", "halverToSeparatorFamily"],
+
+    // Bags/Defs
+    ["bagSize", "nativeBagIdx"],
+    ["nativeBagIdx", "isJStranger"],
+    ["isJStranger", "jStrangerCount"],
+    ["isJStranger", "isJStranger_antitone"],
+
+    // Bags/Invariant
+    ["jStrangerCount", "SeifInvariant"],
+    ["SeifInvariant", "initialInvariant"],
+    ["SeifInvariant", "capacity_maintained"],
+    ["SeifInvariant", "stranger_bound_maintained_gt1"],
+    ["SeifInvariant", "stranger_bound_maintained_eq1"],
+    ["capacity_maintained", "invariant_maintained"],
+    ["stranger_bound_maintained_gt1", "invariant_maintained"],
+    ["stranger_bound_maintained_eq1", "invariant_maintained"],
+
+    // Bags/Stage
+    ["SeparatorFamily", "separatorStage"],
+    ["SeifInvariant", "active_bags_disjoint"],
+    ["active_bags_disjoint", "separatorStage_depth_le"],
+    ["separatorStage", "separatorStage_depth_le"],
+
+    // Bags/TreeSort
+    ["separatorStage", "separatorSortingNetwork"],
+    ["separatorStage_depth_le", "separatorSortingNetwork_depth_le"],
+    ["separatorSortingNetwork", "separatorSortingNetwork_depth_le"],
+    ["separatorSortingNetwork", "separatorSortingNetwork_sorts"],
+    ["invariant_maintained", "separatorSortingNetwork_sorts"],
+    ["separatorSortingNetwork_depth_le", "separatorSortingNetwork_depth_bound"]
   ],
 
   // File groupings with display names
@@ -938,6 +1030,10 @@ const PROOF_DATA = {
     { id: "AKS/Separator/Defs.lean", label: "Separator/Defs.lean", color: "#1a1e24" },
     { id: "AKS/Separator/Family.lean", label: "Separator/Family.lean", color: "#1a1e24" },
     { id: "AKS/Separator/FromHalver.lean", label: "Separator/FromHalver.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Defs.lean", label: "Bags/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Invariant.lean", label: "Bags/Invariant.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Stage.lean", label: "Bags/Stage.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/TreeSort.lean", label: "Bags/TreeSort.lean", color: "#1a1e24" },
     { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
   ]
 };
