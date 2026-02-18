@@ -5,14 +5,14 @@
   AKS construction to produce the final unparameterized results.
 
   The key chain:
-  1. `explicit_expanders_exist_zigzag` (ZigZag.lean): zig-zag expander family, gap ≤ c < 1
+  1. `explicit_expanders_exist_zigzag` (ZigZag/Expanders.lean): zig-zag expander family, gap ≤ c < 1
   2. Iterated squaring (`squareIter`): reduces spectral gap from c to c^(2^k) < 1/2
   3. `zigzag_implies_aks_network` (AKSNetwork.lean): expander family with gap < 1/2 → O(n log n) sorting networks
   4. This file: plug them together in `aks_sorting_networks_exist`
 -/
 
 import AKS.Tree.AKSNetwork
-import AKS.ZigZag
+import AKS.ZigZag.Expanders
 import AKS.Graph.Square
 
 open Real
@@ -76,7 +76,7 @@ theorem expander_family_small_gap {D : ℕ}
   -- Find k such that c^(2^k) < β
   obtain ⟨k, hk⟩ := exists_pow_two_pow_lt hc_pos.le hc_lt hβ_pos
   -- The zig-zag family gives D²-regular graphs with gap ≤ c at every size
-  -- (sorry'd in ZigZag.lean via Cauchy interlacing)
+  -- (sorry'd in ZigZag/Expanders.lean via Cauchy interlacing)
   have hfamily := explicit_expanders_exist_zigzag hβ hβ_le hbase hc_le hiter
   -- Square each graph k times to get (D²)^(2^k)-regular graphs with gap ≤ c^(2^k) < β
   refine ⟨(D * D) ^ (2 ^ k), fun n hn ↦ ?_⟩

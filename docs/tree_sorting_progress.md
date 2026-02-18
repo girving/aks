@@ -384,7 +384,7 @@ Break into phases with risk levels. Document fallbacks (axiomatize, defer, refor
 ## Connection to Other Work
 
 ### Zig-Zag Expander Construction (Parallel Track)
-**Different CC instance working on:** `AKS/ZigZag.lean`, `AKS/ZigZagOperators.lean`
+**Different CC instance working on:** `AKS/ZigZag/Expanders.lean`, `AKS/ZigZagOperators.lean`
 
 **IMPORTANT:** This is **unrelated** to tree sorting despite name collision!
 - **Expander zig-zag:** Graph product G₁ ⊗_z G₂ (three-step walk)

@@ -60,7 +60,7 @@ Our formalization follows this structure:
 1. **Comparator networks and 0-1 principle** (`AKS/Basic.lean`)
    - Based on standard results from Knuth TAOCP Vol. 3
 
-2. **Expander graphs via zig-zag product** (`AKS/ZigZag.lean`, `AKS/ZigZagOperators.lean`, `AKS/ZigZagSpectral.lean`)
+2. **Expander graphs via zig-zag product** (`AKS/ZigZag/Expanders.lean`, `AKS/ZigZagOperators.lean`, `AKS/ZigZagSpectral.lean`)
    - Following Reingold–Vadhan–Wigderson (2002)
 
 3. **ε-halvers from expanders** (`AKS/Halver.lean`)

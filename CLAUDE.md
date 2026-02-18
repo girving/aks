@@ -26,7 +26,7 @@ The project explores two parallel approaches for the tree-based correctness proo
 
 2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (γ,ε)-separators + outsider counting with Seiferas's single potential function. Definitions in place; downstream files not yet implemented. See `docs/separator-plan.md` for the full design.
 
-Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
+Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag/Expanders.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
 
 ## Build Commands
 
@@ -227,7 +227,7 @@ Abstract operator theory connecting walk bounds to spectral gap bounds. Imports 
 1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
 2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
 
-### `AKS/ZigZag.lean` — Expander Families (~115 lines)
+### `AKS/ZigZag/Expanders.lean` — Expander Families (~115 lines)
 Assembles the spectral bound and builds the iterated construction:
 1. **Spectral composition theorem** — `zigzag_spectral_bound` (assembles sublemmas)
 2. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
@@ -251,7 +251,7 @@ See `docs/separator-plan.md` for full design. Planned files:
 
 ### Data flow
 ```
-Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
+Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag/Expanders.lean
                                → Graph/Complete.lean           ↓
                               → Halver/Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
                               → WalkBound.lean ──→ CertificateBridge.lean
@@ -275,7 +275,7 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
 - Move reusable helpers into their own files (e.g., `Fin` arithmetic → `AKS/Misc/Fin.lean`). Iterate in-file during development, extract before committing.
 - Split files beyond ~300 lines. Smaller files = faster incremental checking (imports are precompiled; only the current file re-elaborates from the change point).
-- **Use parent module + subdirectory for cohesive subsystems.** Lean 4 allows `AKS/Name.lean` (parent module) and `AKS/Name/*.lean` (child modules) to coexist. The parent re-exports or assembles results; children hold the implementation. Example: `AKS/ZigZag.lean` imports `AKS.ZigZag.Operators`, `AKS.ZigZag.Spectral`, etc. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
+- **Use subdirectories for cohesive subsystems.** Group related files under `AKS/Name/*.lean`. Consumers import leaf modules directly. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
 - **Parameterize theorems over abstract bounds, not hard-coded constants.** Take spectral gap bounds (β, c, etc.) as parameters with hypotheses, not baked-in fractions. Chain `.trans` through hypotheses, not `norm_num`. Prefer explicit types/degrees (`D * D`) over `∃ d`, and concrete objects as parameters over axioms in statements. Motivation: we want explicit, computable, extractable constants.
 - **Avoid non-terminal `simp`** — use `simp only [specific, lemmas]` or `rw` instead. Non-terminal `simp` is fragile (new simp lemmas can break downstream tactics). Exception: acceptable if the alternative is much uglier, but document why.

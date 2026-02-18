@@ -182,4 +182,4 @@ theorem explicit_expanders_exist_zigzag {D : ℕ}
 
 -- The `zigzag_implies_aks_network` theorem connecting this to the AKS
 -- sorting network construction is in the root AKS.lean module, since it
--- references types from both `AKS.Basic` and `AKS.ZigZag`.
+-- references types from both `AKS.Basic` and `AKS.ZigZag.Expanders`.

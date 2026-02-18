@@ -28,7 +28,7 @@ import AKS.ZigZag.Operators
 import AKS.ZigZag.Spectral
 import AKS.ZigZag.RVWInequality
 import AKS.ZigZag.RVWBound
-import AKS.ZigZag
+import AKS.ZigZag.Expanders
 import AKS.Certificate
 import AKS.WalkBound
 import AKS.DiagDominant
