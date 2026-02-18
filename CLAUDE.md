@@ -22,11 +22,11 @@ The key papers are checked into the repo:
 
 The project explores two parallel approaches for the tree-based correctness proof (halvers → sorting network):
 
-1. **AKS original** (`TreeSorting.lean`, `Nearsort.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
+1. **AKS original** (`TreeSorting.lean`, `Nearsort/Defs.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
 
 2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (γ,ε)-separators + outsider counting with Seiferas's single potential function. Definitions in place; downstream files not yet implemented. See `docs/separator-plan.md` for the full design.
 
-Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
+Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag/Expanders.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
 
 ## Build Commands
 
@@ -43,18 +43,22 @@ scripts/sorries                             # Audit sorry, #exit, native_decide,
 
 No tests or linters — correctness is verified through Lean's type checker.
 
+### Exploratory Lean snippets
+
+Use `scripts/lean-test` to run ad-hoc Lean snippets (checking types, `#print`, `#check`, proof experiments). Write the snippet to a `/tmp/*.lean` file first, then run `scripts/lean-test /tmp/foo.lean`. This avoids repeated permission prompts for `lake env lean --stdin`.
+
 ### `lake build` (fallback only)
 
 Use `lake build` only when debugging the `lean-check` daemon (e.g., if you suspect stale state). For checking all files, prefer `scripts/lean-check --all` — it uses the daemon cache and is much faster.
 
 ```bash
 lake exe cache get    # Download prebuilt Mathlib oleans (run after lake clean or fresh clone)
-lake build CertChecker  # Build precompiled certificate checker (must run before lake build)
+lake build CertCheck    # Build precompiled certificate checker (must run before lake build)
 lake build            # Full rebuild — slow, use only as fallback
 lake clean            # Clean build artifacts
 ```
 
-**After `lake clean` or a fresh clone, run `lake exe cache get` then `lake build CertChecker` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). The CertChecker build produces a precompiled shared library that the AKS lib loads via `--load-dynlib` for fast `native_decide` (130s → 2s). Without it, `lake build` fails on files that need the shared lib. The `lean-check` daemon handles this automatically.
+**After `lake clean` or a fresh clone, run `lake exe cache get` then `lake build CertCheck` before `lake build`.** The Mathlib cache avoids recompiling Mathlib from source (~30+ min → ~1 min). The CertCheck build produces a precompiled shared library that the AKS lib loads via `--load-dynlib` for fast `native_decide` (130s → 2s). Without it, `lake build` fails on files that need the shared lib. The `lean-check` daemon handles this automatically.
 
 ### Python Scripts
 
@@ -185,7 +189,7 @@ The complete graph as a concrete example:
 ### `AKS/Halver/Mixing.lean` — Expander Mixing Lemma
 Fully proved expander mixing lemma via indicator vectors + Cauchy-Schwarz + operator norm.
 
-### `AKS/Random.lean` + `AKS/Random20736.lean` — Base Expander for Zig-Zag Construction
+### `AKS/Random/` — Base Expander for Zig-Zag Construction
 Concrete base expander certified via davidad's triangular-inverse method:
 1. **`Random20736.graph`** — concrete `RegularGraph 20736 12`, rotation map verified by `native_decide`
 2. **`Random20736.gap`** — spectral gap ≤ 10/12 via `certificate_bridge` (sorry: 821 MB PSD certificate too large to embed on 16 GB machine)
@@ -218,12 +222,28 @@ Operator theory importing `RVWInequality.lean`:
 2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
 3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
 
-### `AKS/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
+### `AKS/Cert/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
 Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `Graph/Regular.lean`:
 1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
 2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
 
-### `AKS/ZigZag.lean` — Expander Families (~115 lines)
+### `AKS/Cert/` — Certificate Bridge Infrastructure
+Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
+- **`Defs.lean`** — proof-only pure recursive definitions (`adjMulPure`, `pEntryPure`, `kEntryPure`, etc.) (~100 lines)
+- **`Bridge.lean`** — main bridge theorem chaining all layers (~870 lines)
+- **`FastProof.lean`** — proves `checkCertificateFast = checkCertificateSlow` (~55 lines)
+- **`SpectralMatrix.lean`** — Layer 1: spectral matrix M PSD → walk bound (~186 lines)
+- **`DiagDominant.lean`** — Layer 2: Hermitian + strictly diag-dominant → PSD (~123 lines)
+- **`ColumnNormBridge.lean`** — imperative column norm checker = pure recursive version (~1538 lines)
+- **`Read.lean`** — `bin_base85%` elaborator + `ensureCertificateData` (~63 lines)
+
+### `AKS/Misc/ForLoop.lean` — For-Loop Characterization (~105 lines)
+Proves `for k in [:n] do` in `Id` monad equals `Nat.fold` + partition-fold lemmas.
+
+### `Bench/` — Benchmarks, Tests, and Profiles
+Not part of the proof. Contains optimization variants (`CertFast`, `CertV2`, `CertV7`, `CertParallel`) and profiling tools. Run via `scripts/bench` or `lake exe cert-{bench,test,profile}`.
+
+### `AKS/ZigZag/Expanders.lean` — Expander Families (~115 lines)
 Assembles the spectral bound and builds the iterated construction:
 1. **Spectral composition theorem** — `zigzag_spectral_bound` (assembles sublemmas)
 2. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
@@ -231,7 +251,7 @@ Assembles the spectral bound and builds the iterated construction:
 
 ### `AKS/Separator/Defs.lean` — (γ, ε)-Separator Definitions (~50 lines)
 ε-approximate γ-separation (Seiferas 2009, Section 6). Alternative to the
-ε-nearsort path in `Nearsort.lean`; both paths share `IsEpsilonHalver`.
+ε-nearsort path in `Nearsort/Defs.lean`; both paths share `IsEpsilonHalver`.
 1. **`SepInitial`**, **`SepFinal`** — one-sided separation (initial/final via `αᵒᵈ`)
 2. **`IsApproxSep`** — both-sided ε-approximate γ-separation
 3. **`IsSeparator`** — network-level property (quantified over permutations)
@@ -240,28 +260,36 @@ For γ = 1/2 this reduces to `IsEpsilonHalver`. Uses Seiferas's two-parameter
 
 ### `AKS/Separator/` — Remaining Files (Planned)
 See `docs/separator-plan.md` for full design. Planned files:
-1. **`FromHalver.lean`** — `halver_gives_separator` (Paterson Section 4)
-2. **`Outsider.lean`** — `outsiderCount`, block assignment (Paterson Section 5)
-3. **`Potential.lean`** — Seiferas potential function and decrease lemma (Seiferas Section 7)
-4. **`TreeSort.lean`** — assembly: separators → sorting network
+1. **`Family.lean`** — `SeparatorFamily` structure (analogous to `HalverFamily`)
+2. **`FromHalver.lean`** — `halverToSeparator` computable construction (Seiferas Section 6)
+
+### `AKS/Bags/` — Bag-Tree Sorting (Planned)
+Seiferas's bag-based tree argument: separators → O(log n) depth sorting network.
+1. **`Defs.lean`** — bag tree, register assignment, j-strangers
+2. **`Invariant.lean`** — four-clause invariant maintenance (Seiferas Section 5)
+3. **`Stage.lean`** — one-stage network construction + depth bound
+4. **`TreeSort.lean`** — full sorting network, correctness, depth O(log n)
 
 ### Data flow
 ```
-Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag.lean
+Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag/Expanders.lean
                                → Graph/Complete.lean           ↓
                               → Halver/Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
-                              → WalkBound.lean ──→ CertificateBridge.lean
+                              → Cert/WalkBound.lean ──→ Cert/Bridge.lean
                               → ZigZag/Operators.lean ──→     ↑
-                                  ZigZag/Spectral.lean ─↗ ComparatorNetwork.lean ─→ AKSNetwork.lean
-           Random.lean ────────────────────────────↗          ↑
-           ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗  Halver.lean ─→ Halver/ExpanderToHalver.lean
-           Certificate.lean ──→ CertificateBridge.lean  Halver/Tanner.lean ─↗
+                                  ZigZag/Spectral.lean ─↗ Sort/*.lean ─→ Tree/AKSNetwork.lean
+           Random/*.lean ──────────────────────────↗          ↑
+           ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗  Halver/*.lean ─→ Halver/ExpanderToHalver.lean
+           CertCheck.lean ──→ Cert/Defs.lean ──→ Cert/Bridge.lean  Halver/Tanner.lean ─↗
                                                                     ↓
                                                          Separator/Defs.lean
+                                                         Separator/Family.lean
                                                          Separator/FromHalver.lean
-                                                         Separator/Outsider.lean
-                                                         Separator/Potential.lean
-                                                         Separator/TreeSort.lean ──→ AKSNetwork.lean
+                                                                    ↓
+                                                         Bags/Defs.lean
+                                                         Bags/Invariant.lean
+                                                         Bags/Stage.lean
+                                                         Bags/TreeSort.lean ──→ Tree/AKSNetwork.lean
 ```
 
 ## Style
@@ -271,13 +299,14 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
 - Move reusable helpers into their own files (e.g., `Fin` arithmetic → `AKS/Misc/Fin.lean`). Iterate in-file during development, extract before committing.
 - Split files beyond ~300 lines. Smaller files = faster incremental checking (imports are precompiled; only the current file re-elaborates from the change point).
-- **Use parent module + subdirectory for cohesive subsystems.** Lean 4 allows `AKS/Name.lean` (parent module) and `AKS/Name/*.lean` (child modules) to coexist. The parent re-exports or assembles results; children hold the implementation. Example: `AKS/ZigZag.lean` imports `AKS.ZigZag.Operators`, `AKS.ZigZag.Spectral`, etc. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
+- **Use subdirectories for cohesive subsystems.** Group related files under `AKS/Name/*.lean`. Consumers import leaf modules directly. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
 - **Parameterize theorems over abstract bounds, not hard-coded constants.** Take spectral gap bounds (β, c, etc.) as parameters with hypotheses, not baked-in fractions. Chain `.trans` through hypotheses, not `norm_num`. Prefer explicit types/degrees (`D * D`) over `∃ d`, and concrete objects as parameters over axioms in statements. Motivation: we want explicit, computable, extractable constants.
+- **Define constructions as computable `def`s, prove properties as separate theorems.** Never use `∃ (net : ComparatorNetwork n), ...` when the witness is known — define it as a `def` and prove properties about it. This gives: (1) computability, (2) composability (downstream code can refer to the object directly), (3) cleaner proofs (no `Exists.choose`/`noncomputable`). Example: `expanderHalver` is a `def` with `expanderHalver_isEpsilonHalver` and `expanderHalver_size` as theorems — not `∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d`. Similarly, bundle families as `structure`s with computable fields + proof fields (see `HalverFamily`).
+- **Prove depth bounds, not size bounds.** For comparator networks, depth (parallel rounds) is the fundamental complexity measure. Size ≤ n/2 · depth follows trivially from `size_le_half_n_mul_depth`. Always state the depth bound first; derive size as a corollary. This applies to `HalverFamily` (already correct: `depth_le` is fundamental, `size_le` derived), separator families, and the top-level sorting network theorem.
 - **Avoid non-terminal `simp`** — use `simp only [specific, lemmas]` or `rw` instead. Non-terminal `simp` is fragile (new simp lemmas can break downstream tactics). Exception: acceptable if the alternative is much uglier, but document why.
 - **Don't create import-only re-export files.** A file that just imports its children (e.g., `AKS/Sort.lean` importing `Sort.Defs`, `Sort.Monotone`, etc.) adds indirection with no value. Import leaf modules directly from the root `AKS.lean` or from consuming files.
 - **Colocate files with their consumers, not their topic.** If a file has only one downstream user, move it into that subsystem's directory. E.g., `Mixing.lean` was used only by `Halver/Tanner.lean`, so it belongs in `AKS/Halver/`, not at the top level.
-- **`NpyReader.lean` has dead exports.** Only `bin_base85%` (elaborator) and `ensureCertificateData` are used. The NPY reading functions (`readNpyInt64`, `readBinI32File`, etc.) and `bin_array%` are unused leftovers from before the base-85 encoding approach.
 
 ## Key Lean/Mathlib Conventions
 
@@ -285,7 +314,8 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 - **Avoid `native_decide`** — sidesteps the kernel's trust boundary. Prefer `decide +kernel` when `decide` is too slow. Only use `native_decide` as a last resort.
-- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see. **Use `@[csimp]` instead** — it requires a proof that the replacement function equals the original, so soundness is preserved. The compiler and `native_decide` use the fast version; proofs reference the simple one.
+- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
+- **Do not use `@[csimp]` in `CertCheck.lean`** — `CertCheck` is a separate precompiled library (`precompileModules := true`) that contains only definitions, no proofs. `@[csimp]` requires a proof that the replacement equals the original, which would force proofs into the precompiled module and break modularity. Instead, prove the bridge theorem (`checkCertificateFast_eq_slow`) in a separate file (`AKS/Cert/FastProof.lean`) that imports both `CertCheck` and Mathlib.
 
 ## Proof Workflow
 
@@ -298,6 +328,10 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 Before attempting a `sorry`, estimate the probability of proving it directly (e.g., 30%, 50%, 80%) and report this. If the probability is below ~50%, first factor the `sorry` into intermediate lemmas — smaller steps that are each individually likely to succeed. This avoids wasting long build-test cycles on proofs that need restructuring.
 
 **Recognize thrashing and ask the user.** After 3+ failed approaches to the same goal, stop and ask for guidance. Signs: repeated restructuring, oscillating between approaches, growing helper count without progress. A 2-minute conversation is cheaper than 30 minutes of failed builds.
+
+**Never silently abandon an agreed plan.** If a plan was approved and a step turns out harder than expected, do NOT silently switch to a shortcut (e.g., replacing a proof with `native_decide` or `sorry`). Always confirm radical plan changes with the user first — explain what's hard, what the alternatives are, and let them decide. A 2-minute conversation about changing course is far cheaper than discovering the change broke assumptions downstream.
+
+**Never change fast code to make proofs easier.** `CertCheck.lean` contains optimized imperative code (`checkCertificateFast`, `checkColumnNormBound`, `mulAdjWith`, etc.) that must stay exactly as-is. The job is to PROVE the existing fast code correct via bridge theorems, not to modify it. When a proof about imperative code is hard, discuss the difficulty with the user — don't silently switch to "make the code easier to prove about" by adding `native_decide` calls, slowing down the fast path, or replacing imperative code with pure equivalents. The `native_decide` in `Random*.lean` should only be on `checkCertificateFast`; everything else must be derived via structural proofs.
 
 **Assess proof risk before significant work.** Break non-trivial theorems into phases with risk levels: LOW (definition, direct proof), MEDIUM (standard argument, uncertain details), HIGH (novel connection, unclear if approach works). Identify the highest-risk phase, document fallback plans (axiomatize, defer, reformulate), and validate the critical bottleneck lemma before building dependencies. Escalate to user after 2-3 failed attempts on a MEDIUM+ phase.
 
@@ -439,9 +473,9 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 ### Base expander certificate pipeline (implemented)
 
-Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `Certificate.lean` (checker) → `WalkBound.lean` (abstract theory) → `CertificateBridge.lean` (bridge) → `Random{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for background.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `CertCheck.lean` (checker) → `Cert/WalkBound.lean` (abstract theory) → `Cert/Bridge.lean` (bridge) → `Random/{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for background.
 
-**Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
+**Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `Cert/WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `Cert/WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
 
 ## RVW Quadratic Inequality (proved)
 

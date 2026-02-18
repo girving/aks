@@ -1,0 +1,344 @@
+/-
+  # PSD Certificate Checker (precompiled)
+
+  Decidable checks for `native_decide`:
+  1. Rotation map is a valid involution (proves `RegularGraph`)
+  2. `M = c₁I − c₂B² + c₃J` is positive definite via triangular certificate
+
+  All data is base-85 encoded as `String` literals for compact storage.
+  Each i32 value (interpreted as unsigned u32) is encoded as 5 ASCII chars
+  (codepoints 33–117). Decoding uses `String.toUTF8` + `ByteArray.get!`.
+
+  This file imports only `Init` (no Mathlib) so it can be precompiled into a
+  shared library via `precompileModules := true` in `lakefile.lean`.
+
+  **Keep this file minimal:** only runtime definitions used by `native_decide`,
+  plus shared helpers (`sumTo`, `certEntryInt`, `intAbs`, `zColNormPure`) used by
+  both runtime and proof-only code. Proof-only definitions go in `AKS/Cert/Defs.lean`.
+  Proofs about these functions go in `AKS/Cert/Bridge.lean` (which can import Mathlib).
+-/
+
+
+/-! **Base-85 decoding** -/
+
+/-- Decode the `k`-th unsigned i32 value from base-85 encoded bytes as `Nat`. -/
+def decodeBase85Nat (bytes : ByteArray) (k : Nat) : Nat :=
+  let pos := 5 * k
+  let c0 := (bytes.get! pos).toNat - 33
+  let c1 := (bytes.get! (pos + 1)).toNat - 33
+  let c2 := (bytes.get! (pos + 2)).toNat - 33
+  let c3 := (bytes.get! (pos + 3)).toNat - 33
+  let c4 := (bytes.get! (pos + 4)).toNat - 33
+  c0 + 85 * (c1 + 85 * (c2 + 85 * (c3 + 85 * c4)))
+
+/-- Decode the `k`-th signed i32 value from base-85 encoded bytes as `Int`. -/
+def decodeBase85Int (bytes : ByteArray) (k : Nat) : Int :=
+  let u := decodeBase85Nat bytes k
+  if u < 2^31 then (u : Int) else (u : Int) - (2^32 : Int)
+
+
+/-! **Rotation map validation** -/
+
+/-- Check that a base-85 encoded rotation map represents a valid involution.
+    The rotation map has `n*d` pairs `(vertex, port)` as consecutive entries:
+    entry `2*k` = destination vertex, entry `2*k+1` = destination port. -/
+def checkInvolution (rotBytes : ByteArray) (n d : Nat) : Bool :=
+  let nd := n * d
+  if rotBytes.size != nd * 2 * 5 then false
+  else Id.run do
+    let mut ok := true
+    for k in [:nd] do
+      let w := decodeBase85Nat rotBytes (2 * k)
+      let q := decodeBase85Nat rotBytes (2 * k + 1)
+      if w >= n || q >= d then
+        ok := false
+        break
+      let k2 := w * d + q
+      let v2 := decodeBase85Nat rotBytes (2 * k2)
+      let p2 := decodeBase85Nat rotBytes (2 * k2 + 1)
+      if v2 * d + p2 != k then
+        ok := false
+        break
+    return ok
+
+
+/-! **Sparse matrix-vector product via rotation map** -/
+
+/-- Common `mulAdj` parameterized by neighbor lookup function.
+    `(mulAdjWith f z n d)[v] = ∑_{p<d} z[f(v*d+p)]!`. -/
+@[inline] def mulAdjWith (getNeighbor : Nat → Nat) (z : Array Int)
+    (n d : Nat) : Array Int :=
+  Id.run do
+    let mut result := Array.replicate n 0
+    for v in [:n] do
+      let mut acc : Int := 0
+      for p in [:d] do
+        let w := getNeighbor (v * d + p)
+        acc := acc + z[w]!
+      result := result.set! v acc
+    return result
+
+/-- Given base-85 encoded rotation map and vector `z`, compute `B·z` where `B`
+    is the adjacency matrix. `(B·z)[v] = ∑_{p=0}^{d-1} z[neighbor(v,p)]`. -/
+def mulAdj (rotBytes : ByteArray) (z : Array Int) (n d : Nat) : Array Int :=
+  mulAdjWith (fun k => decodeBase85Nat rotBytes (2 * k)) z n d
+
+/-- Pre-decode all neighbor vertices from the rotation map. -/
+def decodeNeighbors (rotBytes : ByteArray) (n d : Nat) : Array Nat :=
+  .ofFn (n := n * d) fun k => decodeBase85Nat rotBytes (2 * k.val)
+
+/-- `mulAdj` with pre-decoded neighbor array. -/
+def mulAdjPre (neighbors : Array Nat) (z : Array Int) (n d : Nat) : Array Int :=
+  mulAdjWith (fun k => neighbors[k]!) z n d
+
+
+/-! **Diagonal positivity check** -/
+
+/-- Check that all diagonal entries `Z[j,j]` in the packed certificate are positive.
+    Column `j` of the upper-triangular matrix `Z` is stored at byte positions
+    `j*(j+1)/2 + k` for `k = 0..j`, so `Z[j,j]` is at index `j*(j+1)/2 + j`. -/
+def allDiagPositive (certBytes : ByteArray) (n : Nat) : Bool :=
+  match n with
+  | 0 => true
+  | k + 1 =>
+    allDiagPositive certBytes k &&
+    decide (0 < decodeBase85Int certBytes (k * (k + 1) / 2 + k))
+
+
+/-! **PSD Certificate Check** -/
+
+/-- Per-chunk result from parallel PSD computation. -/
+structure PSDChunkResult where
+  epsMax : Int
+  minDiag : Int
+  first : Bool
+
+/-- Merge two chunk results by taking the max epsMax and min minDiag. -/
+def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
+  if a.first then b
+  else if b.first then a
+  else {
+    epsMax := if a.epsMax > b.epsMax then a.epsMax else b.epsMax
+    minDiag := if a.minDiag < b.minDiag then a.minDiag else b.minDiag
+    first := false
+  }
+
+/-- Per-column PSD update: process column `j`, return updated state.
+    `doMulAdj` is the adjacency-vector product function (either `mulAdj` or
+    `mulAdjPre`-based). Factored out so that `checkPSDCertificate` and
+    `checkPSDColumns` share the exact same step function. -/
+@[inline] def psdColumnStep (doMulAdj : Array Int → Array Int)
+    (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
+    (state : PSDChunkResult) (j : Nat) : PSDChunkResult :=
+  let colStart := j * (j + 1) / 2
+  let zCol := Id.run do
+    let mut arr := Array.replicate n (0 : Int)
+    for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
+    return arr
+  let bz := doMulAdj zCol
+  let b2z := doMulAdj bz
+  let colSum := Id.run do
+    let mut s : Int := 0
+    for k in [:j+1] do s := s + zCol[k]!
+    return s
+  Id.run do
+    let mut epsMax := state.epsMax
+    let mut minDiag := state.minDiag
+    let mut first := state.first
+    for i in [:n] do
+      let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+      if i == j then
+        if first then minDiag := pij; first := false
+        else if pij < minDiag then minDiag := pij
+      else if i < j then
+        let absPij := if pij >= 0 then pij else -pij
+        if absPij > epsMax then epsMax := absPij
+    return { epsMax, minDiag, first }
+
+/-- Process a subset of columns using pre-decoded neighbors, returning
+    epsMax (max off-diagonal `|P[i,j]|` for `i < j`) and minDiag (min `P[j,j]`).
+    Uses `mulAdjPre` (gather-based, not scatter), so the computation is
+    structurally identical to `checkPSDCertificate` per-column via shared
+    `psdColumnStep`. -/
+def checkPSDColumns (neighbors : Array Nat) (certBytes : ByteArray)
+    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) : PSDChunkResult :=
+  let step := psdColumnStep (mulAdjPre neighbors · n d) certBytes n c₁ c₂ c₃
+  Id.run do
+    let mut state : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
+    for j in columns do state := step state j
+    return state
+
+/-- Build interleaved column partition: column `j` goes to chunk `j % numChunks`.
+    Shared between sequential and parallel PSD checks. -/
+def buildColumnLists (n numChunks : Nat) : Array (Array Nat) :=
+  Id.run do
+    let mut lists := Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1))
+    for j in [:n] do
+      let c := j % numChunks
+      lists := lists.set! c (lists[c]!.push j)
+    return lists
+
+/-- Merge an array of chunk results into a single result, then check the
+    Gershgorin threshold. Shared between sequential and parallel PSD checks. -/
+@[inline] def checkPSDThreshold (results : Array PSDChunkResult)
+    (n : Nat) : Bool :=
+  let merged := results.foldl PSDChunkResult.merge
+    { epsMax := 0, minDiag := 0, first := true }
+  if merged.first then false
+  else decide (merged.minDiag > merged.epsMax * (n * (n + 1) / 2))
+
+/-- Check the PSD certificate for `M = c₁I − c₂B² + c₃J`.
+
+    For each column `j` of `Z_int` (column-major packed, base-85 decoded):
+    - Extract `z = Z_int[:,j]` from packed format
+    - Compute `P[:,j] = M · z` using `c₁·z − c₂·B·(B·z) + c₃·(1ᵀz)·1`
+    - Track `ε_max` (max upper-triangle `|P[i,j]|` for `i < j`)
+    - Track `min_diag` (min diagonal `P[i,i]`)
+
+    Then verify: `min_diag > ε_max · n · (n+1) / 2` (Gershgorin condition)
+    AND all diagonal entries `Z[j,j] > 0`.
+
+    Uses partition + merge structure (matching `checkPSDCertificatePar`) so the
+    bridge `checkCertificateFast = checkCertificateSlow` is structurally trivial. -/
+def checkPSDCertificate (rotBytes certBytes : ByteArray)
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+  if certBytes.size != n * (n + 1) / 2 * 5 then false
+  else allDiagPositive certBytes n &&
+    let neighbors := decodeNeighbors rotBytes n d
+    let columnLists := buildColumnLists n 64
+    let results := columnLists.map fun cols =>
+      checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
+    checkPSDThreshold results n
+
+
+/-! **Rotation function from base-85 data** -/
+
+/-- Decode a base-85 encoded rotation map into a rotation function `Fin n × Fin d → Fin n × Fin d`.
+    Matches the `hmatch` hypothesis in `certificate_bridge`, so `(fun _ => rfl)` discharges it. -/
+def rotFun (rotStr : String) (n d : Nat) (hn : 0 < n) (hd : 0 < d)
+    (vp : Fin n × Fin d) : Fin n × Fin d :=
+  let rotBytes := rotStr.toUTF8
+  let k := vp.1.val * d + vp.2.val
+  (⟨decodeBase85Nat rotBytes (2 * k) % n, Nat.mod_lt _ hn⟩,
+   ⟨decodeBase85Nat rotBytes (2 * k + 1) % d, Nat.mod_lt _ hd⟩)
+
+/-! **Pure involution spec (for `native_decide`)** -/
+
+/-- Check involution at a single index: decoded `(w,q)` is in-bounds and round-trips. -/
+def checkInvAt (rotBytes : ByteArray) (n d k : Nat) : Bool :=
+  let w := decodeBase85Nat rotBytes (2 * k)
+  let q := decodeBase85Nat rotBytes (2 * k + 1)
+  decide (w < n) && decide (q < d) &&
+  decide (decodeBase85Nat rotBytes (2 * (w * d + q)) * d +
+          decodeBase85Nat rotBytes (2 * (w * d + q) + 1) = k)
+
+/-- Check all indices from 0 to `m-1`. -/
+def checkInvBelow (rotBytes : ByteArray) (n d : Nat) : Nat → Bool
+  | 0 => true
+  | k + 1 => checkInvAt rotBytes n d k && checkInvBelow rotBytes n d k
+
+/-- Pure recursive involution check. Computationally equivalent to `checkInvolution`
+    but structured for formal reasoning (no imperative loop).
+    Bridge proof: `checkInvolutionSpec_implies_rotFun_involution` in `CertificateBridge.lean`. -/
+def checkInvolutionSpec (rotBytes : ByteArray) (n d : Nat) : Bool :=
+  decide (rotBytes.size = n * d * 2 * 5) && checkInvBelow rotBytes n d (n * d)
+
+
+/-! **Shared helpers for column-norm bound checking** -/
+
+/-- Sum `f(0) + f(1) + ... + f(n-1)`. -/
+def sumTo (f : Nat → Int) : Nat → Int
+  | 0 => 0
+  | n + 1 => sumTo f n + f n
+
+/-- Certificate matrix entry `Z[i,j]` as integer. Zero when `i > j`. -/
+def certEntryInt (certBytes : ByteArray) (i j : Nat) : Int :=
+  if i ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + i) else 0
+
+/-- Integer absolute value. Works without Mathlib imports. -/
+@[inline] def intAbs (x : Int) : Int := if x ≥ 0 then x else -x
+
+/-- Column ℓ₁-norm of Z: `∑_{k<n} |Z[k,j]|`. -/
+def zColNormPure (certBytes : ByteArray) (n j : Nat) : Int :=
+  sumTo (fun k ↦ intAbs (certEntryInt certBytes k j)) n
+
+/-- Per-row column-norm bound check. Checks rows `i, i+1, ..., i+remaining-1`.
+    `prefSum` = `∑_{j<i} zColNormPure certBytes n j`. -/
+def checkPerRow (certBytes : ByteArray) (n : Nat) (ε mdpe : Int)
+    (remaining i : Nat) (prefSum : Int) : Bool :=
+  match remaining with
+  | 0 => true
+  | r + 1 =>
+    let si := zColNormPure certBytes n i
+    let ti := prefSum + (↑(n - i) : Int) * si
+    decide (certEntryInt certBytes i i * mdpe > ε * ti) &&
+    checkPerRow certBytes n ε mdpe r (i + 1) (prefSum + si)
+
+/-- Check column-norm bound: computes `epsMax`/`minDiag` via `checkPSDColumns`,
+    then checks `Z[i,i]·(minDiag + epsMax) > epsMax·T_i` for each row. -/
+def checkColumnNormBound (rotBytes certBytes : ByteArray) (n d : Nat)
+    (c₁ c₂ c₃ : Int) : Bool :=
+  if certBytes.size != n * (n + 1) / 2 * 5 then false
+  else
+    let neighbors := decodeNeighbors rotBytes n d
+    let columnLists := buildColumnLists n 64
+    let results := columnLists.map fun cols =>
+      checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
+    let merged := results.foldl PSDChunkResult.merge
+      { epsMax := 0, minDiag := 0, first := true }
+    if merged.first then false
+    else checkPerRow certBytes n merged.epsMax (merged.minDiag + merged.epsMax) n 0 0
+
+
+/-! **Combined check** -/
+
+/-- Full certificate check: involution + PSD + column-norm bound.
+    Both rotation map and certificate are base-85 encoded `String`s.
+    All sub-checks are O(n²·d), making `native_decide` feasible for n ≤ ~10000. -/
+def checkCertificateSlow (rotStr certStr : String)
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+  let rotBytes := rotStr.toUTF8
+  let certBytes := certStr.toUTF8
+  checkInvolution rotBytes n d &&
+  checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ &&
+  checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃
+
+
+/-! **Parallel certificate checking** -/
+
+/-- Parallel PSD certificate check: same result as `checkPSDCertificate` but
+    spawns dedicated OS threads for each chunk via `Task.spawn`.
+
+    Structure matches `checkPSDCertificate` exactly: same guards, same
+    `buildColumnLists`, same `checkPSDColumns`, same `checkPSDThreshold`.
+    The only difference is `Task.spawn` wrapping each chunk evaluation.
+    Since `Task` is a transparent structure in Lean 4 (`Task.spawn fn = ⟨fn ()⟩`),
+    the bridge `checkPSDCertificatePar = checkPSDCertificate` follows from
+    `Array.map_map` + definitional unfolding. -/
+def checkPSDCertificatePar (rotBytes certBytes : ByteArray)
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+  if certBytes.size != n * (n + 1) / 2 * 5 then false
+  else allDiagPositive certBytes n &&
+    let neighbors := decodeNeighbors rotBytes n d
+    let columnLists := buildColumnLists n 64
+    -- Spawn all tasks (all start running concurrently)
+    let tasks := columnLists.map fun cols =>
+      Task.spawn (prio := .dedicated) fun () =>
+        checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
+    -- Collect all results (each .get blocks until its task completes)
+    let results := tasks.map Task.get
+    checkPSDThreshold results n
+
+/-- Parallel certificate check: same result as `checkCertificateSlow` but splits
+    the O(n²d) PSD column loop across 4 dedicated OS threads via `Task.spawn`
+    with pre-decoded neighbors. Uses `checkColumnNormBound` directly (identical
+    to slow version). -/
+def checkCertificateFast (rotStr certStr : String)
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+  let rotBytes := rotStr.toUTF8
+  let certBytes := certStr.toUTF8
+  checkInvolution rotBytes n d &&
+  checkPSDCertificatePar rotBytes certBytes n d c₁ c₂ c₃ &&
+  checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃
+
+

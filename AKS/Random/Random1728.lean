@@ -7,8 +7,8 @@
   Regenerate data: `cargo +nightly -Zscript rust/certificate.rs 1728 12 42 30 data/1728`
 -/
 
-import AKS.CertificateBridge
-import AKS.NpyReader
+import AKS.Cert.Bridge
+import AKS.Cert.Read
 
 namespace Random1728
 
@@ -27,12 +27,14 @@ def graph : RegularGraph 1728 12 where
       involution_check
 
 theorem certificate_passes :
-    checkCertificate rotData certData 1728 12 792 9 2 = true := by
+    checkCertificateFast rotData certData 1728 12 792 9 2 = true := by
   native_decide
 
 theorem gap : spectralGap graph ≤ 10 / (1 * 12) := by
+  have h : checkCertificateSlow rotData certData 1728 12 792 9 2 = true := by
+    rw [← checkCertificateFast_eq_slow]; exact certificate_passes
   exact_mod_cast certificate_bridge 1728 12 (by decide) (by decide) graph
-    rotData certData 792 9 2 certificate_passes
+    rotData certData 792 9 2 h involution_check
     10 1 (by decide) (by decide) (by decide) (by decide) (fun _ => rfl)
 
 end Random1728

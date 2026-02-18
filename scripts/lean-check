@@ -82,11 +82,45 @@ def ensure_mathlib_cache():
         print("Mathlib cache downloaded successfully.")
 
 
+def kill_stale_lean_processes():
+    """Kill any stale lean-daemon and associated lean/lake processes.
+
+    Previous daemon instances can linger if not properly shut down,
+    consuming GBs of RAM each. Kill them before starting a new daemon."""
+    import signal
+
+    # Kill any existing lean-daemon.py processes for this project
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE) as f:
+                old_pid = int(f.read().strip())
+            os.kill(old_pid, signal.SIGTERM)
+            time.sleep(0.5)
+            try:
+                os.kill(old_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        except (ProcessLookupError, ValueError, FileNotFoundError):
+            pass
+        try:
+            os.unlink(PID_FILE)
+        except FileNotFoundError:
+            pass
+    if os.path.exists(SOCKET_PATH):
+        try:
+            os.unlink(SOCKET_PATH)
+        except FileNotFoundError:
+            pass
+
+
 def start_daemon():
     """Start the daemon in the background."""
     if daemon_running():
         print("Daemon already running.")
         return True
+
+    # Kill any stale daemon processes before starting fresh
+    kill_stale_lean_processes()
 
     # Ensure Mathlib cache is downloaded before starting daemon
     ensure_mathlib_cache()
@@ -232,13 +266,22 @@ def check_files(filepaths: list):
 
 
 def find_project_files():
-    """Find all project .lean files (excluding lake dependencies and lakefile)."""
+    """Find all project .lean files (excluding lake dependencies and lakefile).
+
+    Skips Profile*/Bench* files — they use native_decide/heavy computation,
+    consume 500MB-3GB each, and aren't proof code."""
     import glob
     files = []
     for pattern in ["*.lean", "AKS/**/*.lean"]:
         files.extend(glob.glob(pattern, root_dir=PROJECT_ROOT, recursive=True))
-    # Exclude lakefile.lean — it's build config, not proof code
-    return sorted(f for f in set(files) if f != "lakefile.lean")
+    # Exclude non-proof files
+    skip_prefixes = ("lakefile.lean",)
+    skip_infixes = ("Profile", "Bench")
+    return sorted(
+        f for f in set(files)
+        if f not in skip_prefixes
+        and not any(infix in os.path.basename(f) for infix in skip_infixes)
+    )
 
 
 def check_all():
@@ -259,7 +302,9 @@ def check_all():
 
     for filepath in files:
         t0 = time.time()
-        result = send_command({"command": "check", "file": filepath})
+        # close_after=True releases the LSP worker after each file,
+        # preventing memory accumulation (each worker uses 100-3000 MB)
+        result = send_command({"command": "check", "file": filepath, "close_after": True})
         wall_time = time.time() - t0
 
         if "error" in result:

@@ -19,7 +19,7 @@
 -/
 
 import AKS.Halver.Defs
-import AKS.Nearsort
+import AKS.Nearsort.Defs
 
 open Finset BigOperators
 

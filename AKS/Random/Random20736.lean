@@ -11,8 +11,8 @@
   the PSD certificate check is sorry'd pending a machine with more RAM.
 -/
 
-import AKS.CertificateBridge
-import AKS.NpyReader
+import AKS.Cert.Bridge
+import AKS.Cert.Read
 
 namespace Random20736
 
@@ -35,12 +35,14 @@ def graph : RegularGraph 20736 12 where
       involution_check
 
 theorem certificate_passes :
-    checkCertificate rotData certData 20736 12 792 9 2 = true := by
+    checkCertificateFast rotData certData 20736 12 792 9 2 = true := by
   sorry
 
 theorem gap : spectralGap graph ≤ 10 / (1 * 12) := by
+  have h : checkCertificateSlow rotData certData 20736 12 792 9 2 = true := by
+    rw [← checkCertificateFast_eq_slow]; exact certificate_passes
   exact_mod_cast certificate_bridge 20736 12 (by decide) (by decide) graph
-    rotData certData 792 9 2 certificate_passes
+    rotData certData 792 9 2 h involution_check
     10 1 (by decide) (by decide) (by decide) (by decide) sorry
 
 end Random20736

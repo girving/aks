@@ -31,7 +31,7 @@ LEAN_FILES = [
     "AKS/CertificateBridge.lean",
     "AKS/Random.lean",
     "AKS/Random20736.lean",
-    "AKS/ZigZag.lean",
+    "AKS/ZigZag/Expanders.lean",
     "AKS/Main.lean",
     "AKS/TreeSorting.lean",
     "AKS/Basic.lean",
