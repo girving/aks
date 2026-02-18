@@ -93,7 +93,7 @@ def benchBaseline (label : String) (rotStr certStr : String)
     s!"ok={ok} minDiag={minDiag} epsMax={epsMax}"
 
   timed "baseline full    " fun () =>
-    s!"ok={checkCertificate rotStr certStr n d c₁ c₂ c₃}"
+    s!"ok={checkCertificateSlow rotStr certStr n d c₁ c₂ c₃}"
 
   -- V2: pre-decoded neighbors
   let neighbors := decodeNeighbors rotBytes n d

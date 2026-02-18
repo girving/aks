@@ -13,7 +13,7 @@
   ```
   M PSD on 1⊥  →  walk bound  (this file)
   K diag-dominant + Z invertible  →  M PSD  (DiagDominant.lean)
-  checkCertificate = true  →  K diag-dominant  (proved in CertificateBridge.lean)
+  checkCertificateSlow = true  →  K diag-dominant  (proved in CertificateBridge.lean)
   ```
 -/
 

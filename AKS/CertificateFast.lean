@@ -1,7 +1,7 @@
 /-
   # Fast Certificate Checker
 
-  Optimized version of `checkCertificate` from `Certificate.lean`.
+  Optimized version of `checkCertificateSlow` from `CertChecker.lean`.
   Key optimization: pre-decode the base-85 rotation map into an `Array Nat`
   once, so `mulAdj` becomes pure array lookups (no base-85 in hot loop).
 
@@ -12,7 +12,7 @@
   n*(n+1)/2 with no repeats). Only the rotation map benefits from pre-decode
   because each `mulAdj` call re-reads all n*d entries (3456 calls total).
 
-  TODO: prove `@[csimp]` lemma `checkCertificate = checkCertificateFast`
+  Superseded by `checkCertificateFast` in `CertChecker.lean`.
   so `native_decide` automatically uses the fast version. The proof should
   be straightforward since both compute the same result — the only difference
   is when the base-85 decode happens (per-access vs upfront).
@@ -91,9 +91,9 @@ def checkPSDCertificateFast (neighbors : Array Nat) (certBytes : ByteArray)
 
 /-! **Combined fast check** -/
 
-/-- Fast version of `checkCertificate`. Same result, ~2x faster for large n.
+/-- Fast version of `checkCertificateSlow`. Same result, ~2x faster for large n.
     Pre-decodes rotation map once, then uses array lookups in the hot loop. -/
-def checkCertificateFast (rotStr certStr : String)
+def checkCertificateFastV1 (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : ℤ) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8

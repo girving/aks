@@ -1,12 +1,12 @@
 /-
   # Certificate Bridge Theorem
 
-  Connects the decidable `checkCertificate` predicate to the spectral gap
+  Connects the decidable `checkCertificateSlow` predicate to the spectral gap
   bound on `RegularGraph`. Decomposed into three layers:
 
   **Layer 1** (`SpectralMatrix.lean`): M PSD → walk bound (provable)
   **Layer 2** (`DiagDominant.lean`): K diag-dominant + Z invertible → M PSD (provable)
-  **Layer 3** (this file): `checkCertificate = true` → spectral matrix PSD
+  **Layer 3** (this file): `checkCertificateSlow = true` → spectral matrix PSD
 
   The bridge then chains:
   1. `checker_implies_spectralMatrix_psd` (Layer 3): certificate → M PSD
@@ -20,6 +20,7 @@
 -/
 
 import AKS.Certificate
+import AKS.ColumnNormBridge
 import AKS.WalkBound
 import AKS.SpectralMatrix
 import AKS.DiagDominant
@@ -318,31 +319,14 @@ private theorem checkPerRow_spec (certBytes : ByteArray) (n : Nat) (ε mdpe : In
       exact ih (i + 1) (prefSum + zColNormPure certBytes n i) hrest
         (by rw [hpre]; rfl) k hi_lt_k (by omega)
 
-/-- Per-row column-norm inequality from `checkColumnNormBound = true`. -/
-private theorem checkColumnNormBound_perRow
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (hcnb : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true) :
-    ∀ i, i < n →
-      certEntryInt certBytes i i *
-        (minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n +
-         epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n) >
-      epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n *
-        (sumTo (fun j ↦ zColNormPure certBytes n j) i +
-         (↑(n - i) : Int) * zColNormPure certBytes n i) := by
-  -- Extract checkPerRow from checkColumnNormBound
-  unfold checkColumnNormBound at hcnb
-  split at hcnb
-  · simp at hcnb
-  · exact fun i hi ↦ checkPerRow_spec certBytes n
-      (epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n)
-      (minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n +
-       epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n)
-      n 0 0 hcnb rfl i (Nat.zero_le _) (by omega)
+/-- Specification of what `checkColumnNormBoundPure = true` guarantees.
 
-/-- Specification of what `checkColumnNormBound = true` guarantees. -/
-private theorem checkColumnNormBound_spec
+    Uses the pure recursive `epsMaxVal`/`minDiagVal` which are trivially
+    connected to `pEntryPure` via their recursive definitions, avoiding the
+    imperative `checkPSDColumns` → `pEntryPure` bridge entirely. -/
+private theorem checkColumnNormBoundPure_spec
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (hcnb : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true) (hn : 0 < n) :
+    (hcnb : checkColumnNormBoundPure rotBytes certBytes n d c₁ c₂ c₃ = true) (hn : 0 < n) :
     ∃ epsMax minDiag : Int,
       (0 ≤ epsMax) ∧
       (∀ k j, k < j → j < n →
@@ -352,12 +336,18 @@ private theorem checkColumnNormBound_spec
         certEntryInt certBytes i i * (minDiag + epsMax) >
         epsMax * (sumTo (fun j ↦ zColNormPure certBytes n j) i +
                   (↑(n - i) : Int) * zColNormPure certBytes n i)) := by
-  refine ⟨epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n,
-          minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n,
-          epsMaxVal_nonneg _ _ _ _ _ _ _ _,
-          fun k j hkj hjn ↦ epsMaxVal_bound _ _ _ _ _ _ _ _ _ _ hkj hjn,
-          fun j hj ↦ minDiagVal_bound _ _ _ _ _ _ _ _ _ hj hn,
-          checkColumnNormBound_perRow _ _ _ _ _ _ _ hcnb⟩
+  -- Extract checkPerRow from the pure check
+  unfold checkColumnNormBoundPure at hcnb
+  rw [if_neg (by simp [beq_iff_eq]; omega)] at hcnb
+  -- hcnb : checkPerRow certBytes n (epsMaxVal ...) (minDiagVal ... + epsMaxVal ...) n 0 0 = true
+  -- Witness with epsMaxVal and minDiagVal
+  set ε := epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n
+  set δ := minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n
+  refine ⟨ε, δ, epsMaxVal_nonneg _ _ _ _ _ _ _ _,
+          fun k j hk hj ↦ epsMaxVal_bound _ _ _ _ _ _ _ _ _ _ hk hj,
+          fun j hj ↦ minDiagVal_bound _ _ _ _ _ _ _ j n hj hn,
+          fun i hi ↦ ?_⟩
+  exact checkPerRow_spec certBytes n ε (δ + ε) n 0 0 hcnb rfl i (Nat.zero_le _) (by omega)
 
 /-- `kEntryPure` is symmetric: `K[i,j] = K[j,i]` (from `K = Z*MZ` Hermitian). -/
 private theorem kEntryPure_comm {n d : ℕ} (G : RegularGraph n d)
@@ -404,8 +394,8 @@ private theorem checkAllRows_spec (rotBytes certBytes : ByteArray) (n d : ℕ)
 /-- Bridge lemma: if `checkAllRowsDomPure` passes and the rotation map matches,
     then K = star Z * M * Z is strictly row-diag-dominant.
 
-    This theorem takes `checkAllRowsDomPure` directly (not via `checkCertificate`)
-    so it remains valid regardless of which checks `checkCertificate` includes. -/
+    This theorem takes `checkAllRowsDomPure` directly (not via `checkCertificateSlow`)
+    so it remains valid regardless of which checks `checkCertificateSlow` includes. -/
 theorem kRowDominant_implies_diagDominant
     (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     (G : RegularGraph n d)
@@ -500,7 +490,7 @@ private lemma sum_min_split (S : ℕ → ℤ) : ∀ (n i : ℕ), i < n →
 
 /-- `K = Z* · M · Z` is strictly row-diag-dominant when the certificate checker passes.
 
-    The proof uses `checkColumnNormBound` (extracted from `checkCertificate`) together
+    The proof uses `checkColumnNormBoundPure` (pure recursive column-norm check) together
     with the PSD check bounds (minDiag, epsMax) to establish diagonal dominance
     mathematically via the upper-triangular structure of Z:
     - Off-diagonal: `|K[i,j]| ≤ epsMax · S_{min(i,j)}` where `S_j = ∑_{k≤j} |Z[k,j]|`
@@ -510,7 +500,8 @@ theorem congruence_diagDominant
     (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     (G : RegularGraph n d)
     (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
-    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
+    (hcert : checkCertificateSlow rotStr certStr n d c₁ c₂ c₃ = true)
+    (hcnbp : checkColumnNormBoundPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true)
     (hmatch : ∀ vp : Fin n × Fin d,
       G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
                     Nat.mod_lt _ hn⟩,
@@ -524,18 +515,16 @@ theorem congruence_diagDominant
   intro _ _ i
   set rotBytes := rotStr.toUTF8
   set certBytes := certStr.toUTF8
-  -- Extract sub-checks from checkCertificate
-  have hcnb : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true := by
-    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.2
+  -- Extract PSD sub-check from checkCertificateSlow
   have hpsd : checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ = true := by
-    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.1.2
+    simp only [checkCertificateSlow, Bool.and_eq_true] at hcert; exact hcert.1.2
   -- Get Z[i,i] > 0 from PSD check (reuse certMatrix_posdiag)
   have hZii_pos : 0 < certEntryInt certBytes i.val i.val := by
     have h := certMatrix_posdiag n certBytes rotBytes d c₁ c₂ c₃ hpsd i
     rw [certEntry_eq] at h; exact_mod_cast h
-  -- Get epsMax, minDiag, and their properties
+  -- Get epsMax, minDiag, and their properties from pure column-norm check
   obtain ⟨ε, δ, hε_nn, hP_bound, hP_diag, hrow_check⟩ :=
-    checkColumnNormBound_spec rotBytes certBytes n d c₁ c₂ c₃ hcnb hn
+    checkColumnNormBoundPure_spec rotBytes certBytes n d c₁ c₂ c₃ hcnbp hn
   -- Abbreviate column norm
   set S := zColNormPure certBytes n
   -- K entry correspondence
@@ -678,121 +667,6 @@ theorem congruence_diagDominant
     linarith [hoff, hdiag, hrow]
 
 
-/-! **Layer 3: Certificate → spectral matrix PSD** -/
-
-/-- If `checkCertificate` passes and the rotation map matches `G.rot`,
-    then the spectral matrix `c₁I - c₂B² + c₃J` is positive semidefinite.
-
-    **Proof structure:**
-    1. Define `Z` = certificate matrix (upper triangular, from base-85 bytes)
-    2. `Z` upper triangular → `det Z = ∏ Z[i,i]` → positive → `IsUnit Z`
-    3. `K = Z* · M · Z` is Hermitian (from `M` Hermitian)
-    4. `K` is strictly row-diag-dominant (via `congruence_diagDominant`)
-    5. `K` is PSD (from Hermitian + diag-dominant)
-    6. `M` is PSD (from `K` PSD + `Z` invertible, via congruence) -/
-theorem checker_implies_spectralMatrix_psd
-    (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
-    (G : RegularGraph n d)
-    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
-    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
-    (hmatch : ∀ vp : Fin n × Fin d,
-      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
-                    Nat.mod_lt _ hn⟩,
-                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
-                    Nat.mod_lt _ hd⟩)) :
-    Matrix.PosSemidef (spectralMatrix G (↑c₁) (↑c₂) (↑c₃)) := by
-  -- Extract PSD check from combined check
-  have hpsd : checkPSDCertificate rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
-    simp only [checkCertificate, Bool.and_eq_true] at hcert; exact hcert.1.2
-  -- Define Z and M
-  set Z := certMatrixReal certStr.toUTF8 n with hZ_def
-  set M := spectralMatrix G (↑c₁ : ℝ) (↑c₂) (↑c₃) with hM_def
-  -- Step 1: Z is upper triangular
-  have hZ_tri : Z.BlockTriangular id := by
-    intro i j (hij : j < i)
-    show certMatrixReal certStr.toUTF8 n i j = 0
-    simp only [certMatrixReal, of_apply]
-    exact if_neg (by omega)
-  -- Step 2: Z has positive diagonal (sorry'd)
-  have hZ_pos : ∀ j : Fin n, 0 < Z j j :=
-    certMatrix_posdiag n certStr.toUTF8 rotStr.toUTF8 d c₁ c₂ c₃ hpsd
-  -- Step 3: Z is invertible (det = ∏ diag > 0 → IsUnit)
-  have hZ_det : Z.det = ∏ i : Fin n, Z i i := det_of_upperTriangular hZ_tri
-  have hZ_det_pos : 0 < Z.det := hZ_det ▸ Finset.prod_pos (fun i _ ↦ hZ_pos i)
-  have hZ_unit : IsUnit Z := by
-    rw [isUnit_iff_isUnit_det]; exact IsUnit.mk0 _ (ne_of_gt hZ_det_pos)
-  -- Step 4: K = star Z * M * Z is Hermitian
-  have hK_herm : (star Z * M * Z).IsHermitian :=
-    isHermitian_conjTranspose_mul_mul Z (spectralMatrix_isHermitian G ↑c₁ ↑c₂ ↑c₃)
-  -- Step 5: K is strictly diag-dominant (sorry'd)
-  have hK_dom : ∀ i : Fin n,
-      ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
-      (star Z * M * Z) i i :=
-    congruence_diagDominant n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hmatch
-  -- Step 6: K is PSD (Hermitian + diag-dominant → PSD)
-  have hK_psd : (star Z * M * Z).PosSemidef := diagDominant_posSemidef hK_herm hK_dom
-  -- Step 7: M is PSD via congruence (K PSD + Z invertible → M PSD)
-  exact hZ_unit.posSemidef_star_left_conjugate_iff.mp hK_psd
-
-
-/-! **Certificate → walk bound (proved from Layers 1 + 3)** -/
-
-/-- If `checkCertificate` passes and the rotation map matches `G.rot`,
-    then `c₂ · d² · ‖Wf‖² ≤ c₁ · ‖f‖²` for all mean-zero `f`.
-
-    Proved by chaining Layer 3 (certificate → PSD) with Layer 1 (PSD → walk bound). -/
-theorem certificate_implies_walk_bound
-    (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
-    (G : RegularGraph n d)
-    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
-    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
-    (hmatch : ∀ vp : Fin n × Fin d,
-      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
-                    Nat.mod_lt _ hn⟩,
-                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
-                    Nat.mod_lt _ hd⟩))
-    (f : EuclideanSpace ℝ (Fin n))
-    (hf : meanCLM n f = 0) :
-    (c₂ : ℝ) * (d : ℝ) ^ 2 * ‖G.walkCLM f‖ ^ 2 ≤ (c₁ : ℝ) * ‖f‖ ^ 2 :=
-  spectralMatrix_posSemidef_implies_walk_bound hn hd G ↑c₁ ↑c₂ ↑c₃
-    (checker_implies_spectralMatrix_psd n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hmatch)
-    f hf
-
-
-/-! **Bridge: PSD certificate → spectral gap bound** -/
-
-/-- If `checkCertificate` passes for a rotation map and certificate,
-    then any `RegularGraph` whose rotation map agrees with `rotStr` has
-    `spectralGap G ≤ βn / (βd · d)`, provided `c₁ · βd² ≤ c₂ · βn²`.
-
-    The hypothesis `hmatch` connects the abstract `G.rot` to the concrete
-    base-85 encoded rotation map. When `G` is defined directly from
-    `rotStr`, this is `rfl`.
-
-    Proved by chaining `spectralGap_le_of_walk_bound`,
-    `certificate_implies_walk_bound`, and `sqrt_coeff_le_frac`. -/
-theorem certificate_bridge (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
-    (G : RegularGraph n d)
-    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
-    (hcert : checkCertificate rotStr certStr n d c₁ c₂ c₃ = true)
-    (βn βd : ℕ) (hβd : 0 < βd)
-    (hβ : c₁ * (↑βd * ↑βd) ≤ c₂ * (↑βn * ↑βn))
-    (hc₁ : 0 ≤ c₁) (hc₂ : 0 < c₂)
-    (hmatch : ∀ vp : Fin n × Fin d,
-      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
-                    Nat.mod_lt _ hn⟩,
-                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
-                    Nat.mod_lt _ hd⟩)) :
-    spectralGap G ≤ ↑βn / (↑βd * ↑d) :=
-  (spectralGap_le_of_walk_bound hd G (by exact_mod_cast hc₁) (by exact_mod_cast hc₂)
-    (fun f hf ↦ certificate_implies_walk_bound n d hn hd G
-      rotStr certStr c₁ c₂ c₃ hcert hmatch f hf)).trans
-  (sqrt_coeff_le_frac (by exact_mod_cast hc₂) hd hβd (by
-    have h : ((c₁ * (↑βd * ↑βd) : ℤ) : ℝ) ≤ ((c₂ * (↑βn * ↑βn) : ℤ) : ℝ) :=
-      Int.cast_le.mpr hβ
-    push_cast at h; nlinarith))
-
-
 /-! **Involution bridge** -/
 
 private theorem checkInvBelow_all {rotBytes : ByteArray} {n d m : Nat}
@@ -853,3 +727,144 @@ theorem checkInvolutionSpec_implies_rotFun_involution (rotStr : String) (n d : N
                Nat.mod_eq_of_lt hv2, Nat.mod_eq_of_lt hp2]
   · exact hveq
   · exact hpeq
+
+/-- If the involution spec check passes, all decoded neighbor indices are in-bounds. -/
+theorem checkInvolutionSpec_neighbor_lt (rotStr : String) (n d : Nat)
+    (h : checkInvolutionSpec (rotStr.toUTF8) n d = true) :
+    ∀ k, k < n * d → decodeBase85Nat rotStr.toUTF8 (2 * k) < n := by
+  unfold checkInvolutionSpec at h
+  rw [Bool.and_eq_true] at h
+  intro k hk
+  have hka := checkInvBelow_all h.2 k hk
+  unfold checkInvAt at hka
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hka
+  exact hka.1.1
+
+
+/-! **Layer 3: Certificate → spectral matrix PSD** -/
+
+/-- If `checkCertificateSlow` passes and the rotation map matches `G.rot`,
+    then the spectral matrix `c₁I - c₂B² + c₃J` is positive semidefinite.
+
+    **Proof structure:**
+    1. Define `Z` = certificate matrix (upper triangular, from base-85 bytes)
+    2. `Z` upper triangular → `det Z = ∏ Z[i,i]` → positive → `IsUnit Z`
+    3. `K = Z* · M · Z` is Hermitian (from `M` Hermitian)
+    4. `K` is strictly row-diag-dominant (via `congruence_diagDominant`)
+    5. `K` is PSD (from Hermitian + diag-dominant)
+    6. `M` is PSD (from `K` PSD + `Z` invertible, via congruence) -/
+theorem checker_implies_spectralMatrix_psd
+    (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
+    (G : RegularGraph n d)
+    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
+    (hcert : checkCertificateSlow rotStr certStr n d c₁ c₂ c₃ = true)
+    (hcnbp : checkColumnNormBoundPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true)
+    (hmatch : ∀ vp : Fin n × Fin d,
+      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
+                    Nat.mod_lt _ hn⟩,
+                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
+                    Nat.mod_lt _ hd⟩)) :
+    Matrix.PosSemidef (spectralMatrix G (↑c₁) (↑c₂) (↑c₃)) := by
+  -- Extract PSD check from combined check
+  have hpsd : checkPSDCertificate rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
+    simp only [checkCertificateSlow, Bool.and_eq_true] at hcert; exact hcert.1.2
+  -- Define Z and M
+  set Z := certMatrixReal certStr.toUTF8 n with hZ_def
+  set M := spectralMatrix G (↑c₁ : ℝ) (↑c₂) (↑c₃) with hM_def
+  -- Step 1: Z is upper triangular
+  have hZ_tri : Z.BlockTriangular id := by
+    intro i j (hij : j < i)
+    show certMatrixReal certStr.toUTF8 n i j = 0
+    simp only [certMatrixReal, of_apply]
+    exact if_neg (by omega)
+  -- Step 2: Z has positive diagonal
+  have hZ_pos : ∀ j : Fin n, 0 < Z j j :=
+    certMatrix_posdiag n certStr.toUTF8 rotStr.toUTF8 d c₁ c₂ c₃ hpsd
+  -- Step 3: Z is invertible (det = ∏ diag > 0 → IsUnit)
+  have hZ_det : Z.det = ∏ i : Fin n, Z i i := det_of_upperTriangular hZ_tri
+  have hZ_det_pos : 0 < Z.det := hZ_det ▸ Finset.prod_pos (fun i _ ↦ hZ_pos i)
+  have hZ_unit : IsUnit Z := by
+    rw [isUnit_iff_isUnit_det]; exact IsUnit.mk0 _ (ne_of_gt hZ_det_pos)
+  -- Step 4: K = star Z * M * Z is Hermitian
+  have hK_herm : (star Z * M * Z).IsHermitian :=
+    isHermitian_conjTranspose_mul_mul Z (spectralMatrix_isHermitian G ↑c₁ ↑c₂ ↑c₃)
+  -- Step 5: K is strictly diag-dominant
+  have hK_dom : ∀ i : Fin n,
+      ∑ j ∈ Finset.univ.erase i, ‖(star Z * M * Z) i j‖ <
+      (star Z * M * Z) i i :=
+    congruence_diagDominant n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hcnbp hmatch
+  -- Step 6: K is PSD (Hermitian + diag-dominant → PSD)
+  have hK_psd : (star Z * M * Z).PosSemidef := diagDominant_posSemidef hK_herm hK_dom
+  -- Step 7: M is PSD via congruence (K PSD + Z invertible → M PSD)
+  exact hZ_unit.posSemidef_star_left_conjugate_iff.mp hK_psd
+
+
+/-! **Certificate → walk bound (proved from Layers 1 + 3)** -/
+
+/-- If `checkCertificateSlow` passes and the rotation map matches `G.rot`,
+    then `c₂ · d² · ‖Wf‖² ≤ c₁ · ‖f‖²` for all mean-zero `f`.
+
+    Proved by chaining Layer 3 (certificate → PSD) with Layer 1 (PSD → walk bound). -/
+theorem certificate_implies_walk_bound
+    (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
+    (G : RegularGraph n d)
+    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
+    (hcert : checkCertificateSlow rotStr certStr n d c₁ c₂ c₃ = true)
+    (hcnbp : checkColumnNormBoundPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true)
+    (hmatch : ∀ vp : Fin n × Fin d,
+      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
+                    Nat.mod_lt _ hn⟩,
+                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
+                    Nat.mod_lt _ hd⟩))
+    (f : EuclideanSpace ℝ (Fin n))
+    (hf : meanCLM n f = 0) :
+    (c₂ : ℝ) * (d : ℝ) ^ 2 * ‖G.walkCLM f‖ ^ 2 ≤ (c₁ : ℝ) * ‖f‖ ^ 2 :=
+  spectralMatrix_posSemidef_implies_walk_bound hn hd G ↑c₁ ↑c₂ ↑c₃
+    (checker_implies_spectralMatrix_psd n d hn hd G rotStr certStr c₁ c₂ c₃ hcert hcnbp hmatch)
+    f hf
+
+
+/-! **Bridge: PSD certificate → spectral gap bound** -/
+
+/-- If `checkCertificateSlow` passes for a rotation map and certificate,
+    then any `RegularGraph` whose rotation map agrees with `rotStr` has
+    `spectralGap G ≤ βn / (βd · d)`, provided `c₁ · βd² ≤ c₂ · βn²`.
+
+    The hypothesis `hmatch` connects the abstract `G.rot` to the concrete
+    base-85 encoded rotation map. When `G` is defined directly from
+    `rotStr`, this is `rfl`.
+
+    The `checkColumnNormBoundPure` result is derived structurally from
+    `checkCertificateSlow` + `checkInvolutionSpec` via the bridge in
+    `ColumnNormBridge.lean`, avoiding any slow `native_decide` on the
+    pure checker.
+
+    Proved by chaining `spectralGap_le_of_walk_bound`,
+    `certificate_implies_walk_bound`, and `sqrt_coeff_le_frac`. -/
+theorem certificate_bridge (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
+    (G : RegularGraph n d)
+    (rotStr certStr : String) (c₁ c₂ c₃ : ℤ)
+    (hcert : checkCertificateSlow rotStr certStr n d c₁ c₂ c₃ = true)
+    (hinvSpec : checkInvolutionSpec rotStr.toUTF8 n d = true)
+    (βn βd : ℕ) (hβd : 0 < βd)
+    (hβ : c₁ * (↑βd * ↑βd) ≤ c₂ * (↑βn * ↑βn))
+    (hc₁ : 0 ≤ c₁) (hc₂ : 0 < c₂)
+    (hmatch : ∀ vp : Fin n × Fin d,
+      G.rot vp = (⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val)) % n,
+                    Nat.mod_lt _ hn⟩,
+                  ⟨decodeBase85Nat rotStr.toUTF8 (2 * (vp.1.val * d + vp.2.val) + 1) % d,
+                    Nat.mod_lt _ hd⟩)) :
+    spectralGap G ≤ ↑βn / (↑βd * ↑d) := by
+  -- Derive checkColumnNormBoundPure structurally (no native_decide)
+  have hcnb : checkColumnNormBound rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true := by
+    simp only [checkCertificateSlow, Bool.and_eq_true] at hcert; exact hcert.2
+  have hcnbp : checkColumnNormBoundPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true :=
+    checkColumnNormBound_implies_pure _ _ n d c₁ c₂ c₃ hcnb
+      (checkInvolutionSpec_neighbor_lt rotStr n d hinvSpec) hn hd
+  exact (spectralGap_le_of_walk_bound hd G (by exact_mod_cast hc₁) (by exact_mod_cast hc₂)
+      (fun f hf ↦ certificate_implies_walk_bound n d hn hd G
+        rotStr certStr c₁ c₂ c₃ hcert hcnbp hmatch f hf)).trans
+    (sqrt_coeff_le_frac (by exact_mod_cast hc₂) hd hβd (by
+      have h : ((c₁ * (↑βd * ↑βd) : ℤ) : ℝ) ≤ ((c₂ * (↑βn * ↑βn) : ℤ) : ℝ) :=
+        Int.cast_le.mpr hβ
+      push_cast at h; nlinarith))
