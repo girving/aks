@@ -28,8 +28,8 @@ import Bench.CertV7
 /-- Result from processing a chunk of columns: `(epsMax, minDiag, first)`.
     `first = true` means no diagonal entry was seen (chunk was empty). -/
 structure ChunkResult where
-  epsMax : ℤ
-  minDiag : ℤ
+  epsMax : Int
+  minDiag : Int
   first : Bool
   deriving Repr
 
@@ -50,15 +50,15 @@ def ChunkResult.merge (a b : ChunkResult) : ChunkResult :=
     sparse first mulAdj. Columns must be processed in order within the chunk
     for buffer reuse correctness (ascending column indices). -/
 def checkPSDChunk (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) (columns : Array Nat) : ChunkResult :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) : ChunkResult :=
   Id.run do
-    let mut epsMax : ℤ := 0
-    let mut minDiag : ℤ := 0
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
     let mut first := true
 
     -- Preallocate buffers (reused across columns within this chunk)
-    let mut zCol := Array.replicate n (0 : ℤ)
-    let mut bz := Array.replicate n (0 : ℤ)
+    let mut zCol := Array.replicate n (0 : Int)
+    let mut bz := Array.replicate n (0 : Int)
 
     for j in columns do
       let colStart := j * (j + 1) / 2
@@ -68,7 +68,7 @@ def checkPSDChunk (neighbors : Array Nat) (certBytes : ByteArray)
         bz := bz.set! v 0
 
       -- Combined: decode cert → zCol, scatter → bz, accumulate colSum
-      let mut colSum : ℤ := 0
+      let mut colSum : Int := 0
       for k in [:j+1] do
         let zk := decodeBase85Int certBytes (colStart + k)
         zCol := zCol.set! k zk
@@ -80,7 +80,7 @@ def checkPSDChunk (neighbors : Array Nat) (certBytes : ByteArray)
       -- Gershgorin check with inlined B²z
       for i in [:j+1] do
         -- Inline (B²z)[i] = (B·bz)[i]
-        let mut b2zi : ℤ := 0
+        let mut b2zi : Int := 0
         for p in [:d] do
           let w := neighbors[i * d + p]!
           b2zi := b2zi + bz[w]!
@@ -106,7 +106,7 @@ def checkPSDChunk (neighbors : Array Nat) (certBytes : ByteArray)
     O(j + n*d) work, so contiguous chunks are unbalanced).
     Uses `Task.spawn .dedicated` to run on dedicated OS threads. -/
 def checkPSDCertificateParallel (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) (numChunks : Nat := 4) : IO Bool := do
+    (n d : Nat) (c₁ c₂ c₃ : Int) (numChunks : Nat := 4) : IO Bool := do
   if certBytes.size != n * (n + 1) / 2 * 5 then return false
 
   let nc := if numChunks == 0 then 1 else numChunks
@@ -143,7 +143,7 @@ def checkPSDCertificateParallel (neighbors : Array Nat) (certBytes : ByteArray)
     Pre-decodes the rotation map, validates involution sequentially,
     then runs PSD check in parallel. -/
 def checkCertificateParallel (rotStr certStr : String)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) (numChunks : Nat := 4) : IO Bool := do
+    (n d : Nat) (c₁ c₂ c₃ : Int) (numChunks : Nat := 4) : IO Bool := do
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   if !checkInvolution rotBytes n d then return false

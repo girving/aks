@@ -34,20 +34,20 @@ def fmtNs (ns : Nat) : String :=
 
 /-- Like `checkPSDCertificate` but returns (ok, minDiag, epsMax) for diagnostics. -/
 def checkPSDWithMargin (rotBytes certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) : Bool × ℤ × ℤ :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool × Int × Int :=
   if certBytes.size != n * (n + 1) / 2 * 5 then (false, 0, 0)
   else Id.run do
-    let mut epsMax : ℤ := 0
-    let mut minDiag : ℤ := 0
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
     let mut first := true
     for j in [:n] do
       let colStart := j * (j + 1) / 2
-      let mut zCol := Array.replicate n (0 : ℤ)
+      let mut zCol := Array.replicate n (0 : Int)
       for k in [:j+1] do
         zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
       let bz := mulAdj rotBytes zCol n d
       let b2z := mulAdj rotBytes bz n d
-      let mut colSum : ℤ := 0
+      let mut colSum : Int := 0
       for k in [:j+1] do
         colSum := colSum + zCol[k]!
       for i in [:n] do
@@ -83,7 +83,7 @@ def timedIO (name : String) (f : IO String) : IO Unit := do
 
 /-- Baseline benchmark suite for one graph size. -/
 def benchBaseline (label : String) (rotStr certStr : String)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) : IO Unit := do
+    (n d : Nat) (c₁ c₂ c₃ : Int) : IO Unit := do
   IO.println s!"--- {label} (n={n}, d={d}) ---"
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8

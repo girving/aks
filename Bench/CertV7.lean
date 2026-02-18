@@ -25,16 +25,16 @@ import Bench.CertFast
 
 /-- `checkPSDCertificate` with all optimizations. -/
 def checkPSDCertificateV7 (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) : Bool :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
   else Id.run do
-    let mut epsMax : ℤ := 0
-    let mut minDiag : ℤ := 0
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
     let mut first := true
 
     -- Preallocate buffers (reused across columns)
-    let mut zCol := Array.replicate n (0 : ℤ)
-    let mut bz := Array.replicate n (0 : ℤ)
+    let mut zCol := Array.replicate n (0 : Int)
+    let mut bz := Array.replicate n (0 : Int)
 
     for j in [:n] do
       let colStart := j * (j + 1) / 2
@@ -44,7 +44,7 @@ def checkPSDCertificateV7 (neighbors : Array Nat) (certBytes : ByteArray)
         bz := bz.set! v 0
 
       -- Combined: decode cert → zCol, scatter → bz, accumulate colSum
-      let mut colSum : ℤ := 0
+      let mut colSum : Int := 0
       for k in [:j+1] do
         let zk := decodeBase85Int certBytes (colStart + k)
         zCol := zCol.set! k zk
@@ -58,7 +58,7 @@ def checkPSDCertificateV7 (neighbors : Array Nat) (certBytes : ByteArray)
       -- (B·bz)[i] = ∑_p bz[neighbor(i,p)] for i ≤ j, which is all we need.
       for i in [:j+1] do
         -- Inline (B²z)[i] = (B·bz)[i]
-        let mut b2zi : ℤ := 0
+        let mut b2zi : Int := 0
         for p in [:d] do
           let w := neighbors[i * d + p]!
           b2zi := b2zi + bz[w]!
@@ -85,7 +85,7 @@ def checkPSDCertificateV7 (neighbors : Array Nat) (certBytes : ByteArray)
 
 /-- Full certificate check V7. -/
 def checkCertificateV7 (rotStr certStr : String)
-    (n d : Nat) (c₁ c₂ c₃ : ℤ) : Bool :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   if !checkInvolution rotBytes n d then false

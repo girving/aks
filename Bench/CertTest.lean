@@ -110,15 +110,15 @@ def main : IO UInt32 := do
   IO.println "--- mulAdj ---"
 
   -- 4-cycle neighbors: v=0→{1,3}, v=1→{0,2}, v=2→{1,3}, v=3→{2,0}
-  let z0 : Array ℤ := #[1, 0, 0, 0]
+  let z0 : Array Int := #[1, 0, 0, 0]
   let bz0 := mulAdj smallRot z0 4 2
   failures := failures + (← check "B·e₀ = [0,1,0,1]" (bz0 == #[0, 1, 0, 1]))
 
-  let z1 : Array ℤ := #[1, 1, 1, 1]
+  let z1 : Array Int := #[1, 1, 1, 1]
   let bz1 := mulAdj smallRot z1 4 2
   failures := failures + (← check "B·1 = [2,2,2,2]" (bz1 == #[2, 2, 2, 2]))
 
-  let z2 : Array ℤ := #[1, 0, 1, 0]
+  let z2 : Array Int := #[1, 0, 1, 0]
   let bz2 := mulAdj smallRot z2 4 2
   failures := failures + (← check "B·[1,0,1,0] = [0,2,0,2]" (bz2 == #[0, 2, 0, 2]))
 
