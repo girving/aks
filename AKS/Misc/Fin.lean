@@ -89,3 +89,9 @@ lemma rank_fin_od_val {n : ℕ} (i : Fin n) :
   have : Finset.univ.filter (fun b : Fin n ↦ i < b) = Finset.Ioi i := by
     ext x; simp [Finset.mem_Ioi]
   rw [this, Fin.card_Ioi]
+
+/-- `rank` on `(Fin n)ᵒᵈ` in terms of `.val`. Matches goals after unfolding
+    `FinalNearsorted` where the variable is already of type `(Fin n)ᵒᵈ`. -/
+@[simp] lemma rank_fin_od {n : ℕ} (a : (Fin n)ᵒᵈ) :
+    rank a = n - 1 - a.val :=
+  rank_fin_od_val (OrderDual.ofDual a)

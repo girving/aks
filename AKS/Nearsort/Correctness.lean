@@ -360,29 +360,32 @@ theorem halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)
   -- FinalNearsorted = InitialNearsorted on (Fin n)ᵒᵈ
   unfold FinalNearsorted
   intro k hk
-  simp only [Fintype.card_fin] at hk ⊢
-  -- rank on (Fin n)ᵒᵈ = n - 1 - val
-  simp only [rank_fin_od_val]
+  -- Unfold the let-bindings from InitialNearsorted and simplify Fintype.card
+  dsimp only []
+  simp only [Fintype.card_orderDual, Fintype.card_fin] at hk ⊢
   set δ : ℝ := ε * ↑depth
   set w := (halverNetwork n halvers depth).exec (v : Fin n → Fin n)
   set R := ⌊δ * ↑n⌋₊
   have hw : Function.Injective w := ComparatorNetwork.exec_injective _ v.injective
-  -- Convert rank condition: n - 1 - a.val < k ↔ n ≤ a.val + k (for a : Fin n, val ≤ n-1)
-  -- S = {a | n - 1 - a.val < k} = {a | n ≤ a.val + k}
-  -- (Note: n - 1 - a.val < k ↔ n - 1 < k + a.val ↔ n ≤ k + a.val for Nat)
-  have hS : (univ.filter (fun a : Fin n ↦ n - 1 - a.val < k)) =
-    (univ.filter (fun a : Fin n ↦ n ≤ a.val + k)) := by
-    ext a; simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-    constructor <;> intro h <;> have := a.isLt <;> omega
-  have hSε : (univ.filter (fun a : Fin n ↦ n - 1 - a.val < k + R)) =
-    (univ.filter (fun a : Fin n ↦ n ≤ a.val + k + R)) := by
-    ext a; simp only [Finset.mem_filter, Finset.mem_univ, true_and]
-    constructor <;> intro h <;> have := a.isLt <;> omega
-  rw [hS, hSε]
+  -- Convert rank-based filters on (Fin n)ᵒᵈ to val-based filters on Fin n
+  -- rank a < k' in (Fin n)ᵒᵈ ↔ n - 1 - a.val < k' ↔ n ≤ a.val + k'
+  have hconv : ∀ k' : ℕ,
+      (univ.filter (fun a : (Fin n)ᵒᵈ ↦ rank a < k')) =
+      (univ.filter (fun a : Fin n ↦ n ≤ a.val + k')) := by
+    intro k'
+    ext a
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and, rank_fin_od]
+    have := (OrderDual.ofDual a).isLt
+    omega
+  rw [hconv k, hconv (k + R)]
   -- Now apply the dual reformulation and bound
+  -- After hconv, the Sε filter uses a.val + (k + R); convert to a.val + k + R
+  have hassoc : (univ.filter (fun a : Fin n ↦ n ≤ a.val + (k + R))) =
+      (univ.filter (fun a : Fin n ↦ n ≤ a.val + k + R)) := by
+    congr 1; ext a; constructor <;> intro h <;> omega
+  rw [hassoc]
   calc ((univ.filter (fun a : Fin n ↦ n ≤ a.val + k) \
           (univ.filter (fun a : Fin n ↦ n ≤ a.val + k + R)).image w).card : ℝ)
-      = (farLargeCount w k R : ℝ) := by
-        exact_mod_cast sdiff_image_card_eq_far_large_count hw
+      = (farLargeCount w k R : ℝ) := by exact_mod_cast sdiff_image_card_eq_far_large_count hw
     _ ≤ δ * ↑k :=
         halverNetwork_far_large_bound ε depth hε hε1 hdepth halvers hhalvers v k hk
