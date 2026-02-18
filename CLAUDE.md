@@ -244,10 +244,15 @@ For γ = 1/2 this reduces to `IsEpsilonHalver`. Uses Seiferas's two-parameter
 
 ### `AKS/Separator/` — Remaining Files (Planned)
 See `docs/separator-plan.md` for full design. Planned files:
-1. **`FromHalver.lean`** — `halver_gives_separator` (Paterson Section 4)
-2. **`Outsider.lean`** — `outsiderCount`, block assignment (Paterson Section 5)
-3. **`Potential.lean`** — Seiferas potential function and decrease lemma (Seiferas Section 7)
-4. **`TreeSort.lean`** — assembly: separators → sorting network
+1. **`Family.lean`** — `SeparatorFamily` structure (analogous to `HalverFamily`)
+2. **`FromHalver.lean`** — `halverToSeparator` computable construction (Seiferas Section 6)
+
+### `AKS/Bags/` — Bag-Tree Sorting (Planned)
+Seiferas's bag-based tree argument: separators → O(log n) depth sorting network.
+1. **`Defs.lean`** — bag tree, register assignment, j-strangers
+2. **`Invariant.lean`** — four-clause invariant maintenance (Seiferas Section 5)
+3. **`Stage.lean`** — one-stage network construction + depth bound
+4. **`TreeSort.lean`** — full sorting network, correctness, depth O(log n)
 
 ### Data flow
 ```
@@ -262,10 +267,13 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
            Certificate.lean ──→ CertificateBridge.lean  Halver/Tanner.lean ─↗
                                                                     ↓
                                                          Separator/Defs.lean
+                                                         Separator/Family.lean
                                                          Separator/FromHalver.lean
-                                                         Separator/Outsider.lean
-                                                         Separator/Potential.lean
-                                                         Separator/TreeSort.lean ──→ AKSNetwork.lean
+                                                                    ↓
+                                                         Bags/Defs.lean
+                                                         Bags/Invariant.lean
+                                                         Bags/Stage.lean
+                                                         Bags/TreeSort.lean ──→ AKSNetwork.lean
 ```
 
 ## Style
@@ -278,6 +286,8 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - **Use parent module + subdirectory for cohesive subsystems.** Lean 4 allows `AKS/Name.lean` (parent module) and `AKS/Name/*.lean` (child modules) to coexist. The parent re-exports or assembles results; children hold the implementation. Example: `AKS/ZigZag.lean` imports `AKS.ZigZag.Operators`, `AKS.ZigZag.Spectral`, etc. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
 - **Parameterize theorems over abstract bounds, not hard-coded constants.** Take spectral gap bounds (β, c, etc.) as parameters with hypotheses, not baked-in fractions. Chain `.trans` through hypotheses, not `norm_num`. Prefer explicit types/degrees (`D * D`) over `∃ d`, and concrete objects as parameters over axioms in statements. Motivation: we want explicit, computable, extractable constants.
+- **Define constructions as computable `def`s, prove properties as separate theorems.** Never use `∃ (net : ComparatorNetwork n), ...` when the witness is known — define it as a `def` and prove properties about it. This gives: (1) computability, (2) composability (downstream code can refer to the object directly), (3) cleaner proofs (no `Exists.choose`/`noncomputable`). Example: `expanderHalver` is a `def` with `expanderHalver_isEpsilonHalver` and `expanderHalver_size` as theorems — not `∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d`. Similarly, bundle families as `structure`s with computable fields + proof fields (see `HalverFamily`).
+- **Prove depth bounds, not size bounds.** For comparator networks, depth (parallel rounds) is the fundamental complexity measure. Size ≤ n/2 · depth follows trivially from `size_le_half_n_mul_depth`. Always state the depth bound first; derive size as a corollary. This applies to `HalverFamily` (already correct: `depth_le` is fundamental, `size_le` derived), separator families, and the top-level sorting network theorem.
 - **Avoid non-terminal `simp`** — use `simp only [specific, lemmas]` or `rw` instead. Non-terminal `simp` is fragile (new simp lemmas can break downstream tactics). Exception: acceptable if the alternative is much uglier, but document why.
 - **Don't create import-only re-export files.** A file that just imports its children (e.g., `AKS/Sort.lean` importing `Sort.Defs`, `Sort.Monotone`, etc.) adds indirection with no value. Import leaf modules directly from the root `AKS.lean` or from consuming files.
 - **Colocate files with their consumers, not their topic.** If a file has only one downstream user, move it into that subsystem's directory. E.g., `Mixing.lean` was used only by `Halver/Tanner.lean`, so it belongs in `AKS/Halver/`, not at the top level.
