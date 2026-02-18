@@ -143,6 +143,19 @@ theorem mulAdjWith_getD (f : Nat → Nat) (z : Array Int) (n d v : Nat) (hv : v 
   getD_of_getElem?_some (by rw [mulAdjWith_getElem?, if_pos hv])
 
 
+/-- `mulAdjEntry` equals the corresponding entry of `mulAdjPre`. -/
+theorem mulAdjEntry_eq_getD (neighbors : Array Nat) (z : Array Int)
+    (n d i : Nat) (hi : i < n) :
+    mulAdjEntry neighbors z d i = (mulAdjPre neighbors z n d).getD i 0 := by
+  show _ = (mulAdjWith (fun k => neighbors[k]!) z n d).getD i 0
+  rw [mulAdjWith_getD _ z n d i hi]
+  show mulAdjEntry neighbors z d i =
+    Nat.fold d (fun p _ acc => acc + z[neighbors[i * d + p]!]!) 0
+  unfold mulAdjEntry
+  simp only [Id.run, bind, pure, Std.Range.forIn_eq_forIn_range', Std.Range.size, Nat.sub_zero,
+    Nat.add_sub_cancel, Nat.div_one, forIn_range'_eq_fold, Nat.zero_add]
+
+
 /-! **`psdColumnStep` sub-expression specifications** -/
 
 /-- `zCol` (the column extraction loop in `psdColumnStep`) produces
@@ -261,18 +274,19 @@ private theorem psdColumnStep_pij_eq
       arr.set! k (decodeBase85Int certBytes (j * (j + 1) / 2 + k)))
       (Array.replicate n (0 : Int))
     let bz := mulAdjPre neighbors zCol n d
-    let b2z := mulAdjPre neighbors bz n d
     let colSum := Nat.fold (j + 1) (fun k _ acc => acc + zCol.getD k 0) 0
-    c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum =
+    c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum =
     pEntryPure rotBytes certBytes n d c₁ c₂ c₃ i j := by
-  intro neighbors zCol bz b2z colSum_imp
+  intro neighbors zCol bz colSum_imp
+  -- Bridge mulAdjEntry to mulAdjPre getD
+  have hmulAdj_eq : mulAdjEntry neighbors bz d i = (mulAdjPre neighbors bz n d).getD i 0 :=
+    mulAdjEntry_eq_getD neighbors bz n d i hi
+  rw [hmulAdj_eq]
   -- Step 1: zCol[i]! = certEntryInt certBytes i j
   have hzCol_i : (zCol : Array Int).getD i 0 = certEntryInt certBytes i j :=
     zCol_getD certBytes n j i hj hi
   -- Step 2: colSum_imp = colSumZ certBytes n j = sumTo ... n
   have hcolSum : colSum_imp = sumTo (fun l ↦ certEntryInt certBytes l j) n := by
-    -- colSum_imp unfolds to Nat.fold (j+1) (... zCol.getD k 0 ...) 0
-    -- which is definitionally equal to the explicit form in colSum_spec
     change _ = colSumZ certBytes n j
     exact colSum_spec certBytes n j hj
   -- Step 3: bz.getD v 0 = adjMulPure rotBytes (certEntryInt certBytes · j) n d v for v < n
@@ -283,20 +297,15 @@ private theorem psdColumnStep_pij_eq
       (by rw [fold_set_size]; omega) hd hinv]
     exact adjMulPure_congr rotBytes _ _ n d v (by omega)
       (fun k hk ↦ zCol_getD certBytes n j k hj hk)
-  -- Step 4: b2z.getD i 0 = adjMulPure rotBytes (adjMulPure rotBytes zj n d ·) n d i
-  have hb2z_i : b2z.getD i 0 = adjMulPure rotBytes
+  -- Step 4: (mulAdjPre neighbors bz n d).getD i 0 = adjMulPure rotBytes (...) n d i
+  have hb2z_i : (mulAdjPre neighbors bz n d).getD i 0 = adjMulPure rotBytes
       (fun v ↦ adjMulPure rotBytes (fun k ↦ certEntryInt certBytes k j) n d v) n d i := by
     rw [mulAdjPre_getD_eq_adjMulPure rotBytes bz n d i hi
       (mulAdjPre_size _ _ _ _) hd hinv]
     exact adjMulPure_congr rotBytes _ _ n d i (by omega) hbz
-  -- Assemble: pEntryPure unfolds to c₁ * zj i - c₂ * b2zj_i + c₃ * colSum
-  -- where each piece matches what we proved above
+  -- Assemble
   unfold pEntryPure
-  -- Now goal is: c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum_imp =
-  --   c₁ * certEntryInt ... - c₂ * adjMulPure ... + c₃ * sumTo ...
-  -- zCol[i]! = zCol.getD i 0 (by rfl for Int arrays)
-  -- Similarly for b2z[i]!
-  change c₁ * zCol.getD i 0 - c₂ * b2z.getD i 0 + c₃ * colSum_imp =
+  change c₁ * zCol.getD i 0 - c₂ * (mulAdjPre neighbors bz n d).getD i 0 + c₃ * colSum_imp =
     c₁ * certEntryInt certBytes i j -
     c₂ * adjMulPure rotBytes (fun v ↦ adjMulPure rotBytes (fun k ↦ certEntryInt certBytes k j) n d v) n d i +
     c₃ * sumTo (fun l ↦ certEntryInt certBytes l j) n
@@ -315,12 +324,11 @@ private def psdG (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : 
     for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
     return arr
   let bz := mulAdjPre neighbors zCol n d
-  let b2z := mulAdjPre neighbors bz n d
   let colSum := Id.run do
     let mut s : Int := 0
     for k in [:j+1] do s := s + zCol[k]!
     return s
-  c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+  c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
 
 /-- `psdG` equals `pEntryPure` under involution hypothesis. -/
 private theorem psdG_eq_pEntryPure
@@ -558,7 +566,7 @@ private theorem foldMax_eq_epsMaxCol (rotBytes certBytes : ByteArray) (n d : Nat
 /-! **`psdColumnStep` ↔ fold bridge** -/
 
 /-- Prod version of `psdColumnStep` for bridging to fold characterization. -/
-private def psdColumnStepProd (doMulAdj : Array Int → Array Int)
+private def psdColumnStepProd (neighbors : Array Nat) (d : Nat)
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
     (state : PSDChunkResult) (j : Nat) : Int × Bool × Int :=
   let colStart := j * (j + 1) / 2
@@ -566,8 +574,7 @@ private def psdColumnStepProd (doMulAdj : Array Int → Array Int)
     let mut arr := Array.replicate n (0 : Int)
     for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
     return arr
-  let bz := doMulAdj zCol
-  let b2z := doMulAdj bz
+  let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0
     for k in [:j+1] do s := s + zCol[k]!
@@ -576,8 +583,8 @@ private def psdColumnStepProd (doMulAdj : Array Int → Array Int)
     let mut epsMax := state.epsMax
     let mut first := state.first
     let mut minDiag := state.minDiag
-    for i in [:n] do
-      let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
+    for i in [:j+1] do
+      let pij := c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
       if i == j then
         if first then minDiag := pij; first := false
         else if pij < minDiag then minDiag := pij
@@ -590,13 +597,13 @@ private def psdColumnStepProd (doMulAdj : Array Int → Array Int)
 private theorem psdColumnStepProd_eq_fold
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (state : PSDChunkResult) (j : Nat) :
-    psdColumnStepProd (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    psdColumnStepProd (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j =
-    Nat.fold n (fun i _ s => trackerStepP
+    Nat.fold (j + 1) (fun i _ s => trackerStepP
       (psdG rotBytes certBytes n d c₁ c₂ c₃ j) j i s)
       (state.epsMax, state.first, state.minDiag) := by
   unfold psdColumnStepProd
-  exact tracker_3var_eq_fold _ j n state.epsMax state.minDiag state.first
+  exact tracker_3var_eq_fold _ j (j + 1) state.epsMax state.minDiag state.first
 
 
 /-! **Tracker loop characterization** -/
@@ -611,26 +618,26 @@ private theorem psdColumnStep_result
     (state : PSDChunkResult) (j : Nat) (hj : j < n) (hd : 0 < d)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (he : 0 ≤ state.epsMax) :
-    (psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    (psdColumnStep (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j).epsMax = max state.epsMax
       (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j (colSumZ certBytes n j) j) ∧
-    (psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    (psdColumnStep (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j).minDiag =
       (if state.first then pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j
        else min state.minDiag (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j)) ∧
-    (psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    (psdColumnStep (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j).first = false := by
   -- Bridge PSDChunkResult → Prod (definitional equalities)
-  show (psdColumnStepProd (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+  show (psdColumnStepProd (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j).1 = _ ∧
-    (psdColumnStepProd (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    (psdColumnStepProd (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j).2.2 = _ ∧
-    (psdColumnStepProd (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    (psdColumnStepProd (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃ state j).2.1 = _
   rw [psdColumnStepProd_eq_fold]
-  -- Apply fold characterization
-  have hspec := trackerFold_spec (psdG rotBytes certBytes n d c₁ c₂ c₃ j) j n
-    state.epsMax state.minDiag state.first hj he
+  -- Apply fold characterization (fold bound is j+1, so j < j+1 trivially)
+  have hspec := trackerFold_spec (psdG rotBytes certBytes n d c₁ c₂ c₃ j) j (j + 1)
+    state.epsMax state.minDiag state.first (by omega) he
   obtain ⟨heps, hfirst, hmin⟩ := hspec
   refine ⟨?_, ?_, hfirst⟩
   · -- epsMax: foldMax (psdG ...) j = epsMaxCol ... j
@@ -668,7 +675,7 @@ private theorem seqFold_eq_pure
     (hd : 0 < d) (hn : 0 < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) (m : Nat)
     (hm : m ≤ n) :
-    let step := psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+    let step := psdColumnStep (decodeNeighbors rotBytes n d) d
       certBytes n c₁ c₂ c₃
     let init : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
     let result := (List.range m).foldl step init
@@ -683,14 +690,14 @@ private theorem seqFold_eq_pure
     obtain ⟨ih_eps, ih_min, ih_first⟩ := ih hk
     -- Decompose: foldl over range (k+1) = step (foldl over range k) k
     set prev := (List.range k).foldl
-      (psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+      (psdColumnStep (decodeNeighbors rotBytes n d) d
         certBytes n c₁ c₂ c₃)
       { epsMax := 0, minDiag := 0, first := true } with hprev_def
     have hfold : (List.range (k + 1)).foldl
-        (psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+        (psdColumnStep (decodeNeighbors rotBytes n d) d
           certBytes n c₁ c₂ c₃)
         { epsMax := 0, minDiag := 0, first := true } =
-      psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+      psdColumnStep (decodeNeighbors rotBytes n d) d
         certBytes n c₁ c₂ c₃ prev k := by
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
     -- Apply psdColumnStep_result
@@ -698,7 +705,7 @@ private theorem seqFold_eq_pure
     have hpsd := psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ prev k hkn hd hinv he
     obtain ⟨hpsd_eps, hpsd_min, hpsd_first⟩ := hpsd
     set result := (List.range (k + 1)).foldl
-      (psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d)
+      (psdColumnStep (decodeNeighbors rotBytes n d) d
         certBytes n c₁ c₂ c₃)
       { epsMax := 0, minDiag := 0, first := true } with hresult_def
     have hresult_step := hresult_def.trans hfold
@@ -796,7 +803,7 @@ private theorem list_forIn_yield_eq_foldl {α β : Type} (l : List α) (init : �
 private theorem checkPSDColumns_eq_listFoldl (neighbors : Array Nat)
     (certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat) :
     checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols =
-    cols.toList.foldl (psdColumnStep (mulAdjPre neighbors · n d) certBytes n c₁ c₂ c₃)
+    cols.toList.foldl (psdColumnStep neighbors d certBytes n c₁ c₂ c₃)
       { epsMax := 0, minDiag := 0, first := true } := by
   unfold checkPSDColumns; simp only [Id.run, bind, pure]
   rw [show forIn cols _ _ = forIn cols.toList _ _ from (Array.forIn_toList).symm]
@@ -806,7 +813,7 @@ private theorem checkPSDColumns_eq_listFoldl (neighbors : Array Nat)
 /-! **Fold invariants for `psdColumnStep`** -/
 
 private abbrev stepFn (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) :=
-  psdColumnStep (mulAdjPre (decodeNeighbors rotBytes n d) · n d) certBytes n c₁ c₂ c₃
+  psdColumnStep (decodeNeighbors rotBytes n d) d certBytes n c₁ c₂ c₃
 
 /-- `psdColumnStep_result` restated with `stepFn` in the conclusion for `rw` matching. -/
 private theorem stepFn_result (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
@@ -1382,7 +1389,7 @@ private theorem merged_eq_sequential
     (hd : 0 < d) (hn : 0 < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) :
     let neighbors := decodeNeighbors rotBytes n d
-    let step := psdColumnStep (mulAdjPre neighbors · n d) certBytes n c₁ c₂ c₃
+    let step := psdColumnStep neighbors d certBytes n c₁ c₂ c₃
     let init : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
     let columnLists := buildColumnLists n 64
     let results := columnLists.map fun cols =>
