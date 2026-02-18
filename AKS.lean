@@ -12,7 +12,7 @@ import AKS.Sort.ZeroOne
 import AKS.Sort.Depth
 import AKS.Misc.Fin
 import AKS.Tree.AKSNetwork
-import AKS.Nearsort
+import AKS.Nearsort.Defs
 import AKS.Halver.Defs
 import AKS.Halver.Tanner
 import AKS.Halver.ExpanderToHalver

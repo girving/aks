@@ -22,7 +22,7 @@ The key papers are checked into the repo:
 
 The project explores two parallel approaches for the tree-based correctness proof (halvers → sorting network):
 
-1. **AKS original** (`TreeSorting.lean`, `Nearsort.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
+1. **AKS original** (`TreeSorting.lean`, `Nearsort/Defs.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
 
 2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (γ,ε)-separators + outsider counting with Seiferas's single potential function. Definitions in place; downstream files not yet implemented. See `docs/separator-plan.md` for the full design.
 
@@ -231,7 +231,7 @@ Assembles the spectral bound and builds the iterated construction:
 
 ### `AKS/Separator/Defs.lean` — (γ, ε)-Separator Definitions (~50 lines)
 ε-approximate γ-separation (Seiferas 2009, Section 6). Alternative to the
-ε-nearsort path in `Nearsort.lean`; both paths share `IsEpsilonHalver`.
+ε-nearsort path in `Nearsort/Defs.lean`; both paths share `IsEpsilonHalver`.
 1. **`SepInitial`**, **`SepFinal`** — one-sided separation (initial/final via `αᵒᵈ`)
 2. **`IsApproxSep`** — both-sided ε-approximate γ-separation
 3. **`IsSeparator`** — network-level property (quantified over permutations)
