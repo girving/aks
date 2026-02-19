@@ -442,6 +442,14 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **When hitting technical obstacles, step back and reason mathematically first.** After 2-3 failed tactic attempts, don't revert to `sorry`. Instead: (1) write out what you're proving and why it's true, (2) identify key sublemmas, (3) implement as separate helper lemmas, (4) reassemble. Helpers are reusable and make the main proof readable.
 
+**`omega` can't see through Fin literal `.val`.** `omega` treats `(⟨x, proof⟩ : Fin n).val` as an opaque atom, not as `x`. Fixes: (1) `show x - y < z; omega` forces Lean to check definitional equality, reducing the Fin val; (2) for Fin equalities `⟨a, _⟩ = ⟨b, _⟩`, use `ext; show a = b; omega`; (3) for nested Fin terms like `(M - n) + (v ⟨n + (M + j - M), _⟩).val`, use `congr 3; ext; show n + (M + j - M) = n + j; omega` — `congr` peels through `+`, `.val`, function application to reach the Fin constructor.
+
+**`rw` fails on dependent Fin proof terms; use `congr` instead.** `rw [show M + j - M = j ...]` fails when the rewritten Nat expression appears inside a Fin literal `⟨n + (M + j - M), proof⟩` because `proof` depends on `M + j - M`, making the motive ill-typed. Fix: use `congr n; ext; show <nat-eq>; omega` to reach the Fin constructor level where `ext` produces a pure Nat goal.
+
+**`Fin.mk.injEq` for injection proofs.** When proving injectivity of `fun pos => ⟨f pos.val, _⟩`, the hypothesis `hab` has un-beta-reduced form. Use `simp only [Fin.mk.injEq] at hab` to reduce to `f a.val = f b.val`, then `exact Fin.ext hab` or omega.
+
+**Region-based `dite` definitions: extract val-level lemmas per region.** For definitions with multiple `if/dite` branches (e.g., `padFun` with 4 regions), write separate `*_val_rt`, `*_val_pt`, etc. lemmas with explicit negation hypotheses. Proofs then use `have h := lemma_val_region ... (show ¬... by omega) ...; rw [h]; <close>`, avoiding fragile `split_ifs` where branch counts can vary.
+
 ## Mathlib API Reference
 
 ### Spectral Theorem
