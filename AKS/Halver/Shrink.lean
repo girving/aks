@@ -43,23 +43,50 @@ def shrinkHalver {M : ℕ} (net : ComparatorNetwork (2 * M)) (n : ℕ) (hn : n �
               by simp [Fin.lt_iff_val_lt_val]; omega⟩
       else none }
 
+private theorem filterMap_self {α : Type*} (f : α → Option α) (l : List α)
+    (hf : ∀ x ∈ l, f x = some x) : l.filterMap f = l := by
+  induction l with
+  | nil => rfl
+  | cons a as ih =>
+    have ha := hf a (List.mem_cons.mpr (Or.inl rfl))
+    simp only [List.filterMap_cons, ha]
+    congr 1
+    exact ih (fun x hx => hf x (List.mem_cons.mpr (Or.inr hx)))
+
 /-- Shrinking to the same size is the identity (for bipartite networks). -/
 theorem shrinkHalver_self {M : ℕ} (net : ComparatorNetwork (2 * M))
     (hbip : net.IsBipartite) :
     shrinkHalver net M le_rfl = net := by
-  sorry
+  simp only [shrinkHalver]
+  congr 1
+  apply filterMap_self
+  intro c hc
+  have ⟨hi, hj⟩ := hbip c hc
+  have hj_lt := c.j.isLt
+  simp only [dif_pos ⟨hi, hj, by omega⟩]
+  congr 1
+  · exact Fin.ext rfl
+  · exact Fin.ext (by omega)
 
 /-- The shrunk halver is bipartite. -/
 theorem shrinkHalver_isBipartite {M : ℕ} (net : ComparatorNetwork (2 * M))
     (n : ℕ) (hn : n ≤ M) :
     (shrinkHalver net n hn).IsBipartite := by
-  sorry
+  intro c hc
+  simp only [shrinkHalver, List.mem_filterMap] at hc
+  obtain ⟨c', _, h_guard, h_eq⟩ := hc
+  split at h_guard
+  · case isTrue h =>
+    simp only [Option.some.injEq] at h_eq
+    subst h_eq
+    exact ⟨h.1, le_add_right n _⟩
+  · simp at h_guard
 
 /-- The shrunk halver has at most as many comparators as the original. -/
 theorem shrinkHalver_size_le {M : ℕ} (net : ComparatorNetwork (2 * M))
     (n : ℕ) (hn : n ≤ M) :
     (shrinkHalver net n hn).size ≤ net.size := by
-  sorry
+  exact List.length_filterMap_le _ _
 
 
 /-! **Quality Bounds** -/
@@ -109,6 +136,64 @@ theorem shrinkHalver_isEpsilonHalver {M : ℕ} (net : ComparatorNetwork (2 * M))
     (hbip : net.IsBipartite) (ε : ℝ) (hε : IsEpsilonHalver net ε) (hε_nn : 0 ≤ ε)
     (n : ℕ) (hn : 0 < n) (hnM : n ≤ M) :
     IsEpsilonHalver (shrinkHalver net n hnM) (ε * (↑(M - n) + 1)) := by
-  sorry
+  set ε' := ε * (↑(M - n) + 1)
+  set net' := shrinkHalver net n hnM
+  intro v
+  constructor
+  · -- EpsilonInitialHalved
+    intro k hk
+    simp only [Fintype.card_fin, show 2 * n / 2 = n from by omega] at hk
+    by_cases hk0 : k = 0
+    · simp only [hk0, Nat.cast_zero, mul_zero]; positivity
+    · have hk_pos : 0 < k := Nat.pos_of_ne_zero hk0
+      calc ((univ.filter (fun pos : Fin (2 * n) ↦
+                n ≤ rank pos ∧ rank (net'.exec v pos) < k)).card : ℝ)
+          ≤ ε * (↑M - ↑n + ↑k) := shrinkHalver_initialBound net hbip ε hε n hn hnM v k hk
+        _ ≤ ε' * ↑k := by
+            unfold_let ε'
+            rw [mul_assoc]
+            apply mul_le_mul_of_nonneg_left _ hε_nn
+            push_cast [Nat.sub_le_iff_le_add hnM]
+            nlinarith
+  · -- EpsilonFinalHalved = EpsilonInitialHalved on (Fin (2*n))ᵒᵈ
+    show EpsilonInitialHalved (α := (Fin (2 * n))ᵒᵈ) (net'.exec v) ε'
+    simp only [EpsilonInitialHalved, Fintype.card_orderDual, Fintype.card_fin,
+      show 2 * n / 2 = n from by omega]
+    intro k hk
+    by_cases hk0 : k = 0
+    · simp only [hk0, Nat.cast_zero, mul_zero]; positivity
+    · have hk_pos : 0 < k := Nat.pos_of_ne_zero hk0
+      -- Convert OrderDual rank conditions to val conditions via bijection
+      have h_card_eq : (univ.filter (fun pos : (Fin (2 * n))ᵒᵈ ↦
+          n ≤ @rank (Fin (2 * n))ᵒᵈ _ _ pos ∧
+          @rank (Fin (2 * n))ᵒᵈ _ _ (net'.exec v pos) < k)).card =
+        (univ.filter (fun pos : Fin (2 * n) ↦
+          pos.val < n ∧ 2 * n - k ≤ (net'.exec v pos).val)).card := by
+        apply Finset.card_nbij'
+          (fun x => OrderDual.ofDual x) (fun x => OrderDual.toDual x)
+        · intro x hx
+          simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hx ⊢
+          rw [rank_fin_od, rank_fin_od] at hx
+          have hx_lt := (OrderDual.ofDual x).isLt
+          have hwx_lt := (net'.exec v (OrderDual.ofDual x)).isLt
+          constructor <;> omega
+        · intro x hx
+          simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hx ⊢
+          rw [rank_fin_od, rank_fin_od]
+          have hx_lt := x.isLt
+          have hwx_lt := (net'.exec v x).isLt
+          constructor <;> omega
+        · intro _ _; rfl
+        · intro _ _; rfl
+      rw [h_card_eq]
+      calc ((univ.filter (fun pos : Fin (2 * n) ↦
+                pos.val < n ∧ 2 * n - k ≤ (net'.exec v pos).val)).card : ℝ)
+          ≤ ε * (↑M - ↑n + ↑k) := shrinkHalver_finalBound net hbip ε hε n hn hnM v k hk
+        _ ≤ ε' * ↑k := by
+            unfold_let ε'
+            rw [mul_assoc]
+            apply mul_le_mul_of_nonneg_left _ hε_nn
+            push_cast [Nat.sub_le_iff_le_add hnM]
+            nlinarith
 
 
