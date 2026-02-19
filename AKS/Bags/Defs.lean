@@ -138,6 +138,14 @@ theorem jStrangerCount_mono {n : ℕ} {perm : Fin n → Fin n}
   simp only [jStrangerCount]
   exact Finset.card_le_card (Finset.filter_subset_filter _ hst)
 
+/-- Stranger count of a union is at most the sum of stranger counts. -/
+theorem jStrangerCount_union_le {n : ℕ} (perm : Fin n → Fin n)
+    (s₁ s₂ : Finset (Fin n)) (level idx j : ℕ) :
+    jStrangerCount n perm (s₁ ∪ s₂) level idx j ≤
+    jStrangerCount n perm s₁ level idx j + jStrangerCount n perm s₂ level idx j := by
+  simp only [jStrangerCount, Finset.filter_union]
+  exact Finset.card_union_le _ _
+
 /-- The number of `j`-strangers is at most the number of items in the bag. -/
 theorem jStrangerCount_le_card {n : ℕ} (perm : Fin n → Fin n)
     (regs : Finset (Fin n)) (level idx j : ℕ) :
