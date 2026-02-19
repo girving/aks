@@ -135,6 +135,22 @@ def SatisfiesC4_eq1 (A ν lam ε : ℝ) : Prop :=
   + 1 / (8 * A ^ 3 - 2 * A)
   ≤ lam * ν
 
+/-- Combined coefficient for parent 1-stranger sources (Seiferas Section 5).
+    Captures four sub-sources from the parent bag:
+    (a) ε fraction of parent's 1-strangers escape filtering: `ε·λ/A`
+    (b) Halving errors (C-native on wrong side): `ε/(2A)`
+    (c) Excess C-native from subtree stranger accumulation: `2λεA/(1-(2εA)²)`
+    (d) C-native items from above parent: `1/(8A³-2A)` -/
+noncomputable def parentStrangerCoeff (A lam ε : ℝ) : ℝ :=
+  ε * lam / A + ε / (2 * A) +
+  2 * lam * ε * A / (1 - (2 * ε * A) ^ 2) +
+  1 / (8 * A ^ 3 - 2 * A)
+
+/-- The C4 (j=1) constraint decomposes as children + parent coefficient ≤ λν. -/
+theorem c4_eq1_decomposed {A ν lam ε : ℝ} (hC4 : SatisfiesC4_eq1 A ν lam ε) :
+    2 * lam * ε * A + parentStrangerCoeff A lam ε ≤ lam * ν := by
+  unfold SatisfiesC4_eq1 at hC4; unfold parentStrangerCoeff; linarith
+
 /-- All parameter constraints combined. -/
 def SatisfiesConstraints (A ν lam ε : ℝ) : Prop :=
   1 < A ∧ 0 < ν ∧ ν < 1 ∧ 0 < lam ∧ lam < 1/2 ∧ 0 < ε ∧
@@ -425,19 +441,98 @@ theorem stranger_bound_maintained_gt1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     _ = lam * ε ^ (j - 1) * bagCapacity n A ν (t + 1) level := by
         rw [bagCapacity_succ_stage]
 
+/-- Core arithmetic for stranger bound (j = 1): factoring out `bagCapacity` and
+    applying C4 (`2·lam·ε·A + parentStrangerCoeff ≤ lam·ν`). -/
+private theorem stranger_eq1_arithmetic {A ν lam ε b : ℝ}
+    (hC4 : SatisfiesC4_eq1 A ν lam ε) (hb : 0 ≤ b) :
+    2 * lam * ε * A * b + parentStrangerCoeff A lam ε * b ≤
+    lam * (ν * b) := by
+  calc 2 * lam * ε * A * b + parentStrangerCoeff A lam ε * b
+      = (2 * lam * ε * A + parentStrangerCoeff A lam ε) * b := by ring
+    _ ≤ (lam * ν) * b :=
+        mul_le_mul_of_nonneg_right (c4_eq1_decomposed hC4) hb
+    _ = lam * (ν * b) := by ring
+
 /-- Clause (4) maintenance for `j = 1`: 1-stranger bound at stage `t+1`.
     This is the hardest case (Seiferas Section 5). Three sources:
-    (a) 2+-strangers from children kicked up: at most 2*lam*eps*A*b
-    (b) 1-strangers from parent sent down: at most eps*lam*b/A
-    (c) Sibling leakage via separator error: geometric series in (2εA)²
-    Requires the master constraint (C4, j=1). -/
+    (a) 2-strangers from children kicked up: at most `2·lam·ε·A·b`
+    (b)–(e) Parent contributions (1-strangers, halving errors, subtree accumulation,
+    above-parent items): combined at most `parentStrangerCoeff·b`
+    Requires the master constraint (C4, j=1).
+
+    The two hypotheses `hkick_stranger` and `hparent_1stranger` abstract
+    over the separator's behavior:
+    - `hkick_stranger`: 1-strangers among items kicked from each child
+    - `hparent_1stranger`: 1-strangers among items from parent (all four sub-sources) -/
 theorem stranger_bound_maintained_eq1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n}
     (split : ℕ → ℕ → SplitResult n)
-    (inv : SeifInvariant n A ν lam ε t perm (rebag split))
-    (hC4 : SatisfiesC4_eq1 A ν lam ε) (level idx : ℕ) :
+    (hC4 : SatisfiesC4_eq1 A ν lam ε)
+    (hA : 1 < A) (hν : 0 < ν) (hlam : 0 < lam) (hε : 0 ≤ ε)
+    (hkick_stranger : ∀ l i,
+      (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) 1 : ℝ) ≤
+      lam * ε * bagCapacity n A ν t l)
+    (hparent_1stranger : ∀ level idx,
+      (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
+      parentStrangerCoeff A lam ε * bagCapacity n A ν t level)
+    (level idx : ℕ) :
     (jStrangerCount n perm (rebag split level idx) level idx 1 : ℝ) ≤
     lam * bagCapacity n A ν (t + 1) level := by
+  -- Level 0: no 1-strangers (j = 1 > level = 0)
+  by_cases hlev : level = 0
+  · subst hlev
+    rw [jStrangerCount_zero_gt_level perm _ (by omega : 0 < 1)]
+    simp only [Nat.cast_zero]
+    exact mul_nonneg hlam.le (by unfold bagCapacity; positivity)
+  -- Level ≥ 1: union bound + arithmetic
+  · have hA_pos : (0 : ℝ) < A := by linarith
+    -- Bound left child kicked up
+    have hleft : (jStrangerCount n perm ((split (level+1) (2*idx)).toParent)
+        level idx 1 : ℝ) ≤ lam * ε * (A * bagCapacity n A ν t level) := by
+      have := hkick_stranger (level + 1) (2 * idx)
+      rwa [show (level + 1) - 1 = level from by omega,
+           show 2 * idx / 2 = idx from by omega, bagCapacity_child] at this
+    -- Bound right child kicked up
+    have hright : (jStrangerCount n perm ((split (level+1) (2*idx+1)).toParent)
+        level idx 1 : ℝ) ≤ lam * ε * (A * bagCapacity n A ν t level) := by
+      have := hkick_stranger (level + 1) (2 * idx + 1)
+      rwa [show (level + 1) - 1 = level from by omega,
+           show (2 * idx + 1) / 2 = idx from by omega, bagCapacity_child] at this
+    -- Bound parent contribution
+    have hpar := hparent_1stranger level idx
+    -- Assemble via union bound + arithmetic
+    calc (jStrangerCount n perm (rebag split level idx) level idx 1 : ℝ)
+        ≤ ↑(jStrangerCount n perm ((split (level+1) (2*idx)).toParent) level idx 1) +
+          ↑(jStrangerCount n perm ((split (level+1) (2*idx+1)).toParent) level idx 1) +
+          ↑(jStrangerCount n perm (fromParent split level idx) level idx 1) := by
+          exact_mod_cast rebag_strangerCount_le perm split level idx 1
+      _ ≤ lam * ε * (A * bagCapacity n A ν t level) +
+          lam * ε * (A * bagCapacity n A ν t level) +
+          parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by linarith
+      _ = 2 * lam * ε * A * bagCapacity n A ν t level +
+          parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by ring
+      _ ≤ lam * (ν * bagCapacity n A ν t level) :=
+          stranger_eq1_arithmetic hC4 (by unfold bagCapacity; positivity)
+      _ = lam * bagCapacity n A ν (t + 1) level := by
+          rw [bagCapacity_succ_stage]
+
+/-- Parent 1-stranger bound: among items sent from parent to child bag B,
+    the 1-strangers are bounded by `parentStrangerCoeff × capacity`.
+    Combines four sub-sources (Seiferas Section 5):
+    (a) ε fraction of parent's 1-strangers escape filtering
+    (b) Halving errors: C-native items on wrong side of separator
+    (c) Excess C-native from subtree stranger accumulation (geometric series with ratio `(2εA)²`)
+    (d) C-native items from levels above parent -/
+theorem parent_1stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n}
+    (bags : BagAssignment n)
+    (split : ℕ → ℕ → SplitResult n)
+    (hA : 1 < A) (hlam : 0 < lam) (hε : 0 ≤ ε)
+    (h2εA : (2 * ε * A) ^ 2 < 1)
+    (hinv : SeifInvariant n A ν lam ε t perm bags)
+    (level idx : ℕ) :
+    (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
+    parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by
   sorry
 
 /-- Full invariant maintenance: the invariant at stage `t` implies
