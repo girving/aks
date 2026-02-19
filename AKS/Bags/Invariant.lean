@@ -35,6 +35,49 @@ def maxLevel (n : ℕ) : ℕ := Nat.log 2 n - 1
 def bagCapacity (n : ℕ) (A ν : ℝ) (t level : ℕ) : ℝ :=
   ↑n * ν ^ t * A ^ level
 
+/-! **Rebagging: How Items Move Between Bags** -/
+
+/-- Result of applying a separator to one bag's items.
+    Items are partitioned into three groups:
+    - `toParent`: fringe items kicked up to parent bag
+    - `toLeftChild`: middle items sent to left child bag (2*idx)
+    - `toRightChild`: middle items sent to right child bag (2*idx+1) -/
+structure SplitResult (n : ℕ) where
+  toParent : Finset (Fin n)
+  toLeftChild : Finset (Fin n)
+  toRightChild : Finset (Fin n)
+
+/-- Items received from parent during rebagging. At level 0, no parent exists.
+    At level ≥ 1, the parent at `(level-1, idx/2)` sends items to its left (even idx)
+    or right (odd idx) child. -/
+def fromParent {n : ℕ} (split : ℕ → ℕ → SplitResult n) (level idx : ℕ) : Finset (Fin n) :=
+  if level = 0 then ∅
+  else if idx % 2 = 0
+    then (split (level - 1) (idx / 2)).toLeftChild
+    else (split (level - 1) (idx / 2)).toRightChild
+
+/-- Reconstruct bag contents after rebagging. Each bag receives:
+    - Fringe items kicked up from its two children
+    - Middle items sent down from its parent -/
+def rebag {n : ℕ} (split : ℕ → ℕ → SplitResult n) : BagAssignment n :=
+  fun level idx ↦
+    (split (level + 1) (2 * idx)).toParent ∪
+    (split (level + 1) (2 * idx + 1)).toParent ∪
+    fromParent split level idx
+
+/-- Union bound on rebag cardinality. -/
+theorem rebag_card_le {n : ℕ} (split : ℕ → ℕ → SplitResult n) (level idx : ℕ) :
+    (rebag split level idx).card ≤
+      (split (level + 1) (2 * idx)).toParent.card +
+      (split (level + 1) (2 * idx + 1)).toParent.card +
+      (fromParent split level idx).card := by
+  unfold rebag
+  linarith [card_union_le
+      ((split (level + 1) (2 * idx)).toParent ∪ (split (level + 1) (2 * idx + 1)).toParent)
+      (fromParent split level idx),
+    card_union_le (split (level + 1) (2 * idx)).toParent
+      (split (level + 1) (2 * idx + 1)).toParent]
+
 /-! **Four-Clause Invariant (Seiferas Section 4)** -/
 
 /-- Seiferas's four-clause invariant for the bag-tree sorting network.
@@ -164,43 +207,125 @@ theorem initialInvariant (n : ℕ) (A ν lam ε : ℝ)
 
 /-! **Invariant Maintenance Theorems (Seiferas Section 5)** -/
 
-/-- Items received from parent (sent down during rebagging).
-    Parent at `(level-1, idx/2)` sends `≤ bagCapacity / (2A)` items to each child. -/
-theorem items_from_parent_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags : BagAssignment n}
-    (inv : SeifInvariant n A ν lam ε t perm bags)
-    (hA : 1 < A) (level idx : ℕ) (hlevel : 1 ≤ level) :
-    True := by  -- placeholder for the real bound statement
-  trivial
+/-- Capacity decay: `bagCapacity` at stage `t+1` equals `ν` times capacity at stage `t`. -/
+theorem bagCapacity_succ_stage (n : ℕ) (A ν : ℝ) (t level : ℕ) :
+    bagCapacity n A ν (t + 1) level = ν * bagCapacity n A ν t level := by
+  simp only [bagCapacity, pow_succ]; ring
 
-/-- Items received from children (kicked up during rebagging).
-    Each child at `(level+1, 2*idx)` and `(level+1, 2*idx+1)` kicks up
-    at most `2*floor(lam*b_child) + 1` items, for a total of at most `4*lam*b*A + 2`. -/
-theorem items_from_children_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags : BagAssignment n}
-    (inv : SeifInvariant n A ν lam ε t perm bags)
-    (hA : 1 < A) (level idx : ℕ) :
-    True := by  -- placeholder for the real bound statement
-  trivial
+/-- Child capacity: `bagCapacity` at level `l+1` equals `A` times capacity at level `l`. -/
+theorem bagCapacity_child (n : ℕ) (A ν : ℝ) (t level : ℕ) :
+    bagCapacity n A ν t (level + 1) = A * bagCapacity n A ν t level := by
+  simp only [bagCapacity, pow_succ]; ring
+
+/-- Core arithmetic for the capacity proof: if `b ≥ A > 1` and `ν ≥ 4λA + 5/(2A)`,
+    then `4λAb + 2 + b/(2A) ≤ νb`. -/
+private theorem capacity_arithmetic {A ν lam b : ℝ}
+    (hA : 1 < A) (hb_ge : A ≤ b)
+    (hC3 : ν ≥ 4 * lam * A + 5 / (2 * A)) :
+    4 * lam * A * b + 2 + b / (2 * A) ≤ ν * b := by
+  have hA_pos : (0 : ℝ) < A := by linarith
+  have hb_pos : (0 : ℝ) < b := by linarith
+  have h2A_pos : (0 : ℝ) < 2 * A := by linarith
+  -- Step 1: ν * b ≥ 4*lam*A*b + 5*b/(2*A)
+  have h1 : ν * b ≥ 4 * lam * A * b + 5 * b / (2 * A) := by
+    have h1a := mul_le_mul_of_nonneg_right hC3 (le_of_lt hb_pos)
+    have h1b : (4 * lam * A + 5 / (2 * A)) * b = 4 * lam * A * b + 5 * b / (2 * A) := by
+      field_simp
+    linarith
+  -- Step 2: 5*b/(2*A) ≥ 2 + b/(2*A)
+  -- Equivalent to: (4*b - 4*A) / (2*A) ≥ 0
+  have h2 : 5 * b / (2 * A) ≥ 2 + b / (2 * A) := by
+    rw [ge_iff_le, ← sub_nonneg]
+    have : 5 * b / (2 * A) - (2 + b / (2 * A)) = (4 * b - 4 * A) / (2 * A) := by
+      field_simp; ring
+    rw [this]
+    exact div_nonneg (by linarith) (by linarith)
+  linarith
 
 /-- Clause (3) maintenance: capacity bound at stage `t+1`.
-    Requires constraint (C3): `ν ≥ 4*lam*A + 5/(2*A)`. -/
-theorem capacity_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags bags' : BagAssignment n}
-    (inv : SeifInvariant n A ν lam ε t perm bags)
-    (hC3 : SatisfiesC3 A ν lam) :
+    Requires constraint (C3): `ν ≥ 4*lam*A + 5/(2*A)`.
+    Hypotheses on the split:
+    - `hkick`: each bag kicks ≤ `2λ·cap + 1` items to parent
+    - `hsend_left`/`hsend_right`: each bag sends ≤ `cap/2` items to each child
+    - `hcap_ge`: root capacity ≥ A (ensures the +2 additive term is absorbed) -/
+theorem capacity_maintained {n : ℕ} {A ν lam : ℝ} {t : ℕ}
+    (split : ℕ → ℕ → SplitResult n)
+    (hC3 : SatisfiesC3 A ν lam)
+    (hA : 1 < A) (hν : 0 < ν)
+    (hcap_ge : A ≤ ↑n * ν ^ t)
+    (hkick : ∀ l i, ((split l i).toParent.card : ℝ) ≤
+      2 * lam * bagCapacity n A ν t l + 1)
+    (hsend_left : ∀ l i, ((split l i).toLeftChild.card : ℝ) ≤
+      bagCapacity n A ν t l / 2)
+    (hsend_right : ∀ l i, ((split l i).toRightChild.card : ℝ) ≤
+      bagCapacity n A ν t l / 2) :
     ∀ level idx,
-    ((bags' level idx).card : ℝ) ≤ bagCapacity n A ν (t + 1) level := by
-  sorry
+    ((rebag split level idx).card : ℝ) ≤ bagCapacity n A ν (t + 1) level := by
+  intro level idx
+  have hA_pos : (0 : ℝ) < A := by linarith
+  -- bagCapacity n A ν t level ≥ A (since A^level ≥ 1 and n * ν^t ≥ A)
+  have hb_ge : A ≤ bagCapacity n A ν t level := by
+    simp only [bagCapacity]
+    have h1 : 1 ≤ A ^ level := by
+      calc (1 : ℝ) = A ^ 0 := (pow_zero A).symm
+        _ ≤ A ^ level := pow_le_pow_right₀ (le_of_lt hA) (Nat.zero_le level)
+    nlinarith [mul_nonneg (sub_nonneg.mpr hcap_ge) (sub_nonneg.mpr h1)]
+  have hb_pos : (0 : ℝ) < bagCapacity n A ν t level := by linarith
+  -- cap(t+1, level) = ν * cap(t, level)
+  rw [bagCapacity_succ_stage]
+  -- Union bound on card
+  have hcard := rebag_card_le split level idx
+  -- Bound children kicked up (cap at level+1 = A * cap(t, level))
+  have ha := hkick (level + 1) (2 * idx)
+  have hb' := hkick (level + 1) (2 * idx + 1)
+  rw [bagCapacity_child] at ha hb'
+  -- Bound parent contribution ≤ cap(t, level) / (2A)
+  have hparent : ((fromParent split level idx).card : ℝ) ≤
+      bagCapacity n A ν t level / (2 * A) := by
+    unfold fromParent
+    split_ifs with h₁ h₂
+    · -- level = 0: no parent
+      simp only [card_empty, Nat.cast_zero]
+      exact div_nonneg (le_of_lt hb_pos) (by linarith)
+    · -- level ≥ 1, even: left child from parent
+      calc ((split (level - 1) (idx / 2)).toLeftChild.card : ℝ)
+          ≤ bagCapacity n A ν t (level - 1) / 2 := hsend_left _ _
+        _ = bagCapacity n A ν t level / (2 * A) := by
+            simp only [bagCapacity]
+            have hpow : A ^ level = A ^ (level - 1) * A := by
+              conv_lhs => rw [show level = level - 1 + 1 from by omega]
+              exact pow_succ A (level - 1)
+            rw [hpow]; field_simp
+    · -- level ≥ 1, odd: right child from parent
+      calc ((split (level - 1) (idx / 2)).toRightChild.card : ℝ)
+          ≤ bagCapacity n A ν t (level - 1) / 2 := hsend_right _ _
+        _ = bagCapacity n A ν t level / (2 * A) := by
+            simp only [bagCapacity]
+            have hpow : A ^ level = A ^ (level - 1) * A := by
+              conv_lhs => rw [show level = level - 1 + 1 from by omega]
+              exact pow_succ A (level - 1)
+            rw [hpow]; field_simp
+  -- Combine: card ≤ 4*lam*A*cap + 2 + cap/(2*A) ≤ ν*cap
+  calc ((rebag split level idx).card : ℝ)
+      ≤ ↑(split (level + 1) (2 * idx)).toParent.card +
+        ↑(split (level + 1) (2 * idx + 1)).toParent.card +
+        ↑(fromParent split level idx).card := by exact_mod_cast hcard
+    _ ≤ (2 * lam * (A * bagCapacity n A ν t level) + 1) +
+        (2 * lam * (A * bagCapacity n A ν t level) + 1) +
+        bagCapacity n A ν t level / (2 * A) := by linarith
+    _ = 4 * lam * A * bagCapacity n A ν t level + 2 +
+        bagCapacity n A ν t level / (2 * A) := by ring
+    _ ≤ ν * bagCapacity n A ν t level := capacity_arithmetic hA hb_ge hC3
 
 /-- Clause (4) maintenance for `j ≥ 2`: stranger bound at stage `t+1`.
     Sources: (j+1)-strangers from children kicked up + (j-1)-strangers from parent.
     Requires constraint (C4, j>1): `2·A·ε + 1/A ≤ ν`. -/
 theorem stranger_bound_maintained_gt1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags bags' : BagAssignment n}
-    (inv : SeifInvariant n A ν lam ε t perm bags)
+    {perm : Fin n → Fin n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm (rebag split))
     (hC4 : SatisfiesC4_gt1 A ν ε) (level idx j : ℕ) (hj : 2 ≤ j) :
-    (jStrangerCount n perm (bags' level idx) level idx j : ℝ) ≤
+    (jStrangerCount n perm (rebag split level idx) level idx j : ℝ) ≤
     lam * ε ^ (j - 1) * bagCapacity n A ν (t + 1) level := by
   sorry
 
@@ -211,10 +336,11 @@ theorem stranger_bound_maintained_gt1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     (c) Sibling leakage via separator error: geometric series in (2εA)²
     Requires the master constraint (C4, j=1). -/
 theorem stranger_bound_maintained_eq1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags bags' : BagAssignment n}
-    (inv : SeifInvariant n A ν lam ε t perm bags)
+    {perm : Fin n → Fin n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm (rebag split))
     (hC4 : SatisfiesC4_eq1 A ν lam ε) (level idx : ℕ) :
-    (jStrangerCount n perm (bags' level idx) level idx 1 : ℝ) ≤
+    (jStrangerCount n perm (rebag split level idx) level idx 1 : ℝ) ≤
     lam * bagCapacity n A ν (t + 1) level := by
   sorry
 
@@ -222,10 +348,11 @@ theorem stranger_bound_maintained_eq1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     the invariant at stage `t+1` after applying the separator and rebagging.
     Requires all parameter constraints. -/
 theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags bags' : BagAssignment n}
-    (inv : SeifInvariant n A ν lam ε t perm bags)
+    {perm : Fin n → Fin n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm (rebag split))
     (hparams : SatisfiesConstraints A ν lam ε) :
-    SeifInvariant n A ν lam ε (t + 1) perm bags' := by
+    SeifInvariant n A ν lam ε (t + 1) perm (rebag split) := by
   sorry
 
 /-! **Convergence** -/
