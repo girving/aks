@@ -13,6 +13,7 @@ import AKS.Cert.Read
 
 #eval ensureCertificateData 16 4
 #eval ensureCertificateData 1728 12
+#eval ensureCertificateData 20736 12
 
 /-- Format nanoseconds as human-readable string. -/
 def fmtNs (ns : Nat) : String :=
@@ -72,11 +73,21 @@ def benchSuite (label : String) (rotStr certStr : String)
 
   IO.println ""
 
-def rotData16 : String := bin_base85% "data/16/rot_map.bin"
-def certData16 : String := bin_base85% "data/16/cert_z.bin"
+/-- Fast-only benchmark for large graphs (skips slow baseline and parallel variants). -/
+def benchFastOnly (label : String) (rotStr certStr : String)
+    (n d : Nat) (c₁ c₂ c₃ : Int) : IO Unit := do
+  IO.println s!"--- {label} (n={n}, d={d}) ---"
 
-def rotData1728 : String := bin_base85% "data/1728/rot_map.bin"
-def certData1728 : String := bin_base85% "data/1728/cert_z.bin"
+  timed "prod fast        " fun () =>
+    s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
+
+  IO.println ""
+
+def rotData16 : String := bin_base85% "data/16/rot_map.b85"
+def certData16 : String := bin_base85% "data/16/cert_z.b85"
+
+def rotData1728 : String := bin_base85% "data/1728/rot_map.b85"
+def certData1728 : String := bin_base85% "data/1728/cert_z.b85"
 
 def main : IO UInt32 := do
   IO.println "=== Certificate Checker Benchmarks ==="
@@ -85,5 +96,17 @@ def main : IO UInt32 := do
   benchSuite "n=16" rotData16 certData16 16 4 216 9 1
   benchSuite "n=1728" rotData1728 certData1728 1728 12 792 9 2
 
+  IO.println "--- n=20736 (n=20736, d=12) ---"
+  IO.print "  loading data..."
+  let t0 ← IO.monoNanosNow
+  let rotStr ← loadBase85 "data/20736/rot_map.b85"
+  let certStr ← loadBase85 "data/20736/cert_z.b85"
+  let t1 ← IO.monoNanosNow
+  IO.println s!" [{fmtNs (t1 - t0)}]"
+
+  timed "prod fast        " fun () =>
+    s!"ok={checkCertificateFast rotStr certStr 20736 12 792 9 2}"
+
+  IO.println ""
   IO.println "Done."
   return 0

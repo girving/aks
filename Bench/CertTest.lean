@@ -130,8 +130,8 @@ def main : IO UInt32 := do
   IO.println ""
   IO.println "--- checkCertificateSlow (n=16) ---"
 
-  let rotData16 : String := bin_base85% "data/16/rot_map.bin"
-  let certData16 : String := bin_base85% "data/16/cert_z.bin"
+  let rotData16 : String := bin_base85% "data/16/rot_map.b85"
+  let certData16 : String := bin_base85% "data/16/cert_z.b85"
 
   failures := failures + (← check "n=16 certificate accepted"
     (checkCertificateSlow rotData16 certData16 16 4 216 9 1))
