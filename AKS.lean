@@ -16,6 +16,9 @@ import AKS.Nearsort.Defs
 import AKS.Halver.Defs
 import AKS.Halver.Tanner
 import AKS.Halver.ExpanderToHalver
+import AKS.Konig.Defs
+import AKS.Konig.Hall
+import AKS.Konig.Coloring
 import AKS.Nearsort.Construction
 import AKS.Nearsort.Correctness
 import AKS.Nearsort.HalverToNearsort
