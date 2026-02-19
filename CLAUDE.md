@@ -239,7 +239,7 @@ Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
 - **`SpectralMatrix.lean`** — Layer 1: spectral matrix M PSD → walk bound (~186 lines)
 - **`DiagDominant.lean`** — Layer 2: Hermitian + strictly diag-dominant → PSD (~123 lines)
 - **`ColumnNormBridge.lean`** — imperative column norm checker = pure recursive version (~1538 lines)
-- **`Read.lean`** — `bin_base85%` elaborator + `ensureCertificateData` (~63 lines)
+- **`Read.lean`** — `bin_base85%` elaborator (reads `.b85` text files), `loadBase85` (runtime), `ensureCertificateData` (~55 lines)
 
 ### `AKS/Misc/ForLoop.lean` — For-Loop Characterization (~105 lines)
 Proves `for k in [:n] do` in `Id` monad equals `Nat.fold` + partition-fold lemmas.
@@ -372,6 +372,12 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`Fin` arithmetic: `omega` vs. specialized lemmas.** `omega` handles linear Nat but not nonlinear. Key lemmas: `Nat.add_lt_add_left`+`Nat.mul_le_mul_right` for `j*d+i < n*d`; `Nat.add_mul_div_right`/`Nat.add_mul_mod_self_right` for div/mod; `rw [Nat.mul_comm]; exact Nat.div_add_mod` for `(ij/d)*d + ij%d = ij`.
 
+**`Fin.mk.injEq` to convert Fin equalities for omega.** When omega can't see through `Fin` structure projections, use `simp only [Fin.mk.injEq] at heq` to convert `⟨a, _⟩ = ⟨b, _⟩` to `a = b`. This is more reliable than `Fin.ext_iff` + `Fin.val_mk` when the Fin isn't yet in constructor form. Needed after `obtain ⟨x, _, rfl⟩` on `List.mem_map` results.
+
+**Provide nonlinear `Nat.mul` facts to omega explicitly.** When goals involve products of variables (`k₁ * C`, `k₂ * C`), omega treats each product as an opaque atom. Provide key inequalities manually: e.g., `have : k₁ * C + C ≤ k₂ * C := by have := Nat.mul_le_mul_right C hlt; rw [Nat.succ_mul] at this; exact this`. Also provide `Nat.mul_div_le` for `2 * (C / 2) ≤ C`.
+
+**`set` abbreviations create different omega atoms.** After `set C := n / 2 ^ level`, omega treats `↑C` and `↑(n / 2 ^ level)` as independent variables. When `heq` uses the raw expression but `hk` uses the abbreviation, omega can't connect them. Fix: provide auxiliary `have`s using the raw expression, not the `set` abbreviation, or avoid `set` entirely when omega will be the closer.
+
 **Search Mathlib before writing custom helpers.** Existing helpers come with simp lemmas and composability. To search: (1) grep `.lake/packages/mathlib` for keywords, (2) `#check @Fin.someName` in a scratch file, (3) **LeanSearch** (https://leansearch.net/) for semantic queries. Reparameterize types to match Mathlib conventions (e.g., `Fin (n+1)` instead of `Fin d` with `hd : d ≥ 2`). Examples found: `Fin.succAbove`/`Fin.predAbove`, `Monotone.map_min`/`Monotone.map_max`.
 
 **Avoid inline `⟨expr, by omega⟩` inside definitions.** Embedded proof terms create opaque terms that `omega`/`simp` can't see through after unfolding. Instead use Mathlib helpers or named functions with `.val` simp lemmas.
@@ -385,6 +391,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 **Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `Graph/Regular.lean`.
 
 **Triangle inequality for `|·|` via `dist_triangle`.** Convert to metric API: `|μ| = ‖μ‖ = dist μ 0` (via `Real.norm_eq_abs`, `dist_zero_right`), then `dist_triangle μ c 0`. Use `Real.dist_eq` for `dist x y = |x - y|`.
+
+**`List` membership API.** `List.not_mem_nil` has ALL arguments implicit: `@List.not_mem_nil : ∀ {α} {a}, a ∉ []` — use `List.not_mem_nil` not `List.not_mem_nil _`. For `a ∈ a :: l`, use `List.mem_cons.mpr (.inl rfl)` (not `List.mem_cons_self a l`). For `b ∈ a :: l` given `hb : b ∈ l`, use `List.mem_cons_of_mem a hb`.
 
 **`↑(Finset.univ)` ≠ `Set.univ` in `MapsTo` proofs.** `card_eq_sum_card_fiberwise` needs `(s : Set ι).MapsTo f ↑t`. The coercion `↑(Finset.univ)` is `Finset.univ.toSet`, not `Set.univ`. Use `Finset.mem_coe.mpr (Finset.mem_univ _)` to prove `x ∈ ↑univ`.
 
@@ -486,7 +494,7 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 ### Base expander certificate pipeline (implemented)
 
-Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `CertCheck.lean` (checker) → `Cert/WalkBound.lean` (abstract theory) → `Cert/Bridge.lean` (bridge) → `Random/{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for background.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `CertCheck.lean` (checker) → `Cert/WalkBound.lean` (abstract theory) → `Cert/Bridge.lean` (bridge) → `Random/{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (`.b85` base-85 text, `.gitignore`d) — Rust writes base85 directly so Lean just reads the text as-is. See `docs/bridge-proof-plan.md` for background.
 
 **Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `Cert/WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `Cert/WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
 
