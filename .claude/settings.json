@@ -38,6 +38,7 @@
       "Bash(ps *)",
       "Bash(pkill -f lean*)",
       "Bash(pkill -f lake*)",
+      "Bash(scripts/update-viz-lines)",
       "Bash(scripts/update-viz-lines *)",
       "Bash(scripts/sorries *)",
       "Bash(scripts/lean-test *)",
