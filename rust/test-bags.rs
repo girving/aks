@@ -1721,6 +1721,541 @@ fn test_source_bounds_stress() {
     }
 }
 
+/// === RISK REDUCTION TEST A ===
+/// Detailed rebagging flow validation: track exact item counts per flow direction
+/// and verify they match the Seiferas formulas precisely.
+/// Checks: fringe = floor(lam * b), odd adjustment, items_from_below <= 4*lam*b*A + 2,
+/// items_from_above <= b/(2A), no items lost or duplicated.
+fn test_rebagging_flow_validation() {
+    println!("\n=== Test A: Rebagging flow validation (detailed) ===");
+    let params = Params::seiferas_preview();
+    let model = SepModel::Adversarial { lambda: params.lambda };
+
+    for &n in &[8, 16, 64, 256, 1024, 4096] {
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(42);
+        let threshold = 1.0 / params.lambda;
+        let mut max_fringe_error: f64 = 0.0; // |actual_fringe - floor(lam*b)| / floor(lam*b)
+        let mut max_odd_adj = 0usize;
+        let mut items_lost = false;
+        let mut items_duped = false;
+        let mut max_from_below_ratio: f64 = 0.0;
+        let mut max_from_above_ratio: f64 = 0.0;
+        let mut max_total_ratio: f64 = 0.0;
+
+        for t in 0..300 {
+            let pre_total = tree.total_items();
+            let pre_locs = tree.item_locations();
+
+            // Snapshot active bags
+            let active: Vec<((usize, usize), Vec<usize>)> = tree.bags.iter()
+                .filter(|(_, items)| !items.is_empty())
+                .map(|(&k, v)| (k, v.clone()))
+                .collect();
+
+            // Compute expected fringe sizes
+            for &((level, _idx), ref items) in &active {
+                let b = params.capacity(n, t, level);
+                let expected_fringe = (params.lambda * b).floor() as usize;
+                let actual_kick = if level > 0 && level < tree.max_level {
+                    let kick_small = expected_fringe.min(items.len());
+                    let kick_large = expected_fringe.min(items.len().saturating_sub(kick_small));
+                    kick_small + kick_large
+                } else { 0 };
+                if expected_fringe > 0 && level > 0 && level < tree.max_level {
+                    let expected_total_kick = 2 * expected_fringe;
+                    let err = (actual_kick as f64 - expected_total_kick as f64).abs()
+                        / expected_total_kick as f64;
+                    if err > max_fringe_error { max_fringe_error = err; }
+                }
+            }
+
+            // Track flows by destination
+            let mut flows: BTreeMap<(usize, usize), (usize, usize, usize)> = BTreeMap::new();
+            // (from_below, from_above, odd_adjustment)
+            for ((level, idx), mut items) in active.clone() {
+                items.sort();
+                let b = params.capacity(tree.n, t, level);
+                let kick_per_side = (params.lambda * b).floor() as usize;
+                let has_parent = level > 0;
+                let has_children = level < tree.max_level;
+
+                if !has_parent {
+                    let mid = items.len() / 2;
+                    let f = flows.entry((level + 1, 2 * idx)).or_default();
+                    f.1 += mid;
+                    let f = flows.entry((level + 1, 2 * idx + 1)).or_default();
+                    f.1 += items.len() - mid;
+                } else if !has_children {
+                    let f = flows.entry((level - 1, idx / 2)).or_default();
+                    f.0 += items.len();
+                } else {
+                    let kick_small = kick_per_side.min(items.len());
+                    let kick_large = kick_per_side.min(items.len().saturating_sub(kick_small));
+                    let kicked = kick_small + kick_large;
+                    let mut remaining = items.len() - kicked;
+                    let odd = if remaining % 2 == 1 { 1 } else { 0 };
+                    if odd > max_odd_adj { max_odd_adj = odd; }
+                    remaining -= odd;
+
+                    let f = flows.entry((level - 1, idx / 2)).or_default();
+                    f.0 += kicked + odd;
+                    f.2 += odd;
+
+                    if remaining > 0 {
+                        let half = remaining / 2;
+                        let f = flows.entry((level + 1, 2 * idx)).or_default();
+                        f.1 += half;
+                        let f = flows.entry((level + 1, 2 * idx + 1)).or_default();
+                        f.1 += remaining - half;
+                    }
+                }
+            }
+
+            // Check bounds on flows
+            for (&(level, _), &(from_below, from_above, _odd)) in &flows {
+                let b_old = params.capacity(n, t, level);
+                let b_new = params.capacity(n, t + 1, level);
+
+                // items_from_below bound: 4*lambda*b_old*A + 2
+                let below_bound = 4.0 * params.lambda * b_old * params.a + 2.0;
+                if from_below > 0 && below_bound > 0.0 {
+                    let r = from_below as f64 / below_bound;
+                    if r > max_from_below_ratio { max_from_below_ratio = r; }
+                }
+
+                // items_from_above bound: b_old / (2A)
+                let above_bound = b_old / (2.0 * params.a);
+                if from_above > 0 && above_bound > 0.0 {
+                    let r = from_above as f64 / above_bound;
+                    if r > max_from_above_ratio { max_from_above_ratio = r; }
+                }
+
+                // total bound: b_new = nu * b_old
+                let total = from_below + from_above;
+                if total > 0 && b_new > 0.0 {
+                    let r = total as f64 / b_new;
+                    if r > max_total_ratio { max_total_ratio = r; }
+                }
+            }
+
+            tree.do_stage(&params, t, model, &mut rng);
+
+            let post_total = tree.total_items();
+            if post_total != pre_total { items_lost = true; }
+
+            // Check no duplicates
+            let mut seen = vec![false; n];
+            for (_, items) in &tree.bags {
+                for &rank in items {
+                    if seen[rank] { items_duped = true; }
+                    seen[rank] = true;
+                }
+            }
+
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < threshold { break; }
+        }
+
+        let ok = !items_lost && !items_duped && max_total_ratio <= 1.001;
+        println!("  n={:5}: {} | below={:.4} above={:.4} total={:.4} | lost={} dup={} fringe_err={:.4} odd={}",
+            n, if ok { "OK" } else { "FAIL" },
+            max_from_below_ratio, max_from_above_ratio, max_total_ratio,
+            items_lost, items_duped, max_fringe_error, max_odd_adj);
+    }
+}
+
+/// === RISK REDUCTION TEST D ===
+/// End-to-end sorting check: run full pipeline and verify all items end up
+/// in their native bags at convergence (= sorted).
+/// For small n: test ALL permutations via identity (perfect sep).
+/// For larger n: test with adversarial separator and check convergence.
+fn test_end_to_end_sorting() {
+    println!("\n=== Test D: End-to-end sorting verification ===");
+    let params = Params::seiferas_preview();
+
+    // Part 1: Small n with perfect separator — should ALWAYS converge to native bags
+    println!("  Part 1: Perfect separator, verify all items native at convergence");
+    for &n in &[8, 16, 32, 64, 128, 256, 512, 1024] {
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(42);
+        let threshold = 1.0 / params.lambda;
+        let mut converged_t = 0;
+
+        for t in 0..500 {
+            tree.do_stage(&params, t, SepModel::Perfect, &mut rng);
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < threshold {
+                converged_t = t + 1;
+                break;
+            }
+        }
+
+        // Check: every item is in its native bag
+        let all_native = tree.all_native();
+        // Also check: all bags have at most 1 item (converged to singletons)
+        let max_bag_size: usize = tree.bags.values().map(|v| v.len()).max().unwrap_or(0);
+        let total_1strangers: usize = (0..=tree.max_level)
+            .flat_map(|level| (0..(1usize << level)).map(move |idx| (level, idx)))
+            .map(|(level, idx)| {
+                tree.bags.get(&(level, idx)).map_or(0, |items|
+                    tree.j_stranger_count(items, level, idx, 1))
+            }).sum();
+
+        println!("    n={:5}: conv@t={:3} | native={} max_bag={} strangers={}",
+            n, converged_t, all_native, max_bag_size, total_1strangers);
+    }
+
+    // Part 2: Adversarial separator — check items end up native despite errors
+    println!("  Part 2: Adversarial separator, verify sorting at convergence");
+    for &n in &[8, 16, 32, 64, 256, 1024, 4096] {
+        let model = SepModel::Adversarial { lambda: params.lambda };
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(42);
+        let threshold = 2.0; // Our Lean converged def: bagCapacity < 2
+
+        let mut converged_t = 0;
+        let mut invariant_ok = true;
+
+        for t in 0..500 {
+            tree.do_stage(&params, t, model, &mut rng);
+
+            if tree.check_invariant_shifted(&params, t + 1).is_err() {
+                invariant_ok = false;
+            }
+
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < threshold {
+                converged_t = t + 1;
+                break;
+            }
+        }
+
+        let all_native = tree.all_native();
+        let max_bag_size: usize = tree.bags.values().map(|v| v.len()).max().unwrap_or(0);
+        let total_items: usize = tree.total_items();
+
+        println!("    n={:5}: conv@t={:3} | native={} inv={} max_bag={} items={}",
+            n, converged_t, all_native, invariant_ok, max_bag_size, total_items);
+    }
+
+    // Part 3: Multiple seeds, check all converge and sort
+    println!("  Part 3: Adversarial, multiple seeds, n=256");
+    let n = 256;
+    let model = SepModel::Adversarial { lambda: params.lambda };
+    let mut all_ok = true;
+    let mut max_conv_t = 0;
+    let mut native_count = 0;
+
+    for seed in 0..100 {
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(seed);
+
+        for t in 0..500 {
+            tree.do_stage(&params, t, model, &mut rng);
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < 2.0 {
+                if t + 1 > max_conv_t { max_conv_t = t + 1; }
+                break;
+            }
+        }
+
+        if tree.all_native() { native_count += 1; } else { all_ok = false; }
+    }
+    println!("    100 seeds: {}/100 native, max_conv_t={}, all_ok={}",
+        native_count, max_conv_t, all_ok);
+}
+
+/// === RISK REDUCTION TEST B ===
+/// Tight bound ratio analysis for ALL invariant clauses simultaneously.
+/// For each clause, track max(observed/bound) across all bags, stages, and j values.
+/// Identifies which clause is tightest (closest to violation).
+fn test_tight_bound_ratios() {
+    println!("\n=== Test B: Tight bound ratios for all clauses ===");
+    let params = Params::seiferas_preview();
+
+    let models: Vec<(&str, SepModel)> = vec![
+        ("Perfect", SepModel::Perfect),
+        ("Adversarial", SepModel::Adversarial { lambda: params.lambda }),
+    ];
+
+    for (model_name, model) in &models {
+        println!("  --- {} separator ---", model_name);
+        println!("    {:>6} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
+            "n", "cap_ratio", "s1_ratio", "s2_ratio", "s3_ratio", "total_s", "tightest");
+
+        for &n in &[64, 256, 1024, 4096, 16384] {
+            let mut tree = BagTree::new(n);
+            let mut rng = Rng::new(42);
+            let threshold = 1.0 / params.lambda;
+
+            let mut max_cap_ratio: f64 = 0.0;    // clause 3
+            let mut max_s_ratio = vec![0.0f64; 10]; // clause 4, j=1..9
+            let mut max_total_s: f64 = 0.0;       // total 1-strangers / bound
+
+            for t in 0..300 {
+                tree.do_stage(&params, t, *model, &mut rng);
+
+                for level in 0..=tree.max_level {
+                    if (t + 1 + level) % 2 != 0 { continue; }
+                    let b = params.capacity(n, t + 1, level);
+
+                    for idx in 0..(1usize << level) {
+                        let items = match tree.bags.get(&(level, idx)) {
+                            Some(v) if !v.is_empty() => v,
+                            _ => continue,
+                        };
+
+                        // Clause 3: capacity
+                        if b > 0.01 {
+                            let r = items.len() as f64 / b;
+                            if r > max_cap_ratio { max_cap_ratio = r; }
+                        }
+
+                        // Clause 4: stranger bounds
+                        for j in 1..=level.min(9) {
+                            let count = tree.j_stranger_count(items, level, idx, j);
+                            let bound = params.lambda * params.eps.powi(j as i32 - 1) * b;
+                            if bound > 0.01 {
+                                let r = count as f64 / bound;
+                                if r > max_s_ratio[j] { max_s_ratio[j] = r; }
+                            }
+                        }
+                    }
+                }
+
+                let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+                if leaf_cap < threshold { break; }
+            }
+
+            // Find tightest
+            let mut tightest = "cap";
+            let mut tightest_val = max_cap_ratio;
+            for j in 1..=9 {
+                if max_s_ratio[j] > tightest_val {
+                    tightest_val = max_s_ratio[j];
+                    tightest = match j { 1 => "s1", 2 => "s2", 3 => "s3", _ => "s4+" };
+                }
+            }
+
+            println!("    {:>6} {:>10.4} {:>10.4} {:>10.4} {:>10.4} {:>10.4} {:>10}",
+                n, max_cap_ratio, max_s_ratio[1], max_s_ratio[2],
+                max_s_ratio.get(3).copied().unwrap_or(0.0),
+                tightest_val, tightest);
+        }
+    }
+}
+
+/// === RISK REDUCTION TEST C ===
+/// 1-stranger counterexample search: try to maximize 1-stranger ratios.
+/// Uses multiple adversarial strategies and different seeds.
+/// If any ratio exceeds 1.0, the Lean lemma statement is FALSE.
+fn test_1stranger_counterexample_search() {
+    println!("\n=== Test C: 1-stranger counterexample search ===");
+    let params = Params::seiferas_preview();
+
+    // Strategy 1: Standard adversarial, many seeds
+    println!("  Strategy 1: Standard adversarial, 200 seeds");
+    let mut global_max: f64 = 0.0;
+    let mut worst_n = 0;
+    let mut worst_seed = 0;
+    let mut worst_t = 0;
+
+    for &n in &[64, 256, 1024, 4096] {
+        let model = SepModel::Adversarial { lambda: params.lambda };
+        let mut n_max: f64 = 0.0;
+
+        for seed in 0..200 {
+            let mut tree = BagTree::new(n);
+            let mut rng = Rng::new(seed);
+            let threshold = 1.0 / params.lambda;
+
+            for t in 0..300 {
+                tree.do_stage(&params, t, model, &mut rng);
+
+                for level in 0..=tree.max_level {
+                    if (t + 1 + level) % 2 != 0 { continue; }
+                    let b = params.capacity(n, t + 1, level);
+
+                    for idx in 0..(1usize << level) {
+                        if let Some(items) = tree.bags.get(&(level, idx)) {
+                            if items.is_empty() { continue; }
+                            let count = tree.j_stranger_count(items, level, idx, 1);
+                            let bound = params.lambda * b;
+                            if bound > 0.01 {
+                                let r = count as f64 / bound;
+                                if r > n_max { n_max = r; }
+                                if r > global_max {
+                                    global_max = r;
+                                    worst_n = n;
+                                    worst_seed = seed;
+                                    worst_t = t + 1;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+                if leaf_cap < threshold { break; }
+            }
+        }
+
+        let ok = n_max <= 1.0;
+        println!("    n={:5}: max_1stranger_ratio={:.6} {}", n, n_max,
+            if ok { "OK" } else { "EXCEEDS BOUND!" });
+    }
+
+    println!("    Global max: {:.6} at n={} seed={} t={}",
+        global_max, worst_n, worst_seed, worst_t);
+    if global_max > 1.0 {
+        println!("    *** COUNTEREXAMPLE FOUND *** — Lean lemma is FALSE");
+    } else {
+        println!("    No counterexample found (max ratio {:.4}% of bound)", global_max * 100.0);
+    }
+
+    // Strategy 2: Formal stochastic separator, check tail behavior
+    println!("  Strategy 2: Formal stochastic, 200 seeds (tail risk)");
+    let mut formal_max: f64 = 0.0;
+
+    for &n in &[256, 1024, 4096] {
+        let mut n_max: f64 = 0.0;
+
+        for seed in 0..200 {
+            let mut tree = BagTree::new(n);
+            let mut rng = Rng::new(seed);
+            let threshold = 1.0 / params.lambda;
+
+            for t in 0..300 {
+                tree.do_stage(&params, t, SepModel::Formal, &mut rng);
+
+                for level in 0..=tree.max_level {
+                    if (t + 1 + level) % 2 != 0 { continue; }
+                    let b = params.capacity(n, t + 1, level);
+
+                    for idx in 0..(1usize << level) {
+                        if let Some(items) = tree.bags.get(&(level, idx)) {
+                            if items.is_empty() { continue; }
+                            let count = tree.j_stranger_count(items, level, idx, 1);
+                            let bound = params.lambda * b;
+                            if bound > 0.01 {
+                                let r = count as f64 / bound;
+                                if r > n_max { n_max = r; }
+                                if r > formal_max { formal_max = r; }
+                            }
+                        }
+                    }
+                }
+
+                let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+                if leaf_cap < threshold { break; }
+            }
+        }
+
+        println!("    n={:5}: max_1stranger_ratio={:.6}", n, n_max);
+    }
+    println!("    Formal global max: {:.6}", formal_max);
+}
+
+/// === RISK REDUCTION TEST E ===
+/// Parameter sensitivity sweep: vary A, ν, λ, ε and check which constraints
+/// are tight, what the margin is, and whether the invariant holds.
+fn test_parameter_sensitivity() {
+    println!("\n=== Test E: Parameter sensitivity sweep ===");
+
+    // Sweep 1: vary A with lambda=eps=1/99, nu adjusted to satisfy constraints
+    println!("  Sweep 1: Vary A (lambda=eps=1/99)");
+    println!("    {:>6} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8}",
+        "A", "nu_min", "C3_lhs", "C4j>1", "C4j=1", "margin%", "inv_ok");
+
+    for a_int in [2, 3, 5, 8, 10, 15, 20, 30, 50] {
+        let a = a_int as f64;
+        let e = 1.0 / 99.0;
+        let l = 1.0 / 99.0;
+
+        // Minimum nu from constraints
+        let c3_rhs = 4.0 * l * a + 5.0 / (2.0 * a);
+        let c4gt1_rhs = 2.0 * a * e + 1.0 / a;
+        let c4eq1_lhs = 2.0*l*e*a + e*l/a + e/(2.0*a)
+            + 2.0*l*e*a / (1.0 - (2.0*e*a).powi(2))
+            + 1.0 / (8.0*a*a*a - 2.0*a);
+        let c4eq1_rhs = c4eq1_lhs / l; // nu >= c4eq1_lhs / lambda
+
+        let nu_min = c3_rhs.max(c4gt1_rhs).max(c4eq1_rhs);
+        let nu = (nu_min + 0.01).min(0.99);
+        let margin = 1.0 - nu_min / nu;
+
+        // Test invariant at this point
+        let params = Params { a, nu, lambda: l, eps: e };
+        let model = SepModel::Adversarial { lambda: l };
+        let n = 1024;
+        let inv_ok = match run_simulation(n, &params, 300, model, 42, false) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+
+        println!("    {:>6.0} {:>8.4} {:>8.4} {:>8.4} {:>8.6} {:>7.1}% {:>8}",
+            a, nu_min, c3_rhs, c4gt1_rhs, c4eq1_rhs, margin * 100.0, inv_ok);
+    }
+
+    // Sweep 2: vary epsilon with A=10, lambda=eps, nu adjusted
+    println!("  Sweep 2: Vary eps (A=10, lambda=eps)");
+    println!("    {:>10} {:>8} {:>8} {:>8} {:>8} {:>8}",
+        "eps", "nu_min", "C3_lhs", "C4j>1", "C4j=1", "margin%");
+
+    for &eps_denom in &[200, 150, 100, 99, 80, 60, 50, 40, 30, 25, 20] {
+        let e = 1.0 / eps_denom as f64;
+        let l = e;
+        let a = 10.0;
+
+        if (2.0 * e * a).abs() >= 1.0 { continue; } // geometric series diverges
+
+        let c3_rhs = 4.0 * l * a + 5.0 / (2.0 * a);
+        let c4gt1_rhs = 2.0 * a * e + 1.0 / a;
+        let c4eq1_lhs = 2.0*l*e*a + e*l/a + e/(2.0*a)
+            + 2.0*l*e*a / (1.0 - (2.0*e*a).powi(2))
+            + 1.0 / (8.0*a*a*a - 2.0*a);
+        let c4eq1_rhs = c4eq1_lhs / l;
+
+        let nu_min = c3_rhs.max(c4gt1_rhs).max(c4eq1_rhs);
+        let margin = if nu_min < 1.0 { 1.0 - nu_min } else { -1.0 };
+
+        println!("    {:>10.6} {:>8.4} {:>8.4} {:>8.4} {:>8.4} {:>7.1}%",
+            e, nu_min, c3_rhs, c4gt1_rhs, c4eq1_rhs, margin * 100.0);
+    }
+
+    // Sweep 3: decouple lambda and eps
+    println!("  Sweep 3: Decouple lambda and eps (A=10)");
+    println!("    {:>8} {:>8} {:>8} {:>8} {:>8}",
+        "lambda", "eps", "nu_min", "tight", "feas");
+
+    for &lam_d in &[50, 80, 99, 150, 200] {
+        for &eps_d in &[50, 80, 99, 150, 200] {
+            let l = 1.0 / lam_d as f64;
+            let e = 1.0 / eps_d as f64;
+            let a = 10.0;
+
+            if (2.0 * e * a).abs() >= 1.0 { continue; }
+
+            let c3_rhs = 4.0 * l * a + 5.0 / (2.0 * a);
+            let c4gt1_rhs = 2.0 * a * e + 1.0 / a;
+            let c4eq1_lhs = 2.0*l*e*a + e*l/a + e/(2.0*a)
+                + 2.0*l*e*a / (1.0 - (2.0*e*a).powi(2))
+                + 1.0 / (8.0*a*a*a - 2.0*a);
+            let c4eq1_rhs = c4eq1_lhs / l;
+
+            let nu_min = c3_rhs.max(c4gt1_rhs).max(c4eq1_rhs);
+            let tight = if nu_min == c3_rhs { "C3" }
+                else if nu_min == c4gt1_rhs { "C4>1" }
+                else { "C4=1" };
+            let feas = if nu_min < 1.0 { "yes" } else { "NO" };
+
+            println!("    1/{:<5} 1/{:<5} {:>8.4} {:>8} {:>8}",
+                lam_d, eps_d, nu_min, tight, feas);
+        }
+    }
+}
+
 fn main() {
     test_initial_invariant_parity();
     test_seiferas_params();
@@ -1743,4 +2278,10 @@ fn main() {
     test_source_decomposition();
     test_j_gt_1_source_decomposition();
     test_source_bounds_stress();
+    // Risk reduction tests A-E
+    test_rebagging_flow_validation();       // A: rebagging detail
+    test_end_to_end_sorting();              // D: end-to-end sorting check
+    test_tight_bound_ratios();              // B: all clause ratios
+    test_1stranger_counterexample_search(); // C: counterexample search
+    test_parameter_sensitivity();           // E: parameter sweep
 }

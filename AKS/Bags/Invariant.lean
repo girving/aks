@@ -65,6 +65,11 @@ structure SeifInvariant (n : ℕ) (A ν lam ε : ℝ) (t : ℕ)
   stranger_bound : ∀ level idx j, 1 ≤ j →
     (jStrangerCount n perm (bags level idx) level idx j : ℝ) ≤
     lam * ε ^ (j - 1) * bagCapacity n A ν t level
+  /-- (5) Partition: distinct (level, idx) pairs have disjoint register sets. -/
+  bags_disjoint : ∀ l₁ l₂ i₁ i₂,
+    (l₁, i₁) ≠ (l₂, i₂) → Disjoint (bags l₁ i₁) (bags l₂ i₂)
+  /-- (6) Bounded depth: bags beyond maxLevel are empty. -/
+  bounded_depth : ∀ level idx, maxLevel n < level → bags level idx = ∅
 
 /-! **Parameter Constraints (Seiferas Section 5)** -/
 
@@ -144,6 +149,18 @@ theorem initialInvariant (n : ℕ) (A ν lam ε : ℝ)
       simp only [Nat.cast_zero]
       exact mul_nonneg (mul_nonneg (le_of_lt hlam) (pow_nonneg hε _))
         (by unfold bagCapacity; positivity)
+  · -- Clause 5: partition (disjoint bags)
+    intro l₁ l₂ i₁ i₂ hne
+    simp only [initialBags]
+    split_ifs with h₁ h₂
+    · obtain ⟨rfl, rfl⟩ := h₁; obtain ⟨rfl, rfl⟩ := h₂; exact absurd rfl hne
+    all_goals simp
+  · -- Clause 6: bounded depth
+    intro level idx hlev
+    simp only [initialBags]
+    split_ifs with h
+    · obtain ⟨rfl, _⟩ := h; omega
+    · rfl
 
 /-! **Invariant Maintenance Theorems (Seiferas Section 5)** -/
 
@@ -213,8 +230,17 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
 
 /-! **Convergence** -/
 
-/-- Convergence condition: at stage `T`, leaf capacity drops below `1/lam`,
-    forcing zero items at leaves (since items are integers).
+/-- Convergence condition: at stage `T`, the maximum (leaf-level) bag capacity
+    drops below 2, forcing all bags to have at most 1 item.
     `T` is `O(log n)` because capacity decays as `ν^T`. -/
-def converged (n : ℕ) (A ν lam : ℝ) (t : ℕ) : Prop :=
-  bagCapacity n A ν t (maxLevel n) < 1 / lam
+def converged (n : ℕ) (A ν : ℝ) (t : ℕ) : Prop :=
+  bagCapacity n A ν t (maxLevel n) < 2
+
+/-- Capacity is monotone in level when `A ≥ 1`. -/
+theorem bagCapacity_mono_level {n : ℕ} {A ν : ℝ} {t : ℕ}
+    (hA : 1 ≤ A) (hν : 0 ≤ ν) {l₁ l₂ : ℕ} (h : l₁ ≤ l₂) :
+    bagCapacity n A ν t l₁ ≤ bagCapacity n A ν t l₂ := by
+  unfold bagCapacity
+  have hp : A ^ l₁ ≤ A ^ l₂ := pow_le_pow_right₀ hA h
+  have hc : (0 : ℝ) ≤ ↑n * ν ^ t := mul_nonneg (Nat.cast_nonneg n) (pow_nonneg hν t)
+  nlinarith
