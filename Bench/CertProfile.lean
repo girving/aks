@@ -9,7 +9,6 @@
 -/
 
 import CertCheck
-import Bench.CertFast
 import AKS.Cert.Read
 
 #eval ensureCertificateData 1728 12
@@ -141,13 +140,7 @@ def main : IO UInt32 := do
     s!"ok={checkCertificateSlow rotData1728p certData1728p n d c₁ c₂ c₃}"
   IO.println ""
 
-  -- 8. Time the Fast version for comparison
-  IO.println "--- checkCertificateFastV1 (V2 pre-decoded) ---"
-  timedP "fast version    " fun () =>
-    s!"ok={checkCertificateFastV1 rotData1728p certData1728p n d c₁ c₂ c₃}"
-  IO.println ""
-
-  -- 9. Breakdown: decode vs compute
+  -- 8. Breakdown: decode vs compute
   IO.println "--- Breakdown: decode cost ---"
   timedP "decode all cert " fun () => Id.run do
     -- Time just decoding all n*(n+1)/2 cert entries

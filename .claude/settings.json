@@ -4,6 +4,8 @@
     "ask": [
       "Edit(.claude/settings.json)",
       "Write(.claude/settings.json)",
+      "Edit(CertCheck.lean)",
+      "Write(CertCheck.lean)",
       "Edit(AKS/Random/**)",
       "Write(AKS/Random/**)",
       "Bash(git commit)",
@@ -36,6 +38,7 @@
       "Bash(lake env lean *)",
       "Bash(cargo *)",
       "Bash(rg *)",
+      "Bash(grep *)",
       "Bash(ps *)",
       "Bash(pkill -f lean*)",
       "Bash(pkill -f lake*)",

@@ -1296,22 +1296,232 @@ private theorem bcl_fold_invariant (n numChunks : Nat) (hnc : 0 < numChunks) (k 
           (hmem j (Nat.lt_of_le_of_ne (Nat.lt_succ_iff.mp hj) hjm))
 
 /-- Every `j < n` appears in `buildColumnLists n numChunks` at chunk `j % numChunks`. -/
-private theorem buildColumnLists_mem (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+theorem buildColumnLists_mem (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
     j ∈ (buildColumnLists n numChunks)[j % numChunks]!.toList := by
   rw [buildColumnLists_eq_fold]
   exact (bcl_fold_invariant n numChunks hnc n).2 j hj
+
+/-- `getElem!` after `push` at the end position. -/
+private theorem getElem!_push_last (arr : Array Nat) (v : Nat) :
+    (arr.push v)[arr.size]! = v := by
+  show (arr.push v).getD arr.size default = v
+  unfold Array.getD; simp [Array.size_push, Array.getElem_push_eq]
+
+/-- `getElem!` after `push` at an earlier position. -/
+private theorem getElem!_push_lt (arr : Array Nat) (v : Nat) (i : Nat) (hi : i < arr.size) :
+    (arr.push v)[i]! = arr[i]! := by
+  show (arr.push v).getD i default = arr.getD i default
+  unfold Array.getD
+  simp only [Array.size_push, show i < arr.size + 1 from by omega, dite_true, hi]
+  exact Array.getElem_push_lt hi
+
+/-! **Counting infrastructure for round-robin positions** -/
+
+/-- `Nat.fold` splits: fold over `[0, a+b)` = fold over `[a, a+b)` after fold over `[0, a)`. -/
+private theorem fold_split_count {α : Type} (a b : Nat) (f : Nat → α → α) (init : α) :
+    Nat.fold (a + b) (fun i _ acc => f i acc) init =
+    Nat.fold b (fun i _ acc => f (a + i) acc) (Nat.fold a (fun i _ acc => f i acc) init) := by
+  induction b with
+  | zero => rfl
+  | succ b ih => simp only [Nat.fold_succ]; exact congrArg (f (a + b)) ih
+
+/-- Additive fold: counting fold from `s` = `s` + counting fold from `0`. -/
+private theorem fold_additive' (b : Nat) {p : Nat → Prop} [inst : ∀ i, Decidable (p i)] (s : Nat) :
+    Nat.fold b (fun i _ cnt => if p i then cnt + 1 else cnt) s =
+    s + Nat.fold b (fun i _ cnt => if p i then cnt + 1 else cnt) 0 := by
+  induction b generalizing s with
+  | zero => simp [Nat.fold_zero]
+  | succ b ih =>
+    simp only [Nat.fold_succ]; rw [ih]; rw [ih (s := 0)]; split <;> omega
+
+/-- Count of `m < k` with `m % nc = c`. -/
+private def countRes' (nc c k : Nat) : Nat :=
+  Nat.fold k (fun m _ cnt => if m % nc = c then cnt + 1 else cnt) 0
+
+/-- Split `countRes'` at a boundary. -/
+private theorem countRes'_split (nc c a b : Nat) :
+    countRes' nc c (a + b) =
+    countRes' nc c a + Nat.fold b (fun i _ cnt =>
+      if (a + i) % nc = c then cnt + 1 else cnt) 0 := by
+  unfold countRes'
+  rw [fold_split_count a b (fun m cnt => if m % nc = c then cnt + 1 else cnt) 0]
+  exact fold_additive' (p := fun i => (a + i) % nc = c) b _
+
+/-- For `k ≤ c < nc`: no `m < k` has `m % nc = c`. -/
+private theorem countRes'_zero_of_le (nc c k : Nat) (hc : c < nc) (hk : k ≤ c) :
+    countRes' nc c k = 0 := by
+  unfold countRes'
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+    simp only [Nat.fold_succ]
+    have : k % nc ≠ c := by rw [Nat.mod_eq_of_lt (by omega : k < nc)]; omega
+    simp only [this, ite_false]; exact ih (by omega)
+
+/-- If `a % nc = c` and `0 < i < nc`, then `(a + i) % nc ≠ c`. -/
+private theorem mod_add_ne' {nc c : Nat} (a : Nat) (ha : a % nc = c) (i : Nat)
+    (hi : 0 < i) (hi2 : i < nc) : (a + i) % nc ≠ c := by
+  rw [Nat.add_mod, ha, Nat.mod_eq_of_lt hi2]
+  intro heq
+  have hdm := Nat.div_add_mod (c + i) nc; rw [heq] at hdm
+  cases Nat.eq_zero_or_pos ((c + i) / nc) with
+  | inl h => rw [h, Nat.mul_zero] at hdm; omega
+  | inr h =>
+    rw [show (c + i) / nc = ((c + i) / nc - 1) + 1 from by omega, Nat.mul_succ] at hdm; omega
+
+/-- Among `nc` consecutive values starting at `a` where `a % nc = c`: exactly one match. -/
+private theorem fold_nc_consec' (nc c a : Nat) (hc : c < nc) (ha : a % nc = c) :
+    Nat.fold nc (fun i _ cnt => if (a + i) % nc = c then cnt + 1 else cnt) 0 = 1 := by
+  suffices stable : ∀ k, 0 < k → k ≤ nc →
+      Nat.fold k (fun i _ cnt => if (a + i) % nc = c then cnt + 1 else cnt) 0 = 1 from
+    stable nc (by omega) (by omega)
+  intro k hk hknc
+  induction k with
+  | zero => omega
+  | succ k ihk =>
+    simp only [Nat.fold_succ]
+    cases k with
+    | zero => simp only [Nat.fold_zero, Nat.add_zero, ha, ite_true]
+    | succ k' =>
+      rw [ihk (by omega) (by omega)]
+      have : (a + (k' + 1)) % nc ≠ c := mod_add_ne' a ha (k' + 1) (by omega) (by omega)
+      simp only [this, ite_false]
+
+/-- `countRes' nc c (a + nc) = countRes' nc c a + 1` when `a % nc = c`. -/
+private theorem countRes'_add_nc (nc c a : Nat) (hc : c < nc) (ha : a % nc = c) :
+    countRes' nc c (a + nc) = countRes' nc c a + 1 := by
+  rw [countRes'_split, fold_nc_consec' nc c a hc ha]
+
+/-- Main counting formula: `countRes' nc (j % nc) j = j / nc`. -/
+private theorem count_mod_self_eq_div' (nc : Nat) (hnc : 0 < nc) (j : Nat) :
+    countRes' nc (j % nc) j = j / nc := by
+  suffices h : ∀ r, r < nc → ∀ q, countRes' nc r (nc * q + r) = q by
+    have := h (j % nc) (Nat.mod_lt j hnc) (j / nc)
+    rwa [show nc * (j / nc) + j % nc = j from (Nat.div_add_mod j nc)] at this
+  intro r hr q
+  induction q with
+  | zero => simp; exact countRes'_zero_of_le nc r r hr (by omega)
+  | succ q ih =>
+    rw [show nc * (q + 1) + r = (nc * q + r) + nc from by rw [Nat.mul_succ]; omega]
+    rw [countRes'_add_nc nc r (nc * q + r) hr (by
+      rw [show nc * q + r = r + nc * q from by omega]
+      rw [Nat.add_mul_mod_self_left]; exact Nat.mod_eq_of_lt hr)]
+    omega
+
+/-- Monotonicity: `countRes'` is nondecreasing in the bound. -/
+private theorem countRes'_le_succ (nc c k : Nat) :
+    countRes' nc c k ≤ countRes' nc c (k + 1) := by
+  unfold countRes'; simp only [Nat.fold_succ]; split <;> omega
+
+private theorem countRes'_mono (nc c : Nat) {a b : Nat} (hab : a ≤ b) :
+    countRes' nc c a ≤ countRes' nc c b := by
+  induction b with
+  | zero => exact (show a = 0 by omega) ▸ Nat.le_refl _
+  | succ b ih =>
+    cases Nat.eq_or_lt_of_le hab with
+    | inl h => exact h ▸ Nat.le_refl _
+    | inr h => exact Nat.le_trans (ih (by omega)) (countRes'_le_succ nc c b)
+
+/-- Step `countRes'` when the new index matches. -/
+private theorem countRes'_succ_eq (nc c m : Nat) (hmod : m % nc = c) :
+    countRes' nc c (m + 1) = countRes' nc c m + 1 := by
+  show Nat.fold (m + 1) _ 0 = Nat.fold m _ 0 + 1
+  rw [Nat.fold_succ]; simp only [hmod, ite_true]
+
+/-- Step `countRes'` when the new index does not match. -/
+private theorem countRes'_succ_ne (nc c m : Nat) (hmod : m % nc ≠ c) :
+    countRes' nc c (m + 1) = countRes' nc c m := by
+  show Nat.fold (m + 1) _ 0 = Nat.fold m _ 0
+  rw [Nat.fold_succ]; simp only [hmod, ite_false]
+
+/-- `countRes' nc (j % nc) (j + 1) = j / nc + 1`. -/
+private theorem countRes'_succ_self (nc : Nat) (hnc : 0 < nc) (j : Nat) :
+    countRes' nc (j % nc) (j + 1) = j / nc + 1 := by
+  rw [countRes'_succ_eq nc (j % nc) j rfl, count_mod_self_eq_div' nc hnc j]
+
+/-! **Fold invariant with entry positions** -/
+
+/-- Combined fold invariant: outer size, inner sizes, and entry correctness.
+    Round-robin assignment puts column `j` at position `j / nc` in chunk `j % nc`. -/
+private theorem bcl_fold_entry (n numChunks : Nat) (hnc : 0 < numChunks) (k : Nat) :
+    let result := Nat.fold k (fun j _ lists =>
+      lists.set! (j % numChunks) (lists[j % numChunks]!.push j))
+      (Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1)))
+    result.size = numChunks ∧
+    (∀ c, c < numChunks → result[c]!.size = countRes' numChunks c k) ∧
+    (∀ j, j < k → result[j % numChunks]![j / numChunks]! = j) := by
+  induction k with
+  | zero =>
+    refine ⟨Array.size_replicate, ?_, by intros; omega⟩
+    intro c hc
+    show ((Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1) : Array Nat)).getD c default).size = 0
+    unfold Array.getD; simp [Array.size_replicate, hc]
+  | succ m ih =>
+    obtain ⟨hsize, hsizes, hentries⟩ := ih
+    set prev := Nat.fold m _ _ with hprev
+    refine ⟨?_, ?_, ?_⟩
+    · -- outer size preserved
+      show (prev.set! (m % numChunks) _).size = numChunks
+      rw [size_set!]; exact hsize
+    · -- inner sizes track countRes'
+      intro c hc
+      show (prev.set! (m % numChunks) (prev[m % numChunks]!.push m))[c]!.size =
+        countRes' numChunks c (m + 1)
+      by_cases hmod : m % numChunks = c
+      · rw [← hmod, getElem!_set!_eq prev (m % numChunks) _
+            (by rw [hsize]; exact Nat.mod_lt m hnc)]
+        rw [Array.size_push, hsizes (m % numChunks) (Nat.mod_lt m hnc), hmod,
+            countRes'_succ_eq numChunks c m hmod]
+      · rw [getElem!_set!_ne _ _ _ _ hmod, hsizes c hc,
+            countRes'_succ_ne numChunks c m hmod]
+    · -- entry correctness
+      intro j hjk
+      show (prev.set! (m % numChunks) (prev[m % numChunks]!.push m))[j % numChunks]![j / numChunks]! = j
+      by_cases hjm : j = m
+      · -- j = m: just pushed at position j / numChunks
+        subst hjm
+        rw [getElem!_set!_eq prev (j % numChunks) _
+            (by rw [hsize]; exact Nat.mod_lt j hnc)]
+        have hsize_eq : prev[j % numChunks]!.size = j / numChunks := by
+          rw [hsizes (j % numChunks) (Nat.mod_lt j hnc)]
+          exact count_mod_self_eq_div' numChunks hnc j
+        rw [← hsize_eq]
+        exact getElem!_push_last _ _
+      · -- j < m: was already placed
+        have hjlt : j < m := by omega
+        by_cases hmod : m % numChunks = j % numChunks
+        · -- Same chunk: push at end doesn't affect earlier positions
+          rw [← hmod, getElem!_set!_eq prev (m % numChunks) _
+              (by rw [hsize]; exact Nat.mod_lt m hnc)]
+          rw [hmod]
+          have hlt : j / numChunks < prev[j % numChunks]!.size := by
+            rw [hsizes (j % numChunks) (Nat.mod_lt j hnc)]
+            have h1 := countRes'_succ_self numChunks hnc j
+            have h2 := countRes'_mono numChunks (j % numChunks) (show j + 1 ≤ m from by omega)
+            omega
+          rw [getElem!_push_lt _ _ _ hlt]
+          exact hentries j hjlt
+        · -- Different chunk: set! doesn't affect this chunk
+          rw [getElem!_set!_ne _ _ _ _ hmod]
+          exact hentries j hjlt
+
+/-- Column `j` is at position `j / numChunks` in chunk `j % numChunks`. -/
+theorem buildColumnLists_entry (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+    (buildColumnLists n numChunks)[j % numChunks]![j / numChunks]! = j := by
+  rw [buildColumnLists_eq_fold]
+  exact (bcl_fold_entry n numChunks hnc n).2.2 j hj
 
 
 /-! **Partition + merge = sequential fold** -/
 
 /-- `buildColumnLists` has `numChunks` entries. -/
-private theorem buildColumnLists_size (n numChunks : Nat) (hnc : 0 < numChunks) :
+theorem buildColumnLists_size (n numChunks : Nat) (hnc : 0 < numChunks) :
     (buildColumnLists n numChunks).size = numChunks := by
   rw [buildColumnLists_eq_fold]
   exact (bcl_fold_invariant n numChunks hnc n).1
 
 /-- All entries in chunk `c` of `buildColumnLists n numChunks` are `< n`. -/
-private theorem buildColumnLists_bound (n numChunks c : Nat)
+theorem buildColumnLists_bound (n numChunks c : Nat)
     (hnc : 0 < numChunks) (x : Nat)
     (hx : x ∈ (buildColumnLists n numChunks)[c]!.toList) (hc : c < numChunks) :
     x < n := by
@@ -1350,6 +1560,15 @@ private theorem buildColumnLists_bound (n numChunks c : Nat)
       | inr h => omega
     · rw [getElem!_set!_ne _ _ _ _ hmk] at hy
       exact ih (by omega) c' hc' y hy
+
+/-- Position `j / numChunks` is a valid index in chunk `j % numChunks`. -/
+theorem buildColumnLists_inner_bound (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+    j / numChunks < (buildColumnLists n numChunks)[j % numChunks]!.size := by
+  rw [buildColumnLists_eq_fold]
+  rw [(bcl_fold_entry n numChunks hnc n).2.1 (j % numChunks) (Nat.mod_lt j hnc)]
+  have h1 := countRes'_succ_self numChunks hnc j
+  have h2 := countRes'_mono numChunks (j % numChunks) (show j + 1 ≤ n from by omega)
+  omega
 
 /-- Bridge: `a[i]! = a[i]` when `i < a.size`. -/
 private theorem getElem!_eq_getElem {α : Type} [Inhabited α] (a : Array α) (i : Nat)

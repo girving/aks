@@ -136,6 +136,7 @@ structure PSDChunkResult where
   epsMax : Int
   minDiag : Int
   first : Bool
+  deriving Inhabited
 
 /-- Merge two chunk results by taking the max epsMax and min minDiag. -/
 def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
@@ -351,10 +352,56 @@ def checkPSDCertificatePar (rotBytes certBytes : ByteArray)
     let results := tasks.map Task.get
     checkPSDThreshold results n
 
-/-- Merged parallel certificate check: computes PSD columns once and uses the
-    shared result for both the Gershgorin threshold and column-norm bound.
+/-- Per-column PSD + column ℓ₁-norm, fused into a single cert decode pass.
+    Returns updated PSD state and `∑_{k≤j} |Z[k,j]|`. -/
+@[inline] def psdColumnStepFull (neighbors : Array Nat) (d : Nat)
+    (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
+    (state : PSDChunkResult) (j : Nat) : PSDChunkResult × Int :=
+  let colStart := j * (j + 1) / 2
+  let (zCol, colSum, colNorm) := Id.run do
+    let mut arr := Array.replicate n (0 : Int)
+    let mut s : Int := 0
+    let mut norm : Int := 0
+    for k in [:j+1] do
+      let v := decodeBase85Int certBytes (colStart + k)
+      arr := arr.set! k v
+      s := s + v
+      norm := norm + intAbs v
+    return (arr, s, norm)
+  let bz := mulAdjPre neighbors zCol n d
+  let state' := Id.run do
+    let mut epsMax := state.epsMax
+    let mut minDiag := state.minDiag
+    let mut first := state.first
+    for i in [:j+1] do
+      let pij := c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
+      if i == j then
+        if first then minDiag := pij; first := false
+        else if pij < minDiag then minDiag := pij
+      else if i < j then
+        let absPij := if pij >= 0 then pij else -pij
+        if absPij > epsMax then epsMax := absPij
+    return { epsMax, minDiag, first }
+  (state', colNorm)
+
+/-- Process columns: PSD + column ℓ₁-norms in a single fused pass. -/
+def checkPSDColumnsFull (neighbors : Array Nat) (certBytes : ByteArray)
+    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) :
+    PSDChunkResult × Array Int :=
+  Id.run do
+    let mut state : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
+    let mut norms : Array Int := Array.mkEmpty columns.size
+    for j in columns do
+      let (state', norm) := psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ state j
+      state := state'
+      norms := norms.push norm
+    return (state, norms)
+
+/-- Merged parallel certificate check: PSD + column-norm bound in one parallel pass.
     Same result as `checkCertificateSlow` (proved in `AKS/Cert/FastProof.lean`).
-    Spawns dedicated OS threads for each chunk via `Task.spawn`. -/
+    Each parallel task computes both PSD state and column ℓ₁-norms via fused cert
+    decode. The sequential prefix-sum check uses precomputed norms directly from
+    chunk results: column `j`'s norm is `results[j % 64].2[j / 64]`. -/
 def checkCertificateFast (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   let rotBytes := rotStr.toUTF8
@@ -363,16 +410,27 @@ def checkCertificateFast (rotStr certStr : String)
   if certBytes.size != n * (n + 1) / 2 * 5 then false
   else allDiagPositive certBytes n &&
     let neighbors := decodeNeighbors rotBytes n d
-    let columnLists := buildColumnLists n 64
+    let nc := 64
+    let columnLists := buildColumnLists n nc
     let tasks := columnLists.map fun cols =>
       Task.spawn (prio := .dedicated) fun () =>
-        checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
+        checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols
     let results := tasks.map Task.get
-    let merged := results.foldl PSDChunkResult.merge
+    let merged := (results.map (·.1)).foldl PSDChunkResult.merge
       { epsMax := 0, minDiag := 0, first := true }
     if merged.first then false
     else
       decide (merged.minDiag > merged.epsMax * (n * (n + 1) / 2)) &&
-      checkPerRow certBytes n merged.epsMax (merged.minDiag + merged.epsMax) n 0 0
+      Id.run do
+        let ε := merged.epsMax
+        let mdpe := merged.minDiag + ε
+        let mut prefSum : Int := 0
+        for i in [:n] do
+          let si := results[i % nc]!.2[i / nc]!
+          let ti := prefSum + (↑(n - i) : Int) * si
+          if !(certEntryInt certBytes i i * mdpe > ε * ti) then
+            return false
+          prefSum := prefSum + si
+        return true
 
 

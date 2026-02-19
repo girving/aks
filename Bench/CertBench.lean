@@ -8,9 +8,7 @@
 -/
 
 import CertCheck
-import Bench.CertV2
 import Bench.CertParallel
-import Bench.CertV7
 import AKS.Cert.Read
 
 #eval ensureCertificateData 16 4
@@ -32,39 +30,6 @@ def fmtNs (ns : Nat) : String :=
     let frac := (ns % 1000000000) / 100000000
     s!"{sec}.{frac} s"
 
-/-- Like `checkPSDCertificate` but returns (ok, minDiag, epsMax) for diagnostics. -/
-def checkPSDWithMargin (rotBytes certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool × Int × Int :=
-  if certBytes.size != n * (n + 1) / 2 * 5 then (false, 0, 0)
-  else Id.run do
-    let mut epsMax : Int := 0
-    let mut minDiag : Int := 0
-    let mut first := true
-    for j in [:n] do
-      let colStart := j * (j + 1) / 2
-      let mut zCol := Array.replicate n (0 : Int)
-      for k in [:j+1] do
-        zCol := zCol.set! k (decodeBase85Int certBytes (colStart + k))
-      let bz := mulAdj rotBytes zCol n d
-      let b2z := mulAdj rotBytes bz n d
-      let mut colSum : Int := 0
-      for k in [:j+1] do
-        colSum := colSum + zCol[k]!
-      for i in [:n] do
-        let pij := c₁ * zCol[i]! - c₂ * b2z[i]! + c₃ * colSum
-        if i == j then
-          if first then
-            minDiag := pij
-            first := false
-          else if pij < minDiag then
-            minDiag := pij
-        else if i < j then
-          let absPij := if pij >= 0 then pij else -pij
-          if absPij > epsMax then
-            epsMax := absPij
-    let threshold := epsMax * (n * (n + 1) / 2)
-    return (decide (minDiag > threshold), minDiag, epsMax)
-
 /-- Time a named computation, print result + elapsed. -/
 def timed (name : String) (f : Unit → String) : IO Unit := do
   let t0 ← IO.monoNanosNow
@@ -81,47 +46,29 @@ def timedIO (name : String) (f : IO String) : IO Unit := do
   let t1 ← IO.monoNanosNow
   IO.println s!" [{fmtNs (t1 - t0)}]"
 
-/-- Baseline benchmark suite for one graph size. -/
-def benchBaseline (label : String) (rotStr certStr : String)
+/-- Benchmark suite for one graph size. -/
+def benchSuite (label : String) (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : IO Unit := do
   IO.println s!"--- {label} (n={n}, d={d}) ---"
-  let rotBytes := rotStr.toUTF8
-  let certBytes := certStr.toUTF8
-
-  timed "baseline checkPSD" fun () =>
-    let (ok, minDiag, epsMax) := checkPSDWithMargin rotBytes certBytes n d c₁ c₂ c₃
-    s!"ok={ok} minDiag={minDiag} epsMax={epsMax}"
 
   timed "baseline full    " fun () =>
     s!"ok={checkCertificateSlow rotStr certStr n d c₁ c₂ c₃}"
 
-  -- V2: pre-decoded neighbors
-  let neighbors := decodeNeighbors rotBytes n d
-  timed "V2 pre-decoded   " fun () =>
-    s!"ok={checkPSDCertificateV2 neighbors certBytes n d c₁ c₂ c₃}"
-
-  timed "V2 full          " fun () =>
-    s!"ok={checkCertificateV2 rotStr certStr n d c₁ c₂ c₃}"
-
-  -- Production fast path: checkCertificateFast (scatter + inline + truncate + parallel PSD)
   timed "prod fast        " fun () =>
     s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
 
-  -- Just checkColumnNormBound (sequential, uses optimized psdColumnStep)
-  timed "columnNormBound  " fun () =>
-    s!"ok={checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃}"
-
-  -- V7: buffer reuse + truncated loop + sparse mulAdj + inlined B²z
-  timed "V7 buf+trunc+spr " fun () =>
-    s!"ok={checkCertificateV7 rotStr certStr n d c₁ c₂ c₃}"
-
-  -- Parallel: task-parallel PSD check (various chunk counts)
-  for numChunks in [2, 4, 8] do
-    let label := s!"parallel ({numChunks} chunks)"
+  -- Parallel PSD-only (no column-norm check)
+  for numChunks in [4, 64] do
+    let label := s!"par PSD ({numChunks} chunks)"
     let padded := label ++ String.ofList (List.replicate (17 - label.length) ' ')
     timedIO padded do
       let ok ← checkCertificateParallel rotStr certStr n d c₁ c₂ c₃ numChunks
       return s!"ok={ok}"
+
+  -- Parallel full: PSD + column-norm fused
+  timedIO "par full (64)    " do
+    let ok ← checkCertificateParallelFull rotStr certStr n d c₁ c₂ c₃ 64
+    return s!"ok={ok}"
 
   IO.println ""
 
@@ -135,8 +82,8 @@ def main : IO UInt32 := do
   IO.println "=== Certificate Checker Benchmarks ==="
   IO.println ""
 
-  benchBaseline "n=16" rotData16 certData16 16 4 216 9 1
-  benchBaseline "n=1728" rotData1728 certData1728 1728 12 792 9 2
+  benchSuite "n=16" rotData16 certData16 16 4 216 9 1
+  benchSuite "n=1728" rotData1728 certData1728 1728 12 792 9 2
 
   IO.println "Done."
   return 0
