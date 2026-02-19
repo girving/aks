@@ -227,8 +227,17 @@ impl BagTree {
     }
 
     /// Is item with given rank j-strange at bag (level, idx)?
-    /// j-strange means native path diverges at level (level - j).
+    /// Shifted definition (Seiferas): diverges at level-(j-1).
+    ///   j=1: not native to this bag. j=2: not native to parent.
     fn is_j_stranger(&self, rank: usize, level: usize, idx: usize, j: usize) -> bool {
+        if j == 0 || j > level { return false; }
+        let check_level = level - (j - 1);
+        let check_idx = idx >> (j - 1);
+        self.native_bag_idx(check_level, rank) != check_idx
+    }
+
+    /// Old (unshifted) definition for comparison: diverges at level-j.
+    fn is_j_stranger_unshifted(&self, rank: usize, level: usize, idx: usize, j: usize) -> bool {
         if j == 0 || j > level { return false; }
         let ancestor_level = level - j;
         let ancestor_idx = idx >> j;
@@ -238,6 +247,10 @@ impl BagTree {
     /// Count j-strangers among given items at bag (level, idx)
     fn j_stranger_count(&self, items: &[usize], level: usize, idx: usize, j: usize) -> usize {
         items.iter().filter(|&&rank| self.is_j_stranger(rank, level, idx, j)).count()
+    }
+
+    fn j_stranger_count_unshifted(&self, items: &[usize], level: usize, idx: usize, j: usize) -> usize {
+        items.iter().filter(|&&rank| self.is_j_stranger_unshifted(rank, level, idx, j)).count()
     }
 
     /// Total items across all bags
@@ -434,6 +447,83 @@ impl BagTree {
             }
         }
         true
+    }
+
+    /// Shifted j-stranger definition matching Seiferas's convention.
+    /// j-stranger at (level, idx) iff nativeBagIdx(n, level-(j-1), rank) != idx/2^(j-1).
+    ///   j=1: not native to this bag (nativeBagIdx(n, level, rank) != idx)
+    ///   j=2: not native to parent (nativeBagIdx(n, level-1, rank) != idx/2)
+    /// Same as is_j_stranger (kept for backward compatibility with tests).
+    fn is_j_stranger_shifted(&self, rank: usize, level: usize, idx: usize, j: usize) -> bool {
+        self.is_j_stranger(rank, level, idx, j)
+    }
+
+    fn j_stranger_count_shifted(&self, items: &[usize], level: usize, idx: usize, j: usize) -> usize {
+        self.j_stranger_count(items, level, idx, j)
+    }
+
+    /// Map from rank to (level, idx) for all items currently in bags.
+    fn item_locations(&self) -> Vec<Option<(usize, usize)>> {
+        let mut locs = vec![None; self.n];
+        for (&(level, idx), items) in &self.bags {
+            for &rank in items {
+                locs[rank] = Some((level, idx));
+            }
+        }
+        locs
+    }
+
+    /// Check invariant using shifted j-stranger definition.
+    fn check_invariant_shifted(&self, params: &Params, t: usize) -> Result<(), InvariantViolation> {
+        // Clauses 1-3 identical to check_invariant
+        for (&(level, idx), items) in &self.bags {
+            if (t + level) % 2 != 0 && !items.is_empty() {
+                return Err(InvariantViolation {
+                    clause: 1,
+                    detail: format!("bag ({},{}) nonempty at wrong parity", level, idx),
+                });
+            }
+        }
+        for level in 0..=self.max_level {
+            if (t + level) % 2 != 0 { continue; }
+            let num_bags = 1usize << level;
+            let sizes: Vec<usize> = (0..num_bags)
+                .map(|idx| self.bags.get(&(level, idx)).map_or(0, |v| v.len()))
+                .collect();
+            if !sizes.windows(2).all(|w| w[0] == w[1]) {
+                return Err(InvariantViolation {
+                    clause: 2,
+                    detail: format!("level {} non-uniform: {:?}", level, &sizes[..sizes.len().min(8)]),
+                });
+            }
+        }
+        for (&(level, _idx), items) in &self.bags {
+            if items.is_empty() { continue; }
+            let b = params.capacity(self.n, t, level);
+            if items.len() as f64 > b + 0.001 {
+                return Err(InvariantViolation {
+                    clause: 3,
+                    detail: format!("bag ({},{}) {} items > cap {:.2}", level, _idx, items.len(), b),
+                });
+            }
+        }
+        // Clause 4: shifted stranger bounds
+        for (&(level, idx), items) in &self.bags {
+            if items.is_empty() { continue; }
+            let b = params.capacity(self.n, t, level);
+            for j in 1..=level {
+                let count = self.j_stranger_count_shifted(items, level, idx, j);
+                let bound = params.lambda * params.eps.powi(j as i32 - 1) * b;
+                if count as f64 > bound + 0.001 {
+                    return Err(InvariantViolation {
+                        clause: 4,
+                        detail: format!("shifted: ({},{}) {} {}-strangers > {:.4}",
+                            level, idx, count, j, bound),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1219,6 +1309,418 @@ fn test_model_comparison() {
     }
 }
 
+/// Compare shifted vs unshifted j-stranger definitions.
+/// Shifted (Seiferas): j-stranger iff nativeBagIdx(n, level-(j-1), rank) != idx/2^(j-1)
+///   j=1 means "not native to this bag"
+/// Unshifted (current Lean): j-stranger iff nativeBagIdx(n, level-j, rank) != idx/2^j
+///   j=1 means "not native to parent"
+/// Both should satisfy the invariant. Shifted counts more strangers.
+fn test_shifted_vs_unshifted() {
+    println!("\n=== Test 19: Shifted vs unshifted j-stranger definitions ===");
+    let params = Params::seiferas_preview();
+    let model = SepModel::Adversarial { lambda: params.lambda };
+
+    println!("  {:>6} {:>8} {:>8} {:>10} {:>10} {:>8}",
+        "n", "sh_ok", "un_ok", "max_r_sh", "max_r_un", "extra");
+
+    for exp in 3..=12 {
+        let n = 1usize << exp;
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(42);
+        let threshold = 1.0 / params.lambda;
+        let mut shifted_ok = true;
+        let mut unshifted_ok = true;
+        let mut max_ratio_shifted: f64 = 0.0;
+        let mut max_ratio_unshifted: f64 = 0.0;
+        let mut max_extra: usize = 0;
+
+        for t in 0..300 {
+            tree.do_stage(&params, t, model, &mut rng);
+
+            if tree.check_invariant_shifted(&params, t + 1).is_err() {
+                shifted_ok = false;
+            }
+            if tree.check_invariant(&params, t + 1).is_err() {
+                unshifted_ok = false;
+            }
+
+            for level in 0..=tree.max_level {
+                if (t + 1 + level) % 2 != 0 { continue; }
+                let b = params.capacity(n, t + 1, level);
+                for idx in 0..(1usize << level) {
+                    if let Some(items) = tree.bags.get(&(level, idx)) {
+                        if items.is_empty() { continue; }
+                        for j in 1..=level {
+                            let cs = tree.j_stranger_count(items, level, idx, j);
+                            let cu = tree.j_stranger_count_unshifted(items, level, idx, j);
+                            let bound = params.lambda * params.eps.powi(j as i32 - 1) * b;
+                            let extra = cs.saturating_sub(cu);
+                            if extra > max_extra { max_extra = extra; }
+                            if bound > 0.001 {
+                                let rs = cs as f64 / bound;
+                                let ru = cu as f64 / bound;
+                                if rs > max_ratio_shifted { max_ratio_shifted = rs; }
+                                if ru > max_ratio_unshifted { max_ratio_unshifted = ru; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < threshold { break; }
+        }
+
+        println!("  {:>6} {:>8} {:>8} {:>10.4} {:>10.4} {:>8}",
+            n, shifted_ok, unshifted_ok, max_ratio_shifted, max_ratio_unshifted, max_extra);
+    }
+}
+
+/// 1-stranger source decomposition (shifted definition, j=1).
+/// For each bag B receiving items, classify 1-strangers by source:
+///   (a) Was a 2-stranger (shifted) at a child — came from below
+///   (b) Was a 1-stranger (shifted) at parent D — came from above, previously strange
+///   (c) Was NOT a 1-stranger at D, native to sibling C — newly strange
+/// Seiferas bounds (fraction of b = n*nu^t*A^level):
+///   (a) <= 2*lam*eps*A,  (b) <= eps*lam/A,
+///   (c) <= eps/(2A) + 2*lam*eps*A/(1-(2*eps*A)^2) + 1/(8A^3-2A)
+fn test_source_decomposition() {
+    println!("\n=== Test 20: 1-stranger source decomposition (shifted, j=1) ===");
+    let params = Params::seiferas_preview();
+    let a = params.a;
+    let e = params.eps;
+    let l = params.lambda;
+
+    let bound_a_frac = 2.0 * l * e * a;
+    let bound_b_frac = e * l / a;
+    let bound_c_frac = e / (2.0 * a)
+        + 2.0 * l * e * a / (1.0 - (2.0 * e * a).powi(2))
+        + 1.0 / (8.0 * a.powi(3) - 2.0 * a);
+    let bound_total_frac = l * params.nu;
+
+    println!("  Bounds (fraction of b):");
+    println!("    (a) 2*lam*eps*A           = {:.6}", bound_a_frac);
+    println!("    (b) eps*lam/A             = {:.6}", bound_b_frac);
+    println!("    (c) eps/(2A) + geo + high = {:.6}", bound_c_frac);
+    println!("    Sum (a)+(b)+(c)           = {:.6}", bound_a_frac + bound_b_frac + bound_c_frac);
+    println!("    Required <= lam*nu        = {:.6}", bound_total_frac);
+    println!();
+
+    let models: Vec<(&str, SepModel)> = vec![
+        ("Adversarial", SepModel::Adversarial { lambda: params.lambda }),
+        ("Formal", SepModel::Formal),
+        ("Perfect", SepModel::Perfect),
+    ];
+
+    for (model_name, model) in &models {
+        println!("  --- {} separator ---", model_name);
+
+        for &n in &[64, 256, 1024, 4096] {
+            let mut tree = BagTree::new(n);
+            let mut rng = Rng::new(42);
+            let threshold = 1.0 / params.lambda;
+
+            let mut max_a_ratio: f64 = 0.0;
+            let mut max_b_ratio: f64 = 0.0;
+            let mut max_c_ratio: f64 = 0.0;
+            let mut max_total_ratio: f64 = 0.0;
+            let mut c_not_sibling = 0usize;
+
+            for t in 0..300 {
+                let pre_locs = tree.item_locations();
+
+                // Pre-compute shifted 1-stranger status at old locations
+                let mut pre_shifted_1s = vec![false; n];
+                for rank in 0..n {
+                    if let Some((lev, id)) = pre_locs[rank] {
+                        pre_shifted_1s[rank] = tree.is_j_stranger_shifted(rank, lev, id, 1);
+                    }
+                }
+
+                tree.do_stage(&params, t, *model, &mut rng);
+
+                for level in 0..=tree.max_level {
+                    if (t + 1 + level) % 2 != 0 { continue; }
+                    // b = capacity at B's level at stage t (pre-stage)
+                    let b = (n as f64) * params.nu.powi(t as i32) * params.a.powi(level as i32);
+
+                    for idx in 0..(1usize << level) {
+                        let items = match tree.bags.get(&(level, idx)) {
+                            Some(v) if !v.is_empty() => v,
+                            _ => continue,
+                        };
+
+                        let mut sa = 0usize;
+                        let mut sb = 0usize;
+                        let mut sc = 0usize;
+
+                        for &rank in items {
+                            // Is this item a 1-stranger at B (shifted)?
+                            if !tree.is_j_stranger_shifted(rank, level, idx, 1) { continue; }
+
+                            let Some((old_level, _old_idx)) = pre_locs[rank] else { continue };
+
+                            if old_level > level {
+                                // From a child: was a 2-stranger there (shifted)
+                                sa += 1;
+                            } else if old_level < level {
+                                // From parent D
+                                if pre_shifted_1s[rank] {
+                                    sb += 1; // was already 1-stranger at D
+                                } else {
+                                    sc += 1; // native to D, must be native to sibling C
+                                    // Sanity check
+                                    let sibling_idx = idx ^ 1;
+                                    if tree.native_bag_idx(level, rank) != sibling_idx {
+                                        c_not_sibling += 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        let total = sa + sb + sc;
+                        let ba = bound_a_frac * b;
+                        let bb = bound_b_frac * b;
+                        let bc = bound_c_frac * b;
+                        let bt = bound_total_frac * b;
+
+                        if ba > 0.01 {
+                            let r = sa as f64 / ba;
+                            if r > max_a_ratio { max_a_ratio = r; }
+                        }
+                        if bb > 0.01 {
+                            let r = sb as f64 / bb;
+                            if r > max_b_ratio { max_b_ratio = r; }
+                        }
+                        if bc > 0.01 {
+                            let r = sc as f64 / bc;
+                            if r > max_c_ratio { max_c_ratio = r; }
+                        }
+                        if bt > 0.01 {
+                            let r = total as f64 / bt;
+                            if r > max_total_ratio { max_total_ratio = r; }
+                        }
+                    }
+                }
+
+                let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+                if leaf_cap < threshold { break; }
+            }
+
+            print!("    n={:5}: (a)={:.4} (b)={:.4} (c)={:.4} total={:.4}",
+                n, max_a_ratio, max_b_ratio, max_c_ratio, max_total_ratio);
+            if c_not_sibling > 0 {
+                print!(" [!{} not sibling]", c_not_sibling);
+            }
+            println!();
+        }
+    }
+}
+
+/// j>1 source decomposition (shifted, j=2).
+/// Sources of 2-strangers at B:
+///   (a) 3-strangers at children (shifted) — at most 2*lam*eps^2*b*A
+///   (b) 1-strangers at parent (shifted), filtered — at most eps*lam*b/A
+/// Constraint: 2*A*eps + 1/A <= nu
+fn test_j_gt_1_source_decomposition() {
+    println!("\n=== Test 21: j=2 stranger source decomposition (shifted) ===");
+    let params = Params::seiferas_preview();
+    let a = params.a;
+    let e = params.eps;
+    let l = params.lambda;
+
+    // For j=2: bound = lam*eps * nu * b
+    // Source (a): 2 * lam * eps^2 * b * A  (3-strangers at children)
+    // Source (b): eps * lam * b / A         (1-strangers at parent, filtered)
+    let bound_a_frac = 2.0 * l * e * e * a;
+    let bound_b_frac = e * l / a;
+    let bound_total_frac = l * e * params.nu;
+
+    println!("  j=2 bounds (fraction of b):");
+    println!("    (a) 2*lam*eps^2*A = {:.8}", bound_a_frac);
+    println!("    (b) eps*lam/A     = {:.8}", bound_b_frac);
+    println!("    Total <= lam*eps*nu = {:.8}", bound_total_frac);
+
+    let model = SepModel::Adversarial { lambda: params.lambda };
+
+    for &n in &[64, 256, 1024, 4096] {
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(42);
+        let threshold = 1.0 / params.lambda;
+
+        let mut max_a_ratio: f64 = 0.0;
+        let mut max_b_ratio: f64 = 0.0;
+        let mut max_total_ratio: f64 = 0.0;
+
+        for t in 0..300 {
+            let pre_locs = tree.item_locations();
+            let mut pre_shifted_1s = vec![false; n];
+            for rank in 0..n {
+                if let Some((lev, id)) = pre_locs[rank] {
+                    pre_shifted_1s[rank] = tree.is_j_stranger_shifted(rank, lev, id, 1);
+                }
+            }
+
+            tree.do_stage(&params, t, model, &mut rng);
+
+            for level in 0..=tree.max_level {
+                if (t + 1 + level) % 2 != 0 { continue; }
+                if level < 2 { continue; } // j=2 requires level >= 2
+                let b = (n as f64) * params.nu.powi(t as i32) * params.a.powi(level as i32);
+
+                for idx in 0..(1usize << level) {
+                    let items = match tree.bags.get(&(level, idx)) {
+                        Some(v) if !v.is_empty() => v,
+                        _ => continue,
+                    };
+
+                    let mut sa = 0usize;
+                    let mut sb = 0usize;
+
+                    for &rank in items {
+                        // Is this item a 2-stranger at B (shifted)?
+                        if !tree.is_j_stranger_shifted(rank, level, idx, 2) { continue; }
+
+                        let Some((old_level, _)) = pre_locs[rank] else { continue };
+
+                        if old_level > level {
+                            // From child: was a 3-stranger there (shifted)
+                            sa += 1;
+                        } else if old_level < level {
+                            // From parent: was a 1-stranger there (shifted)
+                            // (only 1-strangers at D can become 2-strangers at B from above)
+                            sb += 1;
+                        }
+                    }
+
+                    let total = sa + sb;
+                    let ba = bound_a_frac * b;
+                    let bb = bound_b_frac * b;
+                    let bt = bound_total_frac * b;
+
+                    if ba > 0.001 {
+                        let r = sa as f64 / ba;
+                        if r > max_a_ratio { max_a_ratio = r; }
+                    }
+                    if bb > 0.001 {
+                        let r = sb as f64 / bb;
+                        if r > max_b_ratio { max_b_ratio = r; }
+                    }
+                    if bt > 0.001 {
+                        let r = total as f64 / bt;
+                        if r > max_total_ratio { max_total_ratio = r; }
+                    }
+                }
+            }
+
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < threshold { break; }
+        }
+
+        println!("    n={:5}: (a)={:.4} (b)={:.4} total={:.4}",
+            n, max_a_ratio, max_b_ratio, max_total_ratio);
+    }
+}
+
+/// Stress-test source bounds with larger eps (tighter constraint margin).
+/// Seiferas params (eps=1/99) leave large margin. Try eps up to constraint limit.
+fn test_source_bounds_stress() {
+    println!("\n=== Test 22: Source bounds stress test (larger eps) ===");
+
+    // Try several eps values with A=10, nu=0.65, lambda=eps
+    let test_eps = [0.005, 0.008, 1.0/99.0, 0.012, 0.013];
+    let n = 4096usize;
+
+    println!("  {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8} {:>8}",
+        "eps", "C4j1_ok", "inv_ok", "(a)", "(b)", "(c)", "total", "margin");
+
+    for &eps in &test_eps {
+        let params = Params { a: 10.0, nu: 0.65, lambda: eps, eps };
+        let a = params.a;
+        let e = params.eps;
+        let l = params.lambda;
+
+        let bound_a_frac = 2.0 * l * e * a;
+        let bound_b_frac = e * l / a;
+        let bound_c_frac = e / (2.0 * a)
+            + 2.0 * l * e * a / (1.0 - (2.0 * e * a).powi(2))
+            + 1.0 / (8.0 * a.powi(3) - 2.0 * a);
+        let bound_total_frac = l * params.nu;
+        let c4_ok = params.check_c4_j_eq_1();
+        let margin = 1.0 - (bound_a_frac + bound_b_frac + bound_c_frac) / bound_total_frac;
+
+        let model = SepModel::Adversarial { lambda: params.lambda };
+        let mut tree = BagTree::new(n);
+        let mut rng = Rng::new(42);
+        let threshold = 1.0 / params.lambda;
+
+        let mut max_a: f64 = 0.0;
+        let mut max_b: f64 = 0.0;
+        let mut max_c: f64 = 0.0;
+        let mut max_t: f64 = 0.0;
+        let mut inv_ok = true;
+
+        for t in 0..300 {
+            let pre_locs = tree.item_locations();
+            let mut pre_s1 = vec![false; n];
+            for rank in 0..n {
+                if let Some((lev, id)) = pre_locs[rank] {
+                    pre_s1[rank] = tree.is_j_stranger_shifted(rank, lev, id, 1);
+                }
+            }
+
+            tree.do_stage(&params, t, model, &mut rng);
+
+            if tree.check_invariant_shifted(&params, t + 1).is_err() {
+                inv_ok = false;
+            }
+
+            for level in 0..=tree.max_level {
+                if (t + 1 + level) % 2 != 0 { continue; }
+                let b = (n as f64) * params.nu.powi(t as i32) * params.a.powi(level as i32);
+
+                for idx in 0..(1usize << level) {
+                    let items = match tree.bags.get(&(level, idx)) {
+                        Some(v) if !v.is_empty() => v,
+                        _ => continue,
+                    };
+
+                    let mut sa = 0usize;
+                    let mut sb = 0usize;
+                    let mut sc = 0usize;
+
+                    for &rank in items {
+                        if !tree.is_j_stranger_shifted(rank, level, idx, 1) { continue; }
+                        let Some((old_level, _)) = pre_locs[rank] else { continue };
+                        if old_level > level {
+                            sa += 1;
+                        } else if old_level < level {
+                            if pre_s1[rank] { sb += 1; } else { sc += 1; }
+                        }
+                    }
+
+                    let total = sa + sb + sc;
+                    let ba = bound_a_frac * b;
+                    let bb = bound_b_frac * b;
+                    let bc = bound_c_frac * b;
+                    let bt = bound_total_frac * b;
+
+                    if ba > 0.01 { max_a = max_a.max(sa as f64 / ba); }
+                    if bb > 0.01 { max_b = max_b.max(sb as f64 / bb); }
+                    if bc > 0.01 { max_c = max_c.max(sc as f64 / bc); }
+                    if bt > 0.01 { max_t = max_t.max(total as f64 / bt); }
+                }
+            }
+
+            let leaf_cap = params.capacity(n, t + 1, tree.max_level);
+            if leaf_cap < threshold { break; }
+        }
+
+        println!("  {:>8.5} {:>8} {:>8} {:>8.4} {:>8.4} {:>8.4} {:>8.4} {:>7.1}%",
+            eps, c4_ok, inv_ok, max_a, max_b, max_c, max_t, margin * 100.0);
+    }
+}
+
 fn main() {
     test_initial_invariant_parity();
     test_seiferas_params();
@@ -1236,4 +1738,9 @@ fn main() {
     test_halving_errors();
     test_adversarial_sep_invariant();
     test_model_comparison();
+    // Source decomposition tests
+    test_shifted_vs_unshifted();
+    test_source_decomposition();
+    test_j_gt_1_source_decomposition();
+    test_source_bounds_stress();
 }

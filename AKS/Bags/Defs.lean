@@ -33,17 +33,26 @@ def nativeBagIdx (n level : ℕ) (r : ℕ) : ℕ := r / bagSize n level
 /-! **j-Strangers (Seiferas Section 3)** -/
 
 /-- An item with sorted rank `r` is `j`-strange at bag `(level, idx)` if its
-    native path diverges from the bag's ancestry at level `level - j`.
+    native bag index disagrees with the bag's ancestry at level `level - (j - 1)`.
+
+    This is Seiferas's convention (shifted indexing):
+    - `j = 1`: not native to this bag (`nativeBagIdx n level rank != idx`)
+    - `j = 2`: not native to parent (`nativeBagIdx n (level-1) rank != idx/2`)
+    - `j = k`: diverges at level `level - (k-1)`
 
     Guards (validated by Rust simulation):
-    - `j ≥ 1`: 0-strange is vacuously false
-    - `j ≤ level`: can't diverge above root
+    - `j >= 1`: 0-strange is vacuously false
+    - `j <= level`: can't diverge above root
 
     Key properties:
-    - `(j+1)`-strange → `j`-strange (divergence propagates: `a/2 ≠ b/2 → a ≠ b`)
-    - Native items (rank in bag's interval) are not `j`-strange for any `j` -/
+    - `(j+1)`-strange -> `j`-strange (divergence propagates: `a/2 != b/2 -> a != b`)
+    - Native items (rank in bag's interval) are not `j`-strange for any `j`
+
+    Note: earlier versions used an unshifted definition (`level - j`, `idx / 2^j`)
+    which missed sibling leakage at `j = 1`. The shifted definition is essential
+    for Seiferas's three-source decomposition of 1-strangers. -/
 @[reducible] def isJStranger (n rank level idx j : ℕ) : Prop :=
-  1 ≤ j ∧ j ≤ level ∧ nativeBagIdx n (level - j) rank ≠ idx / 2 ^ j
+  1 ≤ j ∧ j ≤ level ∧ nativeBagIdx n (level - (j - 1)) rank ≠ idx / 2 ^ (j - 1)
 
 /-- Count of `j`-strangers among items in a bag.
     `perm` maps register positions to sorted ranks.
@@ -74,10 +83,9 @@ theorem not_isJStranger_gt_level {n rank level idx j : ℕ} (h : level < j) :
   simp only [isJStranger, not_and, not_not]
   omega
 
-/-- `(j+1)`-strange → `j`-strange: divergence at a higher ancestor level implies
-    divergence at a lower ancestor level. Uses `a/2 ≠ b/2 → a ≠ b`.
-    Requires `n` is a power of 2 so that
-    `nativeBagIdx n (ℓ-1) r = (nativeBagIdx n ℓ r) / 2`. -/
+/-- `(j+1)`-strange → `j`-strange: divergence at ancestor level `level - j` implies
+    divergence at descendant level `level - (j-1)`. Uses `a/2 ≠ b/2 → a ≠ b` and
+    `nativeBagIdx n ℓ r = (nativeBagIdx n (ℓ+1) r) / 2` (for power-of-2 `n`). -/
 theorem isJStranger_antitone {n rank level idx j : ℕ}
     (hn : ∃ k, n = 2 ^ k) (hj : 1 ≤ j) (hjl : j + 1 ≤ level)
     (h : isJStranger n rank level idx (j + 1)) :
