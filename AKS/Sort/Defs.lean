@@ -104,6 +104,41 @@ theorem ComparatorNetwork.exec_injective {n : ℕ} {α : Type*} [LinearOrder α]
     simp only [List.foldl_cons]
     exact ih (c.apply_injective hv)
 
+/-! **Monotone composition** -/
+
+/-- A single comparator commutes with monotone functions: applying a comparator
+    to `g ∘ v` gives `g ∘ (comparator applied to v)` when `g` is monotone.
+    This is because `min(g a, g b) = g(min(a,b))` and `max(g a, g b) = g(max(a,b))`
+    for monotone `g`. -/
+private theorem Comparator.apply_comp_mono {n : ℕ} {α β : Type*} [LinearOrder α] [LinearOrder β]
+    (c : Comparator n) {g : α → β} (hg : Monotone g) (v : Fin n → α) :
+    c.apply (g ∘ v) = g ∘ (c.apply v) := by
+  ext k
+  simp only [Comparator.apply, Function.comp]
+  by_cases hki : k = c.i
+  · subst hki; rw [if_pos rfl, if_pos rfl, hg.map_min]
+  · rw [if_neg hki, if_neg hki]
+    by_cases hkj : k = c.j
+    · subst hkj; rw [if_pos rfl, if_pos rfl, hg.map_max]
+    · rw [if_neg hkj, if_neg hkj]
+
+/-- Monotone functions commute with comparator network execution:
+    `net.exec (g ∘ v) = g ∘ (net.exec v)` when `g` is monotone.
+
+    This generalizes the 0-1 principle: a comparator network operates
+    identically (up to order-preserving relabeling) regardless of the
+    actual values; only the relative order matters. -/
+theorem ComparatorNetwork.exec_comp_mono {n : ℕ} {α β : Type*} [LinearOrder α] [LinearOrder β]
+    (net : ComparatorNetwork n) {g : α → β} (hg : Monotone g) (v : Fin n → α) :
+    net.exec (g ∘ v) = g ∘ (net.exec v) := by
+  unfold ComparatorNetwork.exec
+  induction net.comparators generalizing v with
+  | nil => rfl
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    rw [c.apply_comp_mono hg v, ih (c.apply v)]
+
+
 /-- Executing a concatenated comparator list equals sequential execution. -/
 theorem ComparatorNetwork.exec_append {n : ℕ} {α : Type*} [LinearOrder α]
     (net₁ net₂ : ComparatorNetwork n) (v : Fin n → α) :
@@ -112,7 +147,7 @@ theorem ComparatorNetwork.exec_append {n : ℕ} {α : Type*} [LinearOrder α]
   simp [ComparatorNetwork.exec, List.foldl_append]
 
 /-- Folding comparators that don't touch position `j` leaves `v j` unchanged. -/
-private theorem foldl_comparators_outside {n : ℕ} {α : Type*} [LinearOrder α]
+theorem foldl_comparators_outside {n : ℕ} {α : Type*} [LinearOrder α]
     (cs : List (Comparator n)) (v : Fin n → α) (j : Fin n)
     (hj : ∀ c ∈ cs, j ≠ c.i ∧ j ≠ c.j) :
     cs.foldl (fun acc c ↦ c.apply acc) v j = v j := by
