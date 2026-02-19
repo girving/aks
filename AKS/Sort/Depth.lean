@@ -273,3 +273,242 @@ theorem size_le_half_n_mul_depth {n : ℕ} (net : ComparatorNetwork n) :
       _ = n * (net.comparators.foldl depthStep (fun _ ↦ 0, 0)).2 := by
           simp [Finset.sum_const, Finset.card_univ]
   omega
+
+
+/-! **Depth of Concatenated Networks** -/
+
+/-- Pointwise shift bound: if initial wire times and running max are offset by `d`
+    from a reference state, then after processing `cs`, the outputs are still offset
+    by at most `d`. This is the key invariant for `depth_append`. -/
+private lemma foldl_depth_pointwise_shift {n : ℕ} (cs : List (Comparator n))
+    (wt wt₀ : Fin n → ℕ) (dm dm₀ d : ℕ)
+    (hwt : ∀ k, wt k ≤ d + wt₀ k) (hdm : dm ≤ d + dm₀) :
+    (∀ k, (cs.foldl depthStep (wt, dm)).1 k ≤
+      d + (cs.foldl depthStep (wt₀, dm₀)).1 k) ∧
+    (cs.foldl depthStep (wt, dm)).2 ≤
+      d + (cs.foldl depthStep (wt₀, dm₀)).2 := by
+  induction cs generalizing wt wt₀ dm dm₀ with
+  | nil => exact ⟨hwt, hdm⟩
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    apply ih
+    · -- Wire times after one step: pointwise shift preserved
+      intro k
+      simp only [Function.update_apply]
+      have hk := hwt k; have hi := hwt c.i; have hj := hwt c.j
+      split_ifs <;> omega
+    · -- Running max after one step: shift preserved
+      dsimp only []
+      have hi := hwt c.i; have hj := hwt c.j
+      omega
+
+/-- **Depth of concatenated networks.** The depth of `net₁ ++ net₂` is at most
+    `net₁.depth + net₂.depth`: the second network starts where the first left off. -/
+theorem depth_append {n : ℕ} (net₁ net₂ : ComparatorNetwork n) :
+    (⟨net₁.comparators ++ net₂.comparators⟩ : ComparatorNetwork n).depth ≤
+    net₁.depth + net₂.depth := by
+  unfold ComparatorNetwork.depth
+  simp only [List.foldl_append]
+  -- After net₁: wire times ≤ net₁.depth (the running max)
+  set d₁ := (net₁.comparators.foldl depthStep (fun _ ↦ 0, 0)).2
+  have hwt := wt_le_running_max net₁.comparators (fun _ ↦ 0) 0 (fun _ ↦ le_refl 0)
+  -- Apply pointwise shift with reference state (0, 0) and offset d₁
+  have h := (foldl_depth_pointwise_shift net₂.comparators
+    (net₁.comparators.foldl depthStep (fun _ ↦ 0, 0)).1
+    (fun _ ↦ 0) d₁ 0 d₁
+    (fun k ↦ by simp; exact hwt k)
+    (le_refl _)).2
+  rw [Prod.mk.eta] at h
+  exact h
+
+
+/-! **Depth of Shifted/Embedded Networks** -/
+
+/-- Processing shifted comparators maintains the running max: the depth of
+    shifted comparators equals the depth of original comparators, because
+    `depthStep` only cares about which wires overlap, not their absolute indices.
+
+    Invariant: `wt` on `Fin n` corresponds to `wt₀` on `Fin m` at positions
+    `[offset, offset+m)`, and is 0 elsewhere. -/
+private lemma foldl_shiftEmbed_eq {m n : ℕ} (cs : List (Comparator m))
+    (offset : ℕ) (h : offset + m ≤ n) (wt₀ : Fin m → ℕ) (wt : Fin n → ℕ) (dm : ℕ)
+    (hwt : ∀ j : Fin m, wt ⟨offset + j.val, by omega⟩ = wt₀ j) :
+    let shifted := cs.map fun c ↦
+      (⟨⟨offset + c.i.val, by omega⟩,
+        ⟨offset + c.j.val, by omega⟩,
+        by show offset + c.i.val < offset + c.j.val
+           have := c.h; simp only [Fin.lt_def] at this; omega⟩ : Comparator n)
+    (shifted.foldl depthStep (wt, dm)).2 = (cs.foldl depthStep (wt₀, dm)).2 := by
+  induction cs generalizing wt₀ wt dm with
+  | nil => simp
+  | cons c cs ih =>
+    simp only [List.map_cons, List.foldl_cons]
+    -- Abbreviate the shifted comparator
+    set c' : Comparator n :=
+      ⟨⟨offset + c.i.val, by omega⟩, ⟨offset + c.j.val, by omega⟩, by
+        show offset + c.i.val < offset + c.j.val
+        have := c.h; simp only [Fin.lt_def] at this; omega⟩
+    -- Wire times at shifted positions equal original wire times (by proof irrelevance)
+    have h_ci : wt c'.i = wt₀ c.i := hwt c.i
+    have h_cj : wt c'.j = wt₀ c.j := hwt c.j
+    -- Running max after one step is equal
+    have hdm_eq : (depthStep (wt, dm) c').2 = (depthStep (wt₀, dm) c).2 := by
+      simp only [depthStep, h_ci, h_cj]
+    -- Wire times after one step correspond at shifted positions
+    have hwt_step : ∀ j : Fin m,
+        (depthStep (wt, dm) c').1 ⟨offset + j.val, by omega⟩ =
+        (depthStep (wt₀, dm) c).1 j := by
+      intro j
+      simp only [depthStep, Function.update_apply, h_ci, h_cj]
+      by_cases hjj : j = c.j
+      · have : (⟨offset + j.val, by omega⟩ : Fin n) = c'.j := by subst hjj; rfl
+        rw [if_pos this, if_pos hjj]
+      · have : (⟨offset + j.val, by omega⟩ : Fin n) ≠ c'.j := by
+          intro heq; apply hjj; ext
+          have := congr_arg Fin.val heq; simp [c'] at this; omega
+        rw [if_neg this, if_neg hjj]
+        by_cases hji : j = c.i
+        · have : (⟨offset + j.val, by omega⟩ : Fin n) = c'.i := by subst hji; rfl
+          rw [if_pos this, if_pos hji]
+        · have : (⟨offset + j.val, by omega⟩ : Fin n) ≠ c'.i := by
+            intro heq; apply hji; ext
+            have := congr_arg Fin.val heq; simp [c'] at this; omega
+          rw [if_neg this, if_neg hji, hwt j]
+    -- Apply IH: use c'.2 as the running max so Prod.mk.eta works on the LHS
+    have step := ih (depthStep (wt₀, dm) c).1 (depthStep (wt, dm) c').1
+      (depthStep (wt, dm) c').2 hwt_step
+    simp only at step
+    rw [Prod.mk.eta] at step
+    rw [hdm_eq, Prod.mk.eta] at step
+    exact step
+
+/-- **Depth is preserved by shift embedding.** Shifting comparator indices
+    by an offset doesn't change the critical-path depth, since the depth
+    scheduling only depends on which wires overlap. -/
+theorem depth_shiftEmbed_le {m : ℕ} (net : ComparatorNetwork m)
+    (n offset : ℕ) (h : offset + m ≤ n) :
+    (net.shiftEmbed n offset h).depth ≤ net.depth := by
+  unfold ComparatorNetwork.depth ComparatorNetwork.shiftEmbed
+  simp only
+  have := foldl_shiftEmbed_eq net.comparators offset h (fun _ ↦ 0) (fun _ ↦ 0) 0
+    (fun _ ↦ rfl)
+  simp only at this
+  rw [this]
+
+
+/-! **Depth of Wire-Disjoint Chunks** -/
+
+/-- Running max is monotone through foldl: the initial `dm` never decreases. -/
+private lemma foldl_dm_le {n : ℕ} (cs : List (Comparator n))
+    (wt : Fin n → ℕ) (dm : ℕ) :
+    dm ≤ (cs.foldl depthStep (wt, dm)).2 := by
+  induction cs generalizing wt dm with
+  | nil => exact le_refl dm
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    have h1 : dm ≤ (depthStep (wt, dm) c).2 := by
+      simp only [depthStep]; exact le_max_left dm _
+    exact le_trans h1 (ih _ _)
+
+/-- Wire times are unchanged for positions not touched by any comparator. -/
+private lemma foldl_untouched_wire {n : ℕ} (cs : List (Comparator n))
+    (wt : Fin n → ℕ) (dm : ℕ) (k : Fin n)
+    (hk : ∀ c ∈ cs, k ≠ c.i ∧ k ≠ c.j) :
+    (cs.foldl depthStep (wt, dm)).1 k = wt k := by
+  induction cs generalizing wt dm with
+  | nil => rfl
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    have ⟨hki, hkj⟩ := hk c (List.mem_cons.mpr (.inl rfl))
+    have hstep : (depthStep (wt, dm) c).1 k = wt k := by
+      simp only [depthStep, Function.update_apply, if_neg hkj, if_neg hki]
+    rw [ih _ _ (fun c' hc' => hk c' (List.mem_cons_of_mem c hc')), hstep]
+
+/-- When wire times agree on all wires of `cs`, the running max is bounded by
+    `max dm (standalone result)`. This captures the key insight that the `t` values
+    produced by `depthStep` depend only on wire times at touched positions. -/
+private lemma foldl_dm_max_of_agree {n : ℕ} (cs : List (Comparator n))
+    (wt wt₀ : Fin n → ℕ) (dm dm₀ : ℕ)
+    (hwt : ∀ c ∈ cs, wt c.i = wt₀ c.i ∧ wt c.j = wt₀ c.j) :
+    (cs.foldl depthStep (wt, dm)).2 ≤
+      max dm (cs.foldl depthStep (wt₀, dm₀)).2 := by
+  induction cs generalizing wt wt₀ dm dm₀ with
+  | nil => exact le_max_left dm dm₀
+  | cons c cs ih =>
+    simp only [List.foldl_cons]
+    have ⟨hci, hcj⟩ := hwt c (List.mem_cons.mpr (.inl rfl))
+    have ht_eq : max (wt c.i) (wt c.j) = max (wt₀ c.i) (wt₀ c.j) := by
+      rw [hci, hcj]
+    -- Wire agreement is preserved after one depthStep
+    have hwt' : ∀ c' ∈ cs, (depthStep (wt, dm) c).1 c'.i =
+        (depthStep (wt₀, dm₀) c).1 c'.i ∧
+        (depthStep (wt, dm) c).1 c'.j =
+        (depthStep (wt₀, dm₀) c).1 c'.j := by
+      intro c' hc'
+      have ⟨hci', hcj'⟩ := hwt c' (List.mem_cons_of_mem c hc')
+      constructor <;> {
+        simp only [depthStep, Function.update_apply, ht_eq]
+        split_ifs <;> first | rfl | assumption
+      }
+    -- Apply IH
+    have step := ih (depthStep (wt, dm) c).1 (depthStep (wt₀, dm₀) c).1
+      (depthStep (wt, dm) c).2 (depthStep (wt₀, dm₀) c).2 hwt'
+    rw [Prod.mk.eta, Prod.mk.eta] at step
+    -- Chain: LHS ≤ max dm₁ (cs_result₀) ≤ max dm (full_result₀)
+    -- t = max(wt c.i, wt c.j) + 1, dm₁ = max dm t
+    -- t ≤ dm₁₀ ≤ full_result₀ (via foldl_dm_le)
+    have h_t_le : max (wt c.i) (wt c.j) + 1 ≤
+        (cs.foldl depthStep (depthStep (wt₀, dm₀) c)).2 :=
+      calc max (wt c.i) (wt c.j) + 1
+          = max (wt₀ c.i) (wt₀ c.j) + 1 := by rw [hci, hcj]
+        _ ≤ (depthStep (wt₀, dm₀) c).2 := by simp only [depthStep]; exact le_max_right _ _
+        _ ≤ _ := foldl_dm_le cs _ _
+    -- dm₁ = max dm t, so max dm₁ X ≤ max dm X when t ≤ X
+    exact le_trans step (max_le
+      (by simp only [depthStep]
+          exact max_le (le_max_left _ _) (le_trans h_t_le (le_max_right _ _)))
+      (le_max_right _ _))
+
+/-- **Depth of wire-disjoint flatMap.** If chunks have pairwise wire-disjoint
+    comparators and each chunk has depth ≤ `d`, then the concatenated network
+    also has depth ≤ `d` (they execute in parallel). -/
+theorem depth_flatMap_disjoint {n : ℕ} {ι : Type*}
+    (chunks : List ι) (f : ι → List (Comparator n)) (d : ℕ)
+    (hd : ∀ x ∈ chunks, (⟨f x⟩ : ComparatorNetwork n).depth ≤ d)
+    (hdisj : chunks.Pairwise (fun a b ↦ ∀ c₁ ∈ f a, ∀ c₂ ∈ f b,
+        (c₁.i ≠ c₂.i ∧ c₁.i ≠ c₂.j) ∧ (c₁.j ≠ c₂.i ∧ c₁.j ≠ c₂.j))) :
+    (⟨chunks.flatMap f⟩ : ComparatorNetwork n).depth ≤ d := by
+  unfold ComparatorNetwork.depth
+  induction chunks with
+  | nil => simp
+  | cons x xs ih =>
+    simp only [List.flatMap_cons, List.foldl_append]
+    have hx_disj := (List.pairwise_cons.mp hdisj).1
+    -- All wires in xs.flatMap f are untouched (still 0) after processing f(x)
+    have hwt_agree : ∀ c ∈ xs.flatMap f,
+        ((f x).foldl depthStep (fun _ ↦ 0, 0)).1 c.i = (fun _ : Fin n ↦ 0) c.i ∧
+        ((f x).foldl depthStep (fun _ ↦ 0, 0)).1 c.j = (fun _ : Fin n ↦ 0) c.j := by
+      intro c hc
+      rw [List.mem_flatMap] at hc
+      obtain ⟨y, hy, hcfy⟩ := hc
+      have hxy := hx_disj y hy
+      constructor
+      · rw [foldl_untouched_wire]
+        intro c₁ hc₁
+        have := hxy c₁ hc₁ c hcfy
+        exact ⟨this.1.1.symm, this.2.1.symm⟩
+      · rw [foldl_untouched_wire]
+        intro c₁ hc₁
+        have := hxy c₁ hc₁ c hcfy
+        exact ⟨this.1.2.symm, this.2.2.symm⟩
+    -- Apply foldl_dm_max_of_agree: result ≤ max dm_x (standalone depth of xs.flatMap f)
+    have h_bound := foldl_dm_max_of_agree (xs.flatMap f)
+      ((f x).foldl depthStep (fun _ ↦ 0, 0)).1 (fun _ ↦ 0)
+      ((f x).foldl depthStep (fun _ ↦ 0, 0)).2 0
+      hwt_agree
+    rw [Prod.mk.eta] at h_bound
+    -- dm_x ≤ d (chunk x's depth) and IH: standalone ≤ d
+    exact le_trans h_bound (max_le
+      (hd x (List.mem_cons.mpr (.inl rfl)))
+      (ih (fun y hy ↦ hd y (List.mem_cons_of_mem x hy))
+          (List.pairwise_cons.mp hdisj).2))
