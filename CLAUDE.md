@@ -354,6 +354,12 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 **Review subtle definitions interactively before building downstream infrastructure.** Definitions that involve distinguishability (e.g., 0-1 values vs labeled elements) or quantifier structure (∀ permutations vs ∀ Boolean sequences) can be subtly wrong in ways that only surface when attempting proofs. When a definition is the foundation for multiple sorry'd lemmas, validate it with the user before committing to downstream work.
 
+**"Easy to see" in papers is a red flag for formalization.** When a paper says "it is easy to see" without proof, validate the *proof strategy* — not just the statement — before investing in Lean infrastructure. The AKS paper's `error_set_bound` ("it is easy to see that |E_l| ≤ ε·k") passes empirical testing with 0 violations, but the natural per-chunk EIH/EFH decomposition is provably insufficient due to overflow (`f_c + t_c > hs` in some chunks). The statement is true; the proof requires a global argument the paper doesn't sketch. Always ask: "what is the proof, not just the claim?"
+
+**Add diagnostic modes to Rust empirical tests.** Pass/fail testing catches wrong statements but not proof obstacles. When a theorem passes empirically but the proof is hard, add diagnostics that measure intermediate quantities in the proof strategy. E.g., for `error_set_bound`: testing `|E_l| ≤ ε·k` found 0 violations, but measuring `f_c + t_c` per chunk revealed overflow in ~111K chunks (max surplus 17) — explaining exactly why the per-chunk decomposition fails. Diagnosis: 10 lines of Rust, saves days of failed proof attempts.
+
+**When local decomposition fails, compare alternative formalizations.** Bounding a global sum `Σ_c bound_c ≤ B` by per-unit bounds requires each unit's bound to be tight. When some units overflow (local bound exceeds budget), the slack from other units can't compensate without a cross-unit argument. Recognize this early by checking whether the per-unit bound holds universally. Reading alternative constructions (e.g., Seiferas's nested-prefix halvers vs. AKS's all-chunks halvers) can reveal that the difficulty is inherent to the construction, not the proof technique — suggesting a different formalization path may avoid the obstacle entirely.
+
 ## Proof Tactics
 
 After completing each proof, reflect on what worked and what didn't. If there's a reusable lesson — a tactic pattern, a Mathlib gotcha, a refactoring that unlocked progress — add it here (not in auto memory). This file is the single source of truth for accumulated lessons, so they persist across machines.
@@ -365,6 +371,12 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 **`Fin` simp lemmas: quantify over proof terms.** When writing simp lemmas for `Fin` encode/decode, take the `isLt` proof as a parameter `(h : ... < d)` so the lemma matches any proof term Lean generates internally.
 
 **`Fin` arithmetic: `omega` vs. specialized lemmas.** `omega` handles linear Nat but not nonlinear. Key lemmas: `Nat.add_lt_add_left`+`Nat.mul_le_mul_right` for `j*d+i < n*d`; `Nat.add_mul_div_right`/`Nat.add_mul_mod_self_right` for div/mod; `rw [Nat.mul_comm]; exact Nat.div_add_mod` for `(ij/d)*d + ij%d = ij`.
+
+**`Fin.mk.injEq` to convert Fin equalities for omega.** When omega can't see through `Fin` structure projections, use `simp only [Fin.mk.injEq] at heq` to convert `⟨a, _⟩ = ⟨b, _⟩` to `a = b`. This is more reliable than `Fin.ext_iff` + `Fin.val_mk` when the Fin isn't yet in constructor form. Needed after `obtain ⟨x, _, rfl⟩` on `List.mem_map` results.
+
+**Provide nonlinear `Nat.mul` facts to omega explicitly.** When goals involve products of variables (`k₁ * C`, `k₂ * C`), omega treats each product as an opaque atom. Provide key inequalities manually: e.g., `have : k₁ * C + C ≤ k₂ * C := by have := Nat.mul_le_mul_right C hlt; rw [Nat.succ_mul] at this; exact this`. Also provide `Nat.mul_div_le` for `2 * (C / 2) ≤ C`.
+
+**`set` abbreviations create different omega atoms.** After `set C := n / 2 ^ level`, omega treats `↑C` and `↑(n / 2 ^ level)` as independent variables. When `heq` uses the raw expression but `hk` uses the abbreviation, omega can't connect them. Fix: provide auxiliary `have`s using the raw expression, not the `set` abbreviation, or avoid `set` entirely when omega will be the closer.
 
 **Search Mathlib before writing custom helpers.** Existing helpers come with simp lemmas and composability. To search: (1) grep `.lake/packages/mathlib` for keywords, (2) `#check @Fin.someName` in a scratch file, (3) **LeanSearch** (https://leansearch.net/) for semantic queries. Reparameterize types to match Mathlib conventions (e.g., `Fin (n+1)` instead of `Fin d` with `hd : d ≥ 2`). Examples found: `Fin.succAbove`/`Fin.predAbove`, `Monotone.map_min`/`Monotone.map_max`.
 
@@ -379,6 +391,8 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 **Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `Graph/Regular.lean`.
 
 **Triangle inequality for `|·|` via `dist_triangle`.** Convert to metric API: `|μ| = ‖μ‖ = dist μ 0` (via `Real.norm_eq_abs`, `dist_zero_right`), then `dist_triangle μ c 0`. Use `Real.dist_eq` for `dist x y = |x - y|`.
+
+**`List` membership API.** `List.not_mem_nil` has ALL arguments implicit: `@List.not_mem_nil : ∀ {α} {a}, a ∉ []` — use `List.not_mem_nil` not `List.not_mem_nil _`. For `a ∈ a :: l`, use `List.mem_cons.mpr (.inl rfl)` (not `List.mem_cons_self a l`). For `b ∈ a :: l` given `hb : b ∈ l`, use `List.mem_cons_of_mem a hb`.
 
 **`↑(Finset.univ)` ≠ `Set.univ` in `MapsTo` proofs.** `card_eq_sum_card_fiberwise` needs `(s : Set ι).MapsTo f ↑t`. The coercion `↑(Finset.univ)` is `Finset.univ.toSet`, not `Set.univ`. Use `Finset.mem_coe.mpr (Finset.mem_univ _)` to prove `x ∈ ↑univ`.
 
