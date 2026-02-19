@@ -263,22 +263,31 @@ private lemma good_radius_implies_close {n : ℕ}
     `a/cs = c` (home chunk), `a % cs < hs` (targeting top sub-half at level `l+1`),
     positioned in chunk `c` at level `l` (good radius), that the halver sends to the
     bottom sub-half (losing good radius). Their local rank in chunk `c` is in
-    `[f_c, f_c + t_c)` where `f_c` = count of foreign-below values in the chunk.
+    `[f_c, f_c + t_c)` where `f_c` = count of foreign-below values in the chunk
+    and `t_c` = count of home-top-small values.
 
     **What works (no overflow)**: When `f_c + t_c ≤ hs` for all chunks `c`,
     `EpsilonInitialHalved` with `j = f_c + t_c` gives per-chunk error ≤ `ε·(f_c+t_c)`.
     Since `Σ(f_c + t_c) ≤ k` (each val-<-k contributes to at most one term),
     the total ≤ `ε · k`. At level 0 this always holds (`f_c = 0` for all `c`).
 
-    **Difficulty (overflow)**: When `f_c + t_c > hs`, `EpsilonInitialHalved` only
-    applies for `j ≤ hs`, giving `ε · hs` for the rank-<-hs part. The rank-≥-hs
-    home-top values (up to `f_c + t_c - hs` of them) go to the bottom "correctly"
-    by the halver's ranking but constitute errors from the global perspective. The
-    per-chunk bound becomes `ε·k + F_l` where `F_l = Σ_{j<l}|E_j|` (accumulated
-    prior errors), leading to exponential growth via the recurrence. The strong
-    bound `ε · k` (confirmed empirically with 0 violations) requires a global
-    argument beyond per-chunk EIH decomposition. The AKS paper (Section 4, p.5)
-    states the result without proof ("it is easy to see"). -/
+    **Overflow occurs in practice**: Rust empirical tests (`rust/test-nearsort.rs`,
+    Test 6) confirm that `f_c + t_c > hs` occurs frequently (thousands of chunks
+    across test configurations, surplus up to ~17). Yet `|E_l| ≤ ε*k` has zero
+    violations across all tests, confirming the bound holds despite overflow.
+
+    **Why per-chunk EIH is insufficient**: When `f_c + t_c > hs`, the per-chunk
+    EIH bound gives `ε·hs + (f_c+t_c - hs)` (overflow ranks ≥ hs go to bottom).
+    Using both EIH and EFH improves this to `(1-ε)·(f_c+t_c) - (1-2ε)·hs`.
+    Summing: `|E_l| ≤ ε·k + (1-2ε)·Σ(overflow surplus)`, where the overflow
+    surplus comes from foreign-below values (prior errors). This leads to a
+    recurrence `|E_l| ≤ ε·k + (1-2ε)·Σ_{l'<l}|E_{l'}|` with exponential growth.
+    The disjointness constraint `Σ|E_l| ≤ k` doesn't close the per-level gap.
+
+    **Open**: A global argument beyond per-chunk EIH/EFH decomposition is needed.
+    The AKS paper (Section 4, p.5) states this without proof ("it is easy to see").
+    The bound is validated empirically with 0 violations across all parameter
+    regimes tested. -/
 private lemma error_set_bound {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
