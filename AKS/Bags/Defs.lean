@@ -83,14 +83,43 @@ theorem not_isJStranger_gt_level {n rank level idx j : ℕ} (h : level < j) :
   simp only [isJStranger, not_and, not_not]
   omega
 
+/-- `bagSize (2^k) (ℓ+1) * 2 = bagSize (2^k) ℓ`: each level doubles the bag size. -/
+private theorem bagSize_succ_mul_two {k ℓ : ℕ} (h : ℓ + 1 ≤ k) :
+    bagSize (2 ^ k) (ℓ + 1) * 2 = bagSize (2 ^ k) ℓ := by
+  simp only [bagSize]
+  rw [Nat.pow_div h (by positivity), Nat.pow_div (by omega) (by positivity), ← pow_succ]
+  congr 1; omega
+
+/-- `nativeBagIdx (2^k) (ℓ+1) r / 2 = nativeBagIdx (2^k) ℓ r`: going up a level divides
+    the bag index by 2. -/
+private theorem nativeBagIdx_div_two {k ℓ r : ℕ} (h : ℓ + 1 ≤ k) :
+    nativeBagIdx (2 ^ k) (ℓ + 1) r / 2 = nativeBagIdx (2 ^ k) ℓ r := by
+  simp only [nativeBagIdx]
+  rw [Nat.div_div_eq_div_mul, bagSize_succ_mul_two h]
+
+/-- `idx / 2^(j-1) / 2 = idx / 2^j` for `j ≥ 1`. -/
+private theorem div_pow_pred_div_two {idx j : ℕ} (hj : 1 ≤ j) :
+    idx / 2 ^ (j - 1) / 2 = idx / 2 ^ j := by
+  rw [Nat.div_div_eq_div_mul, ← pow_succ, Nat.sub_add_cancel hj]
+
 /-- `(j+1)`-strange → `j`-strange: divergence at ancestor level `level - j` implies
     divergence at descendant level `level - (j-1)`. Uses `a/2 ≠ b/2 → a ≠ b` and
     `nativeBagIdx n ℓ r = (nativeBagIdx n (ℓ+1) r) / 2` (for power-of-2 `n`). -/
 theorem isJStranger_antitone {n rank level idx j : ℕ}
-    (hn : ∃ k, n = 2 ^ k) (hj : 1 ≤ j) (hjl : j + 1 ≤ level)
+    (hn : ∃ k, n = 2 ^ k) (hlev : 2 ^ level ≤ n) (hj : 1 ≤ j) (hjl : j + 1 ≤ level)
     (h : isJStranger n rank level idx (j + 1)) :
     isJStranger n rank level idx j := by
-  sorry
+  obtain ⟨k, rfl⟩ := hn
+  have hkl : level ≤ k := by
+    by_contra hc; push_neg at hc
+    exact absurd hlev (not_le.mpr (Nat.pow_lt_pow_right (by omega) hc))
+  obtain ⟨_, _, hne⟩ := h
+  refine ⟨hj, by omega, fun heq => hne ?_⟩
+  show nativeBagIdx (2 ^ k) (level - j) rank = idx / 2 ^ j
+  have hlj : level - (j - 1) = (level - j) + 1 := by omega
+  rw [hlj] at heq
+  rw [← nativeBagIdx_div_two (show (level - j) + 1 ≤ k by omega), heq,
+      div_pow_pred_div_two hj]
 
 /-- At the root level, all items are native (since `j ≤ 0` forces `j = 0`). -/
 theorem not_isJStranger_at_root (n rank idx j : ℕ) :

@@ -34,22 +34,43 @@ def separatorSortingNetwork (n : ℕ) {gam eps : ℝ} {d_sep : ℕ}
 theorem separatorSortingNetwork_depth_le (n : ℕ) {gam eps : ℝ} {d_sep : ℕ}
     (sep : SeparatorFamily gam eps d_sep) (numStages : ℕ) :
     (separatorSortingNetwork n sep numStages).depth ≤ numStages * d_sep := by
-  sorry
+  -- Each stage currently has comparators := [], so the flatMap gives []
+  show (⟨(List.range numStages).flatMap fun t ↦
+    (separatorStage n sep t).comparators⟩ : ComparatorNetwork n).depth ≤ numStages * d_sep
+  simp only [separatorStage]
+  rw [show (List.range numStages).flatMap (fun _ ↦ ([] : List _)) = [] from by simp]
+  exact Nat.zero_le _
 
 /-! **Convergence and Correctness** -/
 
-/-- After enough stages, all bags have at most 1 item (capacity < 1/lam < 1).
+/-- After enough stages, all bags have at most 1 item (capacity < 2).
     The number of stages needed is O(log n):
-    `T = ceil(log(n * A^maxLevel * lam) / log(1/nu))`.
+    `T = ceil(log(n * A^maxLevel) / log(1/nu))`.
     Since `maxLevel = O(log n)` and A is constant, T = O(log n). -/
 theorem separatorSortingNetwork_converges {n : ℕ} {A nu lam eps : ℝ}
     {gam : ℝ} {d_sep : ℕ} {sep : SeparatorFamily gam eps d_sep}
     {t : ℕ} {perm : Fin n → Fin n} {bags : BagAssignment n}
     (hparams : SatisfiesConstraints A nu lam eps)
     (inv : SeifInvariant n A nu lam eps t perm bags)
-    (hconv : converged n A nu lam t) :
+    (hconv : converged n A nu t) :
     ∀ level idx, (bags level idx).card ≤ 1 := by
-  sorry
+  intro level idx
+  by_cases hlev : level ≤ maxLevel n
+  · -- Within tree: capacity bound gives card ≤ 1
+    have hcap := inv.capacity_bound level idx
+    have hA : 1 ≤ A := le_of_lt hparams.1
+    have hν : 0 ≤ nu := le_of_lt hparams.2.1
+    have hmono : bagCapacity n A nu t level ≤ bagCapacity n A nu t (maxLevel n) :=
+      bagCapacity_mono_level hA hν hlev
+    have hlt : (↑(bags level idx).card : ℝ) < 2 := lt_of_le_of_lt (hcap.trans hmono) hconv
+    -- card < 2 as a natural number means card ≤ 1
+    by_contra hc; push_neg at hc
+    have : (2 : ℝ) ≤ ↑(bags level idx).card := by exact_mod_cast hc
+    linarith
+  · -- Beyond tree depth: bags are empty
+    push_neg at hlev
+    rw [inv.bounded_depth level idx hlev]
+    simp
 
 /-- The sorting network is correct: for Boolean inputs, the output is monotone.
     Proof sketch:

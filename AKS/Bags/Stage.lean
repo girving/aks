@@ -32,8 +32,8 @@ theorem active_bags_disjoint {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     (inv : SeifInvariant n A ν lam ε t perm bags)
     (l₁ l₂ i₁ i₂ : ℕ) (hne : (l₁, i₁) ≠ (l₂, i₂))
     (h₁ : bagActive t l₁) (h₂ : bagActive t l₂) :
-    Disjoint (bags l₁ i₁) (bags l₂ i₂) := by
-  sorry
+    Disjoint (bags l₁ i₁) (bags l₂ i₂) :=
+  inv.bags_disjoint l₁ l₂ i₁ i₂ hne
 
 /-! **One-Stage Network Construction** -/
 
@@ -52,4 +52,5 @@ def separatorStage (n : ℕ) {gam eps : ℝ} {d_sep : ℕ}
 theorem separatorStage_depth_le (n : ℕ) {gam eps : ℝ} {d_sep : ℕ}
     (sep : SeparatorFamily gam eps d_sep) (stageIdx : ℕ) :
     (separatorStage n sep stageIdx).depth ≤ d_sep := by
-  sorry
+  show (⟨[]⟩ : ComparatorNetwork n).depth ≤ d_sep
+  rw [depth_nil]; exact Nat.zero_le _
