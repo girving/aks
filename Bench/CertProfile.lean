@@ -13,8 +13,8 @@ import AKS.Cert.Read
 
 #eval ensureCertificateData 1728 12
 
-def rotData1728p : String := bin_base85% "data/1728/rot_map.bin"
-def certData1728p : String := bin_base85% "data/1728/cert_z.bin"
+def rotData1728p : String := bin_base85% "data/1728/rot_map.b85"
+def certData1728p : String := bin_base85% "data/1728/cert_z.b85"
 
 /-- Format nanoseconds as human-readable string. -/
 def fmtNsP (ns : Nat) : String :=

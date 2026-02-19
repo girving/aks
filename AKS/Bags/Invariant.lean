@@ -535,16 +535,130 @@ theorem parent_1stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by
   sorry
 
-/-- Full invariant maintenance: the invariant at stage `t` implies
-    the invariant at stage `t+1` after applying the separator and rebagging.
-    Requires all parameter constraints. -/
+private lemma split_empty_of_bags_empty {n : ℕ}
+    {bags : BagAssignment n}
+    {split : ℕ → ℕ → SplitResult n}
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    {l i : ℕ} (h : bags l i = ∅) :
+    (split l i).toParent = ∅ ∧
+    (split l i).toLeftChild = ∅ ∧
+    (split l i).toRightChild = ∅ :=
+  ⟨Finset.subset_empty.mp (h ▸ (hsplit_sub l i).1),
+   Finset.subset_empty.mp (h ▸ (hsplit_sub l i).2.1),
+   Finset.subset_empty.mp (h ▸ (hsplit_sub l i).2.2)⟩
+
+private lemma fromParent_empty_of_parent_empty {n : ℕ}
+    {bags : BagAssignment n}
+    {split : ℕ → ℕ → SplitResult n}
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    {level idx : ℕ} (h : level = 0 ∨ bags (level - 1) (idx / 2) = ∅) :
+    fromParent split level idx = ∅ := by
+  unfold fromParent
+  obtain rfl | h := h
+  · simp
+  · split_ifs with h₁ h₂
+    · rfl
+    · exact (split_empty_of_bags_empty hsplit_sub h).2.1
+    · exact (split_empty_of_bags_empty hsplit_sub h).2.2
+
+/-- Full invariant maintenance: given the invariant on `bags` at stage `t`,
+    and hypotheses on the split (components ⊆ bags, cardinality bounds,
+    stranger bounds, structural properties), the invariant holds at stage `t+1`
+    on `rebag split`. Requires all parameter constraints. -/
 theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n}
+    {bags : BagAssignment n}
     (split : ℕ → ℕ → SplitResult n)
-    (inv : SeifInvariant n A ν lam ε t perm (rebag split))
-    (hparams : SatisfiesConstraints A ν lam ε) :
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hparams : SatisfiesConstraints A ν lam ε)
+    -- Split components are subsets of bags
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    -- Leaf bags don't send to children
+    (hsplit_leaf : ∀ l i, maxLevel n ≤ l →
+      (split l i).toLeftChild = ∅ ∧ (split l i).toRightChild = ∅)
+    -- Cardinality bounds on the split
+    (hkick : ∀ l i, ((split l i).toParent.card : ℝ) ≤
+      2 * lam * bagCapacity n A ν t l + 1)
+    (hsend_left : ∀ l i, ((split l i).toLeftChild.card : ℝ) ≤
+      bagCapacity n A ν t l / 2)
+    (hsend_right : ∀ l i, ((split l i).toRightChild.card : ℝ) ≤
+      bagCapacity n A ν t l / 2)
+    -- Root capacity large enough
+    (hcap_ge : A ≤ ↑n * ν ^ t)
+    -- Stranger bounds on kicked items (from separator error)
+    (hkick_stranger : ∀ l i j, 1 ≤ j →
+      (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) j : ℝ) ≤
+      lam * ε ^ j * bagCapacity n A ν t l)
+    -- Parent stranger bounds (j >= 2)
+    (hparent_stranger : ∀ level idx j, 2 ≤ j →
+      (jStrangerCount n perm (fromParent split level idx) level idx j : ℝ) ≤
+      lam * ε ^ (j - 1) * bagCapacity n A ν t (level - 1))
+    -- Parent 1-stranger bound
+    (hparent_1stranger : ∀ level idx,
+      (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
+      parentStrangerCoeff A lam ε * bagCapacity n A ν t level)
+    -- Structural properties of rebag
+    (hrebag_uniform : ∀ level i₁ i₂,
+      i₁ < 2 ^ level → i₂ < 2 ^ level →
+      (rebag split level i₁).card = (rebag split level i₂).card)
+    (hrebag_disjoint : ∀ l₁ l₂ i₁ i₂,
+      (l₁, i₁) ≠ (l₂, i₂) → Disjoint (rebag split l₁ i₁) (rebag split l₂ i₂)) :
     SeifInvariant n A ν lam ε (t + 1) perm (rebag split) := by
-  sorry
+  obtain ⟨hA, hν, _, _, _, hε_pos, hC3, hC4_gt1, hC4_eq1⟩ := hparams
+  exact {
+    alternating_empty := by
+      intro level idx hparity
+      have hpar : (t + (level + 1)) % 2 ≠ 0 := by omega
+      have hfp : fromParent split level idx = ∅ :=
+        fromParent_empty_of_parent_empty hsplit_sub
+          (if h : level = 0 then Or.inl h
+           else Or.inr (inv.alternating_empty _ _ (by omega)))
+      unfold rebag
+      rw [(split_empty_of_bags_empty hsplit_sub
+            (inv.alternating_empty _ _ hpar)).1,
+          (split_empty_of_bags_empty hsplit_sub
+            (inv.alternating_empty _ _ hpar)).1,
+          hfp]
+      simp
+    uniform_size := hrebag_uniform
+    capacity_bound :=
+      capacity_maintained split hC3 hA hν hcap_ge hkick hsend_left hsend_right
+    stranger_bound := by
+      intro level idx j hj
+      by_cases hj1 : j = 1
+      · subst hj1
+        have h := stranger_bound_maintained_eq1 split hC4_eq1 hA hν ‹0 < lam› hε_pos.le
+          (fun l i ↦ by have h := hkick_stranger l i 1 (by omega); rwa [pow_one] at h)
+          hparent_1stranger level idx
+        simp only [Nat.sub_self, pow_zero, mul_one]; exact h
+      · exact stranger_bound_maintained_gt1 split hC4_gt1 hA hν ‹0 < lam› hε_pos.le
+          hkick_stranger hparent_stranger level idx j (by omega)
+    bags_disjoint := hrebag_disjoint
+    bounded_depth := by
+      intro level idx hlev
+      have hfp : fromParent split level idx = ∅ := by
+        unfold fromParent
+        split_ifs with h₁ h₂
+        · rfl
+        · exact (hsplit_leaf _ _ (by omega)).1
+        · exact (hsplit_leaf _ _ (by omega)).2
+      unfold rebag
+      rw [(split_empty_of_bags_empty hsplit_sub
+            (inv.bounded_depth _ _ (by omega))).1,
+          (split_empty_of_bags_empty hsplit_sub
+            (inv.bounded_depth _ _ (by omega))).1,
+          hfp]
+      simp
+  }
 
 /-! **Convergence** -/
 

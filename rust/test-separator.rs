@@ -11,6 +11,26 @@
 
 use std::fs;
 
+/// Decode base-85 encoded data back to i32 values.
+/// Inverse of the encoding in `certificate.rs` / Lean's `encodeBinBase85`.
+fn decode_base85(data: &[u8]) -> Vec<i32> {
+    assert_eq!(data.len() % 5, 0, "Base85 data length must be a multiple of 5");
+    let num_entries = data.len() / 5;
+    let mut result = Vec::with_capacity(num_entries);
+    for i in 0..num_entries {
+        let off = i * 5;
+        let mut v: u32 = 0;
+        let mut base: u32 = 1;
+        for j in 0..5 {
+            let digit = (data[off + j] - 33) as u32;
+            v += digit * base;
+            base *= 85;
+        }
+        result.push(v as i32);
+    }
+    result
+}
+
 // ──────────────────────────────────────────────────────────
 // Core types matching Lean definitions exactly
 // ──────────────────────────────────────────────────────────
@@ -68,13 +88,11 @@ struct RegularGraph {
 }
 
 impl RegularGraph {
-    fn from_binary_file(path: &str, n: usize, d: usize) -> Self {
-        let bytes = fs::read(path).unwrap_or_else(|e| panic!("Cannot read {path}: {e}"));
-        assert_eq!(bytes.len(), n * d * 2 * 4, "Expected {} bytes", n * d * 2 * 4);
-        let rot_data: Vec<i32> = bytes
-            .chunks_exact(4)
-            .map(|chunk| i32::from_le_bytes(chunk.try_into().unwrap()))
-            .collect();
+    fn from_b85_file(path: &str, n: usize, d: usize) -> Self {
+        let data = fs::read(path).unwrap_or_else(|e| panic!("Cannot read {path}: {e}"));
+        let rot_data = decode_base85(&data);
+        let expected = n * d * 2;
+        assert_eq!(rot_data.len(), expected, "Expected {} i32 entries, got {}", expected, rot_data.len());
         Self { n, d, rot_data }
     }
 
@@ -478,8 +496,8 @@ fn main() {
     println!("══════════════════════════════════════════════════════\n");
 
     let graphs: Vec<(usize, usize, &str)> = vec![
-        (16, 4, "data/16/rot_map.bin"),
-        (1728, 12, "data/1728/rot_map.bin"),
+        (16, 4, "data/16/rot_map.b85"),
+        (1728, 12, "data/1728/rot_map.b85"),
     ];
 
     for &(m, d, path) in &graphs {
@@ -487,7 +505,7 @@ fn main() {
             println!("SKIP {path} (not found)");
             continue;
         }
-        let g = RegularGraph::from_binary_file(path, m, d);
+        let g = RegularGraph::from_b85_file(path, m, d);
 
         println!("=== Graph m={m}, d={d} ===");
 
@@ -1136,9 +1154,9 @@ fn main() {
 
         // Also test with imperfect halver (expander-based) if graph data available
         println!("\n  With expander halver (if available):");
-        let graph_path = "data/1728/graph.bin";
+        let graph_path = "data/1728/rot_map.b85";
         if std::path::Path::new(graph_path).exists() {
-            let g = RegularGraph::from_binary_file(graph_path, 1728, 12);
+            let g = RegularGraph::from_b85_file(graph_path, 1728, 12);
             let exp_halver = expander_halver(&g);
             let exp_halver_fn = |_m: usize| -> ComparatorNetwork {
                 // This halver is for m=1728 specifically. For testing, we need
