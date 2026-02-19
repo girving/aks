@@ -52,9 +52,12 @@ class LspConnection:
         self._results: dict[int, dict] = {}
         # Diagnostics: accumulate all diagnostics per URI
         self._diagnostics: dict[str, list] = {}
-        # File progress: tracks whether a file is fully processed
-        # True = done (processing array empty), False = still processing
-        self._file_done: dict[str, bool] = {}
+        # Completion tracking: require BOTH fileProgress:[] AND publishDiagnostics
+        # before signaling completion. The Lean server can send fileProgress:[]
+        # before publishDiagnostics in the same batch (especially for fast changes),
+        # so waiting only for fileProgress:[] returns before diagnostics are stored.
+        self._progress_done: dict[str, bool] = {}
+        self._diagnostics_received: dict[str, bool] = {}
         self._file_done_events: dict[str, threading.Event] = {}
         self._reader_thread = threading.Thread(target=self._reader, daemon=True)
         self._reader_thread.start()
@@ -95,18 +98,22 @@ class LspConnection:
             elif msg.get("method") == "textDocument/publishDiagnostics":
                 uri = msg["params"]["uri"]
                 self._diagnostics[uri] = msg["params"]["diagnostics"]
+                # Mark that we have diagnostics; trigger if progress also done
+                self._diagnostics_received[uri] = True
+                if self._progress_done.get(uri, False):
+                    if uri in self._file_done_events:
+                        self._file_done_events[uri].set()
 
             # Handle $/lean/fileProgress — track when file is fully processed
             elif msg.get("method") == "$/lean/fileProgress":
                 uri = msg["params"]["textDocument"]["uri"]
                 processing = msg["params"].get("processing", [])
                 if not processing:
-                    # Empty processing array = file is done
-                    self._file_done[uri] = True
-                    if uri in self._file_done_events:
-                        self._file_done_events[uri].set()
-                else:
-                    self._file_done[uri] = False
+                    # Mark progress done; trigger if diagnostics also received
+                    self._progress_done[uri] = True
+                    if self._diagnostics_received.get(uri, False):
+                        if uri in self._file_done_events:
+                            self._file_done_events[uri].set()
 
     def _send(self, obj: dict):
         """Send a JSON-RPC message."""
@@ -134,9 +141,13 @@ class LspConnection:
 
     def prepare_wait(self, uri: str):
         """Reset wait state for a URI. Must be called BEFORE sending
-        didOpen/didChange to avoid a race where a stale fileProgress:[]
-        arrives between the notification and wait_file_done."""
-        self._file_done[uri] = False
+        didOpen/didChange to avoid a race where the server sends
+        fileProgress:[] before publishDiagnostics in the same batch.
+
+        Requires BOTH fileProgress:[] AND publishDiagnostics to arrive
+        before signaling completion, ensuring diagnostics are populated."""
+        self._progress_done[uri] = False
+        self._diagnostics_received[uri] = False
         event = threading.Event()
         self._file_done_events[uri] = event
         # Clear stale diagnostics so we don't return old results
@@ -245,9 +256,9 @@ class LeanDaemon:
         t0 = time.time()
 
         # Prepare wait state BEFORE sending the notification.
-        # This eliminates a race where the server sends fileProgress:[]
-        # (from acknowledging the change) before wait_file_done registers
-        # its event, causing stale diagnostics to be returned.
+        # Requires both fileProgress:[] and publishDiagnostics before
+        # signaling completion, preventing the race where fileProgress:[]
+        # arrives before diagnostics are stored.
         self.conn.prepare_wait(uri)
 
         if uri in self.opened_files:
