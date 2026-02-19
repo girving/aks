@@ -396,6 +396,58 @@ fn check_final_nearsorted(output: &[usize], n: usize, delta: f64) -> Option<(usi
 }
 
 // ──────────────────────────────────────────────────────────
+// Overflow diagnostic: check if f_c + t_c > hs ever occurs
+// ──────────────────────────────────────────────────────────
+
+/// For each chunk c at level l, compute f_c (foreign-below count) and t_c (home-top-small count).
+/// Returns (max_overflow, total_overflow_chunks) where overflow = max(0, f_c + t_c - hs).
+fn check_overflow(
+    n: usize,
+    halver_fn: &dyn Fn(usize) -> ComparatorNetwork,
+    input: &[usize],
+    k: usize,
+    l: usize,
+) -> (usize, usize) {
+    let out_l = halver_network_output(n, halver_fn, l, input);
+    let inv_l = invert(&out_l);
+    let cs = n / (1 << l);
+    if cs == 0 { return (0, 0); }
+    let hs = cs / 2;
+    if hs == 0 { return (0, 0); }
+    let num_chunks = 1 << l;
+
+    let mut max_overflow = 0usize;
+    let mut overflow_chunks = 0usize;
+
+    for c in 0..num_chunks {
+        // Only relevant chunks (c*cs <= k)
+        if c * cs > k { continue; }
+
+        // f_c: number of values in chunk c with val < c*cs
+        // (ALL such values, not just val < k)
+        let mut f_c = 0usize;
+        // t_c: home-top-small values: val in [c*cs, c*cs+hs) with val < k, positioned in chunk c
+        let mut t_c = 0usize;
+
+        for pos in (c * cs)..((c + 1) * cs).min(n) {
+            let val = out_l[pos];
+            if val < c * cs {
+                f_c += 1;
+            } else if val >= c * cs && val < c * cs + hs && val < k {
+                t_c += 1;
+            }
+        }
+
+        if f_c + t_c > hs {
+            let surplus = f_c + t_c - hs;
+            overflow_chunks += 1;
+            max_overflow = max_overflow.max(surplus);
+        }
+    }
+    (max_overflow, overflow_chunks)
+}
+
+// ──────────────────────────────────────────────────────────
 // Main tests
 // ──────────────────────────────────────────────────────────
 
@@ -758,6 +810,46 @@ fn main() {
                     if ok { "OK" } else { "EXCEEDS ε" }
                 );
             }
+        }
+
+        // ──────────────────────────────────────────────────
+        // Test 6: Overflow diagnostic — does f_c + t_c > hs ever occur?
+        // ──────────────────────────────────────────────────
+        println!("  --- Test 6: Overflow diagnostic (f_c + t_c > hs) ---");
+        let mut rng = Rng::new(333222111);
+        let mut total_overflow = 0usize;
+        let mut max_overflow_val = 0usize;
+
+        for &depth in depths {
+            for _ in 0..trials {
+                let input = rng.random_perm(n);
+                for l in 0..depth {
+                    if n % (1 << (l + 1)) != 0 {
+                        continue;
+                    }
+                    for k_frac in &[0.1, 0.25, 0.5, 0.75, 0.9, 1.0] {
+                        let k = ((*k_frac) * n as f64).round() as usize;
+                        if k == 0 || k > n {
+                            continue;
+                        }
+                        let (max_of, of_chunks) = check_overflow(n, &halver_fn, &input, k, l);
+                        total_overflow += of_chunks;
+                        max_overflow_val = max_overflow_val.max(max_of);
+                        if of_chunks > 0 && total_overflow <= 5 {
+                            let cs = n / (1 << l);
+                            let hs = cs / 2;
+                            println!(
+                                "    OVERFLOW: depth={depth}, l={l}, k={k}, hs={hs}: {of_chunks} chunks, max surplus={max_of}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if total_overflow > 0 {
+            println!("    Total overflow chunks: {total_overflow}, max surplus: {max_overflow_val}");
+        } else {
+            println!("    No overflow detected (f_c + t_c ≤ hs for all chunks)");
         }
 
         println!();

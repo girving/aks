@@ -239,7 +239,7 @@ Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
 - **`SpectralMatrix.lean`** — Layer 1: spectral matrix M PSD → walk bound (~186 lines)
 - **`DiagDominant.lean`** — Layer 2: Hermitian + strictly diag-dominant → PSD (~123 lines)
 - **`ColumnNormBridge.lean`** — imperative column norm checker = pure recursive version (~1538 lines)
-- **`Read.lean`** — `bin_base85%` elaborator + `ensureCertificateData` (~63 lines)
+- **`Read.lean`** — `bin_base85%` elaborator (reads `.b85` text files), `loadBase85` (runtime), `ensureCertificateData` (~55 lines)
 
 ### `AKS/Misc/ForLoop.lean` — For-Loop Characterization (~105 lines)
 Proves `for k in [:n] do` in `Id` monad equals `Nat.fold` + partition-fold lemmas.
@@ -488,7 +488,7 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 ### Base expander certificate pipeline (implemented)
 
-Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `CertCheck.lean` (checker) → `Cert/WalkBound.lean` (abstract theory) → `Cert/Bridge.lean` (bridge) → `Random/{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (binary, `.gitignore`d). See `docs/bridge-proof-plan.md` for background.
+Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `CertCheck.lean` (checker) → `Cert/WalkBound.lean` (abstract theory) → `Cert/Bridge.lean` (bridge) → `Random/{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (`.b85` base-85 text, `.gitignore`d) — Rust writes base85 directly so Lean just reads the text as-is. See `docs/bridge-proof-plan.md` for background.
 
 **Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `Cert/WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `Cert/WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
 
