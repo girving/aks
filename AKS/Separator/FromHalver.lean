@@ -1454,7 +1454,41 @@ theorem halverToSeparator_isSeparator {ε : ℝ} {d : ℕ}
 theorem halverAtLevel_depth_le {ε : ℝ} {d : ℕ}
     (n : ℕ) (family : HalverFamily ε d) (level : ℕ) :
     (halverAtLevel n family.net level).depth ≤ d := by
-  sorry
+  unfold halverAtLevel applyHalverToSubinterval
+  apply depth_flatMap_disjoint
+  · -- Per-chunk depth ≤ d
+    intro k _; simp only
+    split
+    · rename_i h
+      exact le_trans (depth_shiftEmbed_le _ _ _ h) (family.depth_le _)
+    · simp [ComparatorNetwork.depth]
+  · -- Pairwise wire disjointness: chunks at offsets k₁*C, k₂*C have non-overlapping
+    -- wire ranges [ki*C, ki*C + 2*H) since 2*H ≤ C and k₁ < k₂.
+    exact List.pairwise_lt_range.imp fun {k₁ k₂} (hlt : k₁ < k₂) ↦ by
+      simp only
+      intro c₁ hc₁ c₂ hc₂
+      -- Case-split on whether each chunk's dite condition holds
+      by_cases h₁ : k₁ * (n / 2 ^ level) + 2 * (n / 2 ^ level / 2) ≤ n
+      · by_cases h₂ : k₂ * (n / 2 ^ level) + 2 * (n / 2 ^ level / 2) ≤ n
+        · -- Both conditions hold; extract the base comparators
+          simp only [h₁, h₂, dite_true, ComparatorNetwork.shiftEmbed,
+            List.mem_map] at hc₁ hc₂
+          obtain ⟨c₁₀, _, rfl⟩ := hc₁; obtain ⟨c₂₀, _, rfl⟩ := hc₂
+          have h1i := c₁₀.i.isLt; have h1j := c₁₀.j.isLt
+          have h2i := c₂₀.i.isLt; have h2j := c₂₀.j.isLt
+          -- Key nonlinear facts for omega (products of variables)
+          have hCb : 2 * (n / 2 ^ level / 2) ≤ n / 2 ^ level :=
+            Nat.mul_div_le _ 2
+          have hk : k₁ * (n / 2 ^ level) + (n / 2 ^ level) ≤
+              k₂ * (n / 2 ^ level) := by
+            have := Nat.mul_le_mul_right (n / 2 ^ level) hlt
+            rw [Nat.succ_mul] at this; exact this
+          constructor <;> constructor <;> intro heq <;> {
+            simp only [Fin.mk.injEq] at heq; omega }
+        · simp only [h₂, dite_false] at hc₂
+          exact absurd hc₂ (List.not_mem_nil)
+      · simp only [h₁, dite_false] at hc₁
+        exact absurd hc₁ (List.not_mem_nil)
 
 /-- Iterated separator depth ≤ t · d. At each of `t` levels, halvers at the
     same level operate on disjoint wire ranges, giving depth ≤ d per level.
@@ -1462,7 +1496,16 @@ theorem halverAtLevel_depth_le {ε : ℝ} {d : ℕ}
 theorem halverToSeparator_depth_le {ε : ℝ} {d : ℕ}
     (n : ℕ) (family : HalverFamily ε d) (t : ℕ) :
     (halverToSeparator n family t).depth ≤ t * d := by
-  sorry
+  unfold halverToSeparator halverNetwork
+  induction t with
+  | zero => simp [ComparatorNetwork.depth]
+  | succ t ih =>
+    simp only [List.range_succ, List.flatMap_append, List.flatMap_singleton]
+    have h_app := depth_append
+      (⟨(List.range t).flatMap fun l ↦ (halverAtLevel n family.net l).comparators⟩)
+      (halverAtLevel n family.net t)
+    have h_level := halverAtLevel_depth_le n family t
+    linarith
 
 
 /-! **Bundle into SeparatorFamily** -/

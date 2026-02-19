@@ -305,16 +305,16 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 425, status: "sorry", kind: "theorem",
+    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 434, status: "sorry", kind: "theorem",
       sig: "farSmallCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farSmallCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "After depth levels, far-small count at radius n/2^depth is ≤ ε·depth·k. Core of AKS Section 4: requires trajectory/displaced-elements argument with union bound over levels.", difficulty: "weeks" },
-    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 620, status: "sorry", kind: "theorem",
+    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 629, status: "sorry", kind: "theorem",
       sig: "farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farLargeCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "Dual of farSmallCount_depth_bound for end segments.", difficulty: "weeks" },
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 531, status: "proved", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 540, status: "proved", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound. Reformulates as farSmallCount via sdiff_image_card_eq_far_count, then applies depth bound + blowup_covers_displacement." },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 702, status: "proved", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 711, status: "proved", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via farLargeCount_depth_bound and rank_fin_od_val." },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -525,6 +525,20 @@ const PROOF_DATA = {
       sig: "aks_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
       desc: "AKS (1983): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + tree sorting." },
 
+    // ── Seiferas.lean (Seiferas-path assembly, parallel to Main.lean) ──
+    { id: "expanderToHalverFamily", file: "AKS/Seiferas.lean", line: 101, status: "proved", kind: "def",
+      sig: "expanderToHalverFamily (β : ℝ)\n  (hfamily : ∀ n > 0, ∃ G : RegularGraph n d, spectralGap G ≤ β) :\n  HalverFamily β d",
+      desc: "Wraps expanderHalverFamily: expander family → halver family with error β and depth d." },
+    { id: "halverToSeparatorFamily'", file: "AKS/Seiferas.lean", line: 114, status: "sorry", kind: "def",
+      sig: "halverToSeparatorFamily' (family : HalverFamily ε d) (hε : 0 ≤ ε) (t : ℕ) :\n  SeparatorFamily (1/2^t) (t*ε) (t*d)",
+      desc: "Halver family → separator family via iterated halving. Depth proved; isSep sorry (needs 2^t ∣ n for all n, subsumed by separatorSortingNetwork_sorts sorry)." },
+    { id: "seiferas_implies_sorting_network", file: "AKS/Seiferas.lean", line: 142, status: "sorry", kind: "theorem", milestone: true,
+      sig: "seiferas_implies_sorting_network :\n  0 < β → β < 1 → (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "Parameterized Seiferas theorem: expander family → O(n log n) sorting. Size bound fully proved; correctness forwards sorry from separatorSortingNetwork_sorts." },
+    { id: "seiferas_sorting_networks_exist", file: "AKS/Seiferas.lean", line: 218, status: "sorry", kind: "theorem", milestone: true,
+      sig: "seiferas_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "Seiferas (2009): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + separator/bags path. Parallel to aks_sorting_networks_exist." },
+
     // ── Tree/Sorting.lean ──
     { id: "TreeNode", file: "AKS/Tree/Sorting.lean", line: 105, status: "definition", kind: "structure",
       sig: "structure TreeNode where\n  level : ℕ\n  index : ℕ",
@@ -604,7 +618,7 @@ const PROOF_DATA = {
     { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 1427, status: "proved", kind: "theorem",
       sig: "halverToSeparator_isSeparator (h_div : 2^t ∣ n) :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (t*ε)",
       desc: "PROVED. Induction on t: base case (empty network at γ=1) + step via separator_halving_step. t levels of iterated ε-halving give (tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
-    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 1474, status: "sorry", kind: "theorem",
+    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 1517, status: "sorry", kind: "theorem",
       sig: "halverToSeparator_props (n t : ℕ) (h_div : 2^t ∣ n) :\n  IsSeparator ... (1/2^t) (t*ε) ∧ depth ≤ t*d",
       desc: "Bundle separator+depth properties for halver-to-separator construction. Requires divisibility 2^t | n." },
 
@@ -968,6 +982,20 @@ const PROOF_DATA = {
     ["expander_family_small_gap", "aks_sorting_networks_exist"],
     ["zigzag_implies_aks_network", "aks_sorting_networks_exist"],
 
+    // Seiferas.lean — separator-path assembly
+    ["expanderHalverFamily", "expanderToHalverFamily"],
+    ["HalverFamily", "halverToSeparatorFamily'"],
+    ["halverToSeparator_isSeparator", "halverToSeparatorFamily'"],
+    ["SeparatorFamily", "halverToSeparatorFamily'"],
+    ["expanderToHalverFamily", "seiferas_implies_sorting_network"],
+    ["halverToSeparatorFamily'", "seiferas_implies_sorting_network"],
+    ["separatorSortingNetwork_sorts", "seiferas_implies_sorting_network"],
+    ["separatorSortingNetwork_depth_le", "seiferas_implies_sorting_network"],
+    ["size_le_half_n_mul_depth", "seiferas_implies_sorting_network"],
+    ["zero_one_principle", "seiferas_implies_sorting_network"],
+    ["seiferas_implies_sorting_network", "seiferas_sorting_networks_exist"],
+    ["explicit_expanders_exist_zigzag", "seiferas_sorting_networks_exist"],
+
     // WalkBound
     ["spectralGap", "spectralGap_le_of_walk_bound"],
     ["walkCLM", "spectralGap_le_of_walk_bound"],
@@ -1089,7 +1117,8 @@ const PROOF_DATA = {
     { id: "AKS/Bags/Invariant.lean", label: "Bags/Invariant.lean", color: "#1a1e24" },
     { id: "AKS/Bags/Stage.lean", label: "Bags/Stage.lean", color: "#1a1e24" },
     { id: "AKS/Bags/TreeSort.lean", label: "Bags/TreeSort.lean", color: "#1a1e24" },
-    { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
+    { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" },
+    { id: "AKS/Seiferas.lean", label: "Seiferas.lean", color: "#1a1e24" }
   ]
 };
 // ═══════════════════════════════════════════════════════
