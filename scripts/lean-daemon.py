@@ -132,16 +132,24 @@ class LspConnection:
         """Send a notification (no response expected)."""
         self._send({"jsonrpc": "2.0", "method": method, "params": params})
 
-    def wait_file_done(self, uri: str, timeout: float = 120) -> list:
-        """Wait for a file to be fully processed, then return diagnostics."""
-        # Reset done state
+    def prepare_wait(self, uri: str):
+        """Reset wait state for a URI. Must be called BEFORE sending
+        didOpen/didChange to avoid a race where a stale fileProgress:[]
+        arrives between the notification and wait_file_done."""
         self._file_done[uri] = False
         event = threading.Event()
         self._file_done_events[uri] = event
+        # Clear stale diagnostics so we don't return old results
+        self._diagnostics.pop(uri, None)
 
-        # Check if already done (race condition guard)
-        if self._file_done.get(uri):
-            event.set()
+    def wait_file_done(self, uri: str, timeout: float = 120) -> list:
+        """Wait for a file to be fully processed, then return diagnostics.
+
+        prepare_wait(uri) must have been called before the notification
+        that triggers processing."""
+        event = self._file_done_events.get(uri)
+        if event is None:
+            raise RuntimeError(f"prepare_wait was not called for {uri}")
 
         if not event.wait(timeout):
             raise TimeoutError(
@@ -235,6 +243,12 @@ class LeanDaemon:
             content = f.read()
 
         t0 = time.time()
+
+        # Prepare wait state BEFORE sending the notification.
+        # This eliminates a race where the server sends fileProgress:[]
+        # (from acknowledging the change) before wait_file_done registers
+        # its event, causing stale diagnostics to be returned.
+        self.conn.prepare_wait(uri)
 
         if uri in self.opened_files:
             # File already open, send didChange
