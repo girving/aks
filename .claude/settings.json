@@ -42,6 +42,7 @@
       "Bash(scripts/update-viz-lines)",
       "Bash(scripts/update-viz-lines *)",
       "Bash(scripts/sorries *)",
+      "Bash(scripts/lean-test)",
       "Bash(scripts/lean-test *)",
       "Bash(scripts/bench)",
       "Bash(scripts/bench *)",

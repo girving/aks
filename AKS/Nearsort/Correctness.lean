@@ -259,19 +259,26 @@ private lemma good_radius_implies_close {n : ℕ}
     elements. This is the core bound connecting `EpsilonInitialHalved` to the
     trajectory argument.
 
-    **Proof strategy** (key insight: one-sided good radius eliminates Type B errors):
-    With the `≤` definition of `hasGoodRadius` (`pos/cs ≤ val/cs`), only "Type A"
-    errors contribute: home values targeting the top sub-half that go to the bottom.
-    Type B errors (target-bottom going to top) actually help by decreasing position.
+    **Characterization of error elements**: Error elements are values `a < k` with
+    `a/cs = c` (home chunk), `a % cs < hs` (targeting top sub-half at level `l+1`),
+    positioned in chunk `c` at level `l` (good radius), that the halver sends to the
+    bottom sub-half (losing good radius). Their local rank in chunk `c` is in
+    `[f_c, f_c + t_c)` where `f_c` = count of foreign-below values in the chunk.
 
-    Per chunk c at level l, errors are bounded by `EpsilonInitialHalved` applied to
-    the local halver. The key counting argument:
-    - Let `t_c` = |{a : val(a) < k, a targets top sub-half of chunk c, a in chunk c}|
-    - Let `f_c` = |{a : val(a) < k, a in chunk c but from an earlier target chunk}|
-    - Per-chunk error ≤ ε · (t_c + f_c) (via EpsilonInitialHalved with j = t_c + f_c)
-    - Sum: Σ(t_c + f_c) ≤ k (since each val-<-k value contributes to at most one term,
-      and values with good radius targeting bottom contribute to neither term).
-    Therefore total ≤ ε · k. -/
+    **What works (no overflow)**: When `f_c + t_c ≤ hs` for all chunks `c`,
+    `EpsilonInitialHalved` with `j = f_c + t_c` gives per-chunk error ≤ `ε·(f_c+t_c)`.
+    Since `Σ(f_c + t_c) ≤ k` (each val-<-k contributes to at most one term),
+    the total ≤ `ε · k`. At level 0 this always holds (`f_c = 0` for all `c`).
+
+    **Difficulty (overflow)**: When `f_c + t_c > hs`, `EpsilonInitialHalved` only
+    applies for `j ≤ hs`, giving `ε · hs` for the rank-<-hs part. The rank-≥-hs
+    home-top values (up to `f_c + t_c - hs` of them) go to the bottom "correctly"
+    by the halver's ranking but constitute errors from the global perspective. The
+    per-chunk bound becomes `ε·k + F_l` where `F_l = Σ_{j<l}|E_j|` (accumulated
+    prior errors), leading to exponential growth via the recurrence. The strong
+    bound `ε · k` (confirmed empirically with 0 violations) requires a global
+    argument beyond per-chunk EIH decomposition. The AKS paper (Section 4, p.5)
+    states the result without proof ("it is easy to see"). -/
 private lemma error_set_bound {n : ℕ} (ε : ℝ) (hε : 0 < ε)
     (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
     (hhalvers : ∀ m, IsEpsilonHalver (halvers m) ε)
