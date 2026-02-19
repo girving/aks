@@ -1673,7 +1673,7 @@ lemma monotone_has_threshold {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
           Finset.Iio (⟨k, hk_lt⟩ : Fin n) := by
         ext i
         simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_Iio,
-          Fin.lt_iff_val_lt_val]
+          Fin.lt_def]
       rw [this, Fin.card_Iio]
     · have hk_eq : k = n := by omega
       have : (Finset.univ.filter (fun i : Fin n => (i : ℕ) < k)) = Finset.univ := by

@@ -172,7 +172,7 @@ lemma card_topHalf (n : ℕ) : (topHalf n).card = n / 2 := by
     have : topHalf n = Finset.Iio ⟨n / 2, hn2⟩ := by
       ext ⟨i, hi⟩
       simp only [topHalf, Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_Iio,
-        Fin.lt_iff_val_lt_val]
+        Fin.lt_def]
     rw [this, Fin.card_Iio]
 
 /-- Cardinality of bottom half -/
@@ -229,7 +229,7 @@ lemma Monotone.bool_pattern {n : ℕ} (w : Fin n → Bool) (hw : Monotone w) :
         Finset.Iio ⟨i, hi⟩ := by
       intro ⟨j, hj⟩ hm
       simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hm
-      simp only [Finset.mem_Iio, Fin.lt_iff_val_lt_val]
+      simp only [Finset.mem_Iio, Fin.lt_def]
       by_contra h_ge; push_neg at h_ge
       exact absurd (h_above ⟨j, hj⟩ h_ge) (by simp [hm])
     -- Card of false set ≤ card of Iio = i
