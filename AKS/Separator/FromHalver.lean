@@ -1381,13 +1381,45 @@ theorem separator_halving_step {n : ℕ} {ε' ε₁ : ℝ} (t : ℕ)
 
 /-! **Iterated halving** -/
 
+/-- `rank a < Fintype.card α` for any element in a finite linear order. -/
+private lemma rank_lt_card {α : Type*} [Fintype α] [LinearOrder α] (a : α) :
+    rank a < Fintype.card α := by
+  unfold rank; apply Finset.card_lt_card
+  rw [Finset.ssubset_iff_of_subset (Finset.filter_subset _ _)]
+  exact ⟨a, Finset.mem_univ a, by simp⟩
+
+/-- `SepInitial` is trivially true at γ = 1: the threshold `⌊1·n⌋₊ = n` exceeds
+    every rank, so the filter is empty and any ε bound (including 0) holds. -/
+private lemma sepInitial_one_zero {α : Type*} [Fintype α] [LinearOrder α]
+    (w : α → α) : SepInitial w 1 0 := by
+  intro γ' hγ' _
+  suffices h : (Finset.univ.filter (fun pos : α ↦
+      ⌊(1 : ℝ) * ↑(Fintype.card α)⌋₊ ≤ rank pos ∧
+      rank (w pos) < ⌊γ' * ↑(Fintype.card α)⌋₊)).card = 0 by
+    push_cast [h]; positivity
+  rw [Finset.card_eq_zero, Finset.filter_eq_empty_iff]
+  intro x _ hx
+  have hr := rank_lt_card x
+  simp only [one_mul, Nat.floor_natCast] at hx
+  omega
+
+/-- `halverToSeparator` at `t + 1` decomposes into level-`t` separator concatenated
+    with level-`t` halvers. -/
+private lemma halverToSeparator_succ_eq {ε : ℝ} {d : ℕ}
+    (n : ℕ) (family : HalverFamily ε d) (t : ℕ) :
+    halverToSeparator n family (t + 1) =
+    ⟨(halverToSeparator n family t).comparators ++
+     (halverAtLevel n family.net t).comparators⟩ := by
+  simp only [halverToSeparator, halverNetwork, List.range_succ, List.flatMap_append,
+    List.flatMap_singleton]
+
 /-- `t` levels of iterated ε-halving give (t·ε)-approximate (1/2^t)-separation.
 
     Requires `2 ^ t ∣ n` to ensure all chunk sizes at levels 0, ..., t-1
     are even (needed by `separator_halving_step`). This is satisfied when
     n is a power of 2 ≥ 2^t, as in the standard AKS construction.
 
-    Proof: induction on `t` using `halver_isSeparator_half` (base) and
+    Proof: induction on `t` using `sepInitial_one_zero` (base) and
     `separator_halving_step` (step). At each level, the halver introduces
     ε error (one application of EpsilonInitialHalved + EpsilonFinalHalved),
     giving +ε per level, total t·ε.
@@ -1396,7 +1428,23 @@ theorem halverToSeparator_isSeparator {ε : ℝ} {d : ℕ}
     (n : ℕ) (family : HalverFamily ε d) (t : ℕ) (hε : 0 ≤ ε)
     (h_div : 2 ^ t ∣ n) :
     IsSeparator (halverToSeparator n family t) (1 / 2 ^ t) (↑t * ε) := by
-  sorry
+  induction t with
+  | zero =>
+    simp only [halverToSeparator, halverNetwork, List.range_zero, List.flatMap_nil,
+      pow_zero, Nat.cast_zero, zero_mul, div_one]
+    intro v; rw [show (⟨[]⟩ : ComparatorNetwork n).exec (v : Fin n → Fin n) = v from by
+      simp [ComparatorNetwork.exec]]
+    exact ⟨sepInitial_one_zero _, sepInitial_one_zero _⟩
+  | succ t ih =>
+    have h_div_t : 2 ^ t ∣ n := dvd_trans (Nat.pow_dvd_pow 2 (Nat.le_succ t)) h_div
+    have h_even : 2 ∣ n / 2 ^ t := by
+      rw [pow_succ] at h_div; obtain ⟨k, hk⟩ := h_div
+      rw [hk, Nat.mul_assoc, Nat.mul_div_cancel_left _ (by positivity)]
+      exact dvd_mul_right 2 k
+    rw [halverToSeparator_succ_eq]
+    have hstep := separator_halving_step t (ih h_div_t) family.isHalver hε h_even h_div_t
+    convert hstep using 1
+    push_cast; ring
 
 
 /-! **Depth bound** -/

@@ -469,12 +469,12 @@ const PROOF_DATA = {
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
 
     // ── Random/Random20736.lean ──
-    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 31, status: "proved", kind: "def",
+    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 26, status: "proved", kind: "def",
       sig: "def Random20736.graph : RegularGraph 20736 12",
       desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
-    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
+    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 37, status: "proved", kind: "theorem",
       sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
-      desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
+      desc: "Spectral gap bound via certificate bridge. PSD certificate (821 MB) verified by native_decide." },
     // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
     { id: "baseExpander", file: "AKS/Random/Random20736.lean", line: 31, status: "retired", kind: "axiom",
       sig: "axiom baseExpander : RegularGraph 20736 12",
@@ -595,10 +595,10 @@ const PROOF_DATA = {
     { id: "separator_halving_step", file: "AKS/Separator/FromHalver.lean", line: 1365, status: "proved", kind: "theorem",
       sig: "separator_halving_step (t : ℕ) (h_even : 2 ∣ n/2^t) (h_pow_div : 2^t ∣ n) :\n  IsSeparator net (1/2^t) ε' → IsSeparator (net ++ halverAtLevel) (1/2^(t+1)) (ε'+ε₁)",
       desc: "PROVED. Induction step: halving refines (1/2^t, ε')-separation to (1/2^(t+1), ε'+ε₁)-separation. Both SepInitial and SepFinal directions proved via offset bijections + halver ε-bound." },
-    { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 1395, status: "sorry", kind: "theorem",
+    { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 1427, status: "proved", kind: "theorem",
       sig: "halverToSeparator_isSeparator (h_div : 2^t ∣ n) :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (t*ε)",
-      desc: "t levels of iterated ε-halving give (tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
-    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 1426, status: "sorry", kind: "theorem",
+      desc: "PROVED. Induction on t: base case (empty network at γ=1) + step via separator_halving_step. t levels of iterated ε-halving give (tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
+    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 1474, status: "sorry", kind: "theorem",
       sig: "halverToSeparator_props (n t : ℕ) (h_div : 2^t ∣ n) :\n  IsSeparator ... (1/2^t) (t*ε) ∧ depth ≤ t*d",
       desc: "Bundle separator+depth properties for halver-to-separator construction. Requires divisibility 2^t | n." },
 
