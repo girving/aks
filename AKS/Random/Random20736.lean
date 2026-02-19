@@ -15,10 +15,10 @@ namespace Random20736
 #eval ensureCertificateData 20736 12
 
 set_option maxHeartbeats 0 in
-def rotData : String := bin_base85% "data/20736/rot_map.bin"
+def rotData : String := bin_base85% "data/20736/rot_map.b85"
 
 set_option maxHeartbeats 0 in
-def certData : String := bin_base85% "data/20736/cert_z.bin"
+def certData : String := bin_base85% "data/20736/cert_z.b85"
 
 theorem involution_check : checkInvolutionSpec (rotData.toUTF8) 20736 12 = true := by
   native_decide

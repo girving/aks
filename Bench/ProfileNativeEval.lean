@@ -7,8 +7,8 @@
 import CertCheck
 import AKS.Cert.Read
 
-def rotData1728 : String := bin_base85% "data/1728/rot_map.bin"
-def certData1728 : String := bin_base85% "data/1728/cert_z.bin"
+def rotData1728 : String := bin_base85% "data/1728/rot_map.b85"
+def certData1728 : String := bin_base85% "data/1728/cert_z.b85"
 
 -- #eval runs through the interpreter. Times here approximate native_decide cost.
 -- Use IO.println between timestamps to force evaluation (println is strict).

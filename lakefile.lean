@@ -32,7 +32,7 @@ script «gen-cert» _args do
   let sizes : List (Nat × Nat) := [(16, 4), (1728, 12)]
   for (n, d) in sizes do
     let dir := s!"data/{n}"
-    let certFile := s!"{dir}/cert_z.bin"
+    let certFile := s!"{dir}/cert_z.b85"
     if ← System.FilePath.pathExists certFile then
       IO.println s!"data/{n}/ already exists, skipping"
       continue
