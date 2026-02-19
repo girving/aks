@@ -469,12 +469,12 @@ const PROOF_DATA = {
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
 
     // ── Random/Random20736.lean ──
-    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 31, status: "proved", kind: "def",
+    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 26, status: "proved", kind: "def",
       sig: "def Random20736.graph : RegularGraph 20736 12",
       desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
-    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
+    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 37, status: "proved", kind: "theorem",
       sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
-      desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
+      desc: "Spectral gap bound via certificate bridge. PSD certificate (821 MB) verified by native_decide." },
     // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
     { id: "baseExpander", file: "AKS/Random/Random20736.lean", line: 31, status: "retired", kind: "axiom",
       sig: "axiom baseExpander : RegularGraph 20736 12",

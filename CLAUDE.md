@@ -196,7 +196,7 @@ Fully proved expander mixing lemma via indicator vectors + Cauchy-Schwarz + oper
 ### `AKS/Random/` — Base Expander for Zig-Zag Construction
 Concrete base expander certified via davidad's triangular-inverse method:
 1. **`Random20736.graph`** — concrete `RegularGraph 20736 12`, rotation map verified by `native_decide`
-2. **`Random20736.gap`** — spectral gap ≤ 10/12 via `certificate_bridge` (sorry: 821 MB PSD certificate too large to embed on 16 GB machine)
+2. **`Random20736.gap`** — spectral gap ≤ 10/12 via `certificate_bridge` (fully proved, 821 MB PSD certificate verified by `native_decide`)
 
 ### `AKS/ZigZag/Operators.lean` — Zig-Zag Product and Walk Operators (~230 lines)
 Defines the zig-zag product and the three CLM operators for its spectral analysis:
@@ -461,7 +461,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZag/Spectral sublemmas through `rvw_operator_norm_bound`. ZigZag/Operators.lean: 0 sorry. ZigZag/Spectral.lean: 0 sorry. ZigZag/RVWBound.lean: 0 sorry (scalar inequality proved in `ZigZag/RVWInequality.lean`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap sorry'd pending larger machine for PSD certificate. The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZag/Spectral sublemmas through `rvw_operator_norm_bound`. ZigZag/Operators.lean: 0 sorry. ZigZag/Spectral.lean: 0 sorry. ZigZag/RVWBound.lean: 0 sorry (scalar inequality proved in `ZigZag/RVWInequality.lean`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap fully proved (821 MB PSD certificate verified by `native_decide`). The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
@@ -476,7 +476,7 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 **Substantial (months):** **Proved:** `expander_gives_halver` (in `Halver/ExpanderToHalver.lean`, via Tanner's bound), `tanner_bound` (in `Halver/Tanner.lean`), `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
 
-**Engineering (weeks, fiddly):** embedding 821 MB PSD certificate for `Random20736.gap` (needs machine with more RAM), reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
+**Engineering (weeks, fiddly):** reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
 ### Base expander certificate pipeline (implemented)
 
