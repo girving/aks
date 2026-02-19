@@ -30,7 +30,7 @@ private def bipartiteComparators {m d : ℕ} (G : RegularGraph m d) :
     (List.finRange d).map fun p =>
       { i := ⟨v.val, by omega⟩
         j := ⟨m + (G.neighbor v p).val, by omega⟩
-        h := by simp [Fin.lt_iff_val_lt_val]; omega }
+        h := by simp [Fin.lt_def]; omega }
 
 private lemma bipartiteComparators_length {m d : ℕ} (G : RegularGraph m d) :
     (bipartiteComparators G).length = m * d := by
@@ -129,7 +129,7 @@ private lemma foldl_member_order {n m : ℕ} {α : Type*} [LinearOrder α]
 private lemma mem_bipartiteComparators {m d : ℕ} (G : RegularGraph m d)
     (v : Fin m) (p : Fin d) :
     (⟨⟨v.val, by omega⟩, ⟨m + (G.neighbor v p).val, by omega⟩,
-      by simp [Fin.lt_iff_val_lt_val]; omega⟩ : Comparator (2 * m))
+      by simp [Fin.lt_def]; omega⟩ : Comparator (2 * m))
       ∈ bipartiteComparators G := by
   simp only [bipartiteComparators, List.mem_flatMap, List.mem_finRange, List.mem_map, true_and]
   exact ⟨v, p, rfl⟩
@@ -145,7 +145,7 @@ private theorem exec_bipartite_edge_mono {m d : ℕ} {α : Type*} [LinearOrder �
       ⟨m + (G.neighbor v p).val, by omega⟩ := by
   exact foldl_member_order (bipartiteComparators G)
     ⟨⟨v.val, by omega⟩, ⟨m + (G.neighbor v p).val, by omega⟩,
-      by simp [Fin.lt_iff_val_lt_val]; omega⟩
+      by simp [Fin.lt_def]; omega⟩
     (mem_bipartiteComparators G v p)
     (bipartiteComparators_bipartite G) w
 
