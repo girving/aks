@@ -70,6 +70,52 @@ def EpsilonFinalHalved {α : Type*} [Fintype α] [LinearOrder α]
     (w : α → α) (ε : ℝ) : Prop :=
   EpsilonInitialHalved (α := αᵒᵈ) w ε
 
+/-- Val-based formulation of `EpsilonFinalHalved` on `Fin (2*m)`:
+    positions in the first half `[0, m)` with large output values `≥ 2m - k`
+    are bounded by `ε * k`. Bridges from `(Fin (2*m))ᵒᵈ` rank conditions
+    to concrete `Fin (2*m)` val conditions. -/
+lemma EpsilonFinalHalved.val_bound {m : ℕ} {w : Fin (2 * m) → Fin (2 * m)} {ε : ℝ}
+    (h : EpsilonFinalHalved w ε) (k : ℕ) (hk : k ≤ m) :
+    ((Finset.univ.filter (fun pos : Fin (2 * m) ↦
+        pos.val < m ∧ 2 * m - k ≤ (w pos).val)).card : ℝ) ≤ ε * k := by
+  unfold EpsilonFinalHalved EpsilonInitialHalved at h
+  simp only [Fintype.card_orderDual, Fintype.card_fin,
+    show 2 * m / 2 = m from by omega] at h
+  have hbound := h k hk
+  suffices hsuff : (Finset.univ.filter (fun pos : Fin (2 * m) ↦
+      pos.val < m ∧ 2 * m - k ≤ (w pos).val)).card =
+    (Finset.univ.filter (fun pos : (Fin (2 * m))ᵒᵈ ↦
+      m ≤ @rank (Fin (2 * m))ᵒᵈ _ _ pos ∧
+      @rank (Fin (2 * m))ᵒᵈ _ _ (w pos) < k)).card by
+    exact_mod_cast hsuff ▸ hbound
+  apply Finset.card_nbij'
+    (fun x : Fin (2 * m) ↦ (OrderDual.toDual x : (Fin (2 * m))ᵒᵈ))
+    (fun x : (Fin (2 * m))ᵒᵈ ↦ OrderDual.ofDual x)
+  · intro x hx
+    simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hx ⊢
+    obtain ⟨h1, h2⟩ := hx
+    constructor
+    · show m ≤ @rank (Fin (2 * m))ᵒᵈ _ _ (OrderDual.toDual x)
+      rw [rank_fin_od_val]; omega
+    · show @rank (Fin (2 * m))ᵒᵈ _ _ (OrderDual.toDual (w x)) < k
+      rw [rank_fin_od_val]
+      have := (w x).isLt; omega
+  · intro x hx
+    simp only [Finset.mem_coe, Finset.mem_filter, Finset.mem_univ, true_and] at hx ⊢
+    obtain ⟨h1, h2⟩ := hx
+    have hr1 : @rank (Fin (2 * m))ᵒᵈ _ _ x = 2 * m - 1 - (OrderDual.ofDual x).val :=
+      rank_fin_od x
+    have hr2 : @rank (Fin (2 * m))ᵒᵈ _ _ (w x) =
+        2 * m - 1 - (w (OrderDual.ofDual x)).val := by
+      show @rank (Fin (2 * m))ᵒᵈ _ _ (w x) = _
+      exact rank_fin_od (w x)
+    rw [hr1] at h1; rw [hr2] at h2
+    have hx_lt := (OrderDual.ofDual x).isLt
+    have hwx_lt := (w (OrderDual.ofDual x)).isLt
+    constructor <;> omega
+  · intro _ _; rfl
+  · intro _ _; rfl
+
 /-- A function is ε-halved if it satisfies both initial and final segment bounds. -/
 def EpsilonHalved {α : Type*} [Fintype α] [LinearOrder α]
     (w : α → α) (ε : ℝ) : Prop :=

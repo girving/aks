@@ -1006,6 +1006,188 @@ fn main() {
         }
     }
 
+    // ──────────────────────────────────────────────────────────
+    // Part E: Sublemma tests for separator_halving_step
+    //
+    // Tests the two key counting sublemmas:
+    // E1. halverAtLevel_chunk0_count_eq: count of values < k at positions < C
+    //     is preserved by halverAtLevel
+    // E2. halverAtLevel_near_outsider_le: count of values < k at positions
+    //     in [H, C) is ≤ ε₁ · a where a = count of chunk-0 values < k
+    // ──────────────────────────────────────────────────────────
+    println!("\n\n=== Part E: Sublemma tests for separator_halving_step ===\n");
+
+    // Perfect halver: odd-even transposition sort (enough passes for small sizes)
+    let perfect_halver_fn_e = |half_m: usize| -> ComparatorNetwork {
+        let nn = 2 * half_m;
+        let mut comparators = Vec::new();
+        for _pass in 0..nn {
+            let mut i = 0;
+            while i + 1 < nn { comparators.push(Comparator { i, j: i + 1 }); i += 2; }
+            i = 1;
+            while i + 1 < nn { comparators.push(Comparator { i, j: i + 1 }); i += 2; }
+        }
+        ComparatorNetwork { n: nn, comparators }
+    };
+
+    {
+        println!("--- E1: halverAtLevel_chunk0_count_eq ---");
+        println!("  Count of values < k at positions < C preserved by halverAtLevel\n");
+
+        let mut all_ok = true;
+        for &n in &[8, 16, 32, 64, 128] {
+            for t in 0..5 {
+                let c = n / (1 << t);
+                if c < 2 || c % 2 != 0 { continue; }
+                if (1 << t) > n { break; }
+
+                let halver_fn_ref = &perfect_halver_fn_e;
+                let level_net = halver_at_level(n, halver_fn_ref, t);
+
+                let mut rng: u64 = 77 + n as u64 * 13 + t as u64 * 7;
+                let mut ok = true;
+                for _ in 0..5000 {
+                    // Random permutation as w₁
+                    let mut w1: Vec<usize> = (0..n).collect();
+                    for i in (1..n).rev() {
+                        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                        let j = rng as usize % (i + 1);
+                        w1.swap(i, j);
+                    }
+                    let mut w2 = w1.clone();
+                    level_net.exec(&mut w2);
+
+                    // Check: for all k, count of values < k at positions < C is preserved
+                    for k in 0..=n {
+                        let count_w1 = (0..c).filter(|&pos| w1[pos] < k).count();
+                        let count_w2 = (0..c).filter(|&pos| w2[pos] < k).count();
+                        if count_w1 != count_w2 {
+                            println!("  FAIL: n={n}, t={t}, k={k}: w1_count={count_w1}, w2_count={count_w2}");
+                            ok = false;
+                            all_ok = false;
+                            break;
+                        }
+                    }
+                    if !ok { break; }
+                }
+                if ok {
+                    print!("  n={n}, t={t}, C={c}: OK  ");
+                }
+            }
+            println!();
+        }
+        println!("{}", if all_ok { "  All E1 tests passed!" } else { "  SOME E1 TESTS FAILED!" });
+    }
+
+    println!();
+    {
+        println!("--- E2: halverAtLevel_near_outsider_le ---");
+        println!("  Near outsiders ≤ ε₁ · a (with perfect halver, ε₁=0 → must be 0)\n");
+
+        let mut all_ok = true;
+        for &n in &[8, 16, 32, 64, 128] {
+            for t in 0..5 {
+                let c = n / (1 << t);
+                if c < 2 || c % 2 != 0 { continue; }
+                if (1 << t) > n { break; }
+                let h = c / 2;
+
+                let halver_fn_ref = &perfect_halver_fn_e;
+                let level_net = halver_at_level(n, halver_fn_ref, t);
+
+                let mut rng: u64 = 99 + n as u64 * 17 + t as u64 * 11;
+                let mut worst_ratio: f64 = 0.0;
+                let mut fail = false;
+                for _ in 0..5000 {
+                    let mut w1: Vec<usize> = (0..n).collect();
+                    for i in (1..n).rev() {
+                        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                        let j = rng as usize % (i + 1);
+                        w1.swap(i, j);
+                    }
+                    let mut w2 = w1.clone();
+                    level_net.exec(&mut w2);
+
+                    // For each k ≤ H: count near outsiders and chunk-0 small values
+                    for k in 0..=h {
+                        let a = (0..c).filter(|&pos| w1[pos] < k).count();
+                        let near = (h..c).filter(|&pos| w2[pos] < k).count();
+                        // For perfect halver (ε₁=0): near should be 0
+                        if near > 0 {
+                            println!("  FAIL: n={n}, t={t}, k={k}: near={near}, a={a}");
+                            fail = true;
+                            all_ok = false;
+                            break;
+                        }
+                        // Track worst ratio for imperfect halvers (here always 0)
+                        if a > 0 {
+                            let ratio = near as f64 / a as f64;
+                            if ratio > worst_ratio { worst_ratio = ratio; }
+                        }
+                    }
+                    if fail { break; }
+                }
+                if !fail {
+                    print!("  n={n}, t={t}, C={c}, H={h}: OK (worst_ratio={worst_ratio:.4})  ");
+                }
+            }
+            println!();
+        }
+
+        // Also test with imperfect halver (expander-based) if graph data available
+        println!("\n  With expander halver (if available):");
+        let graph_path = "data/1728/graph.bin";
+        if std::path::Path::new(graph_path).exists() {
+            let g = RegularGraph::from_binary_file(graph_path, 1728, 12);
+            let exp_halver = expander_halver(&g);
+            let exp_halver_fn = |_m: usize| -> ComparatorNetwork {
+                // This halver is for m=1728 specifically. For testing, we need
+                // to test at the right size. Use a generic perfect halver for
+                // sizes ≠ 1728 and the expander halver for size 1728.
+                ComparatorNetwork { n: 2 * _m, comparators: Vec::new() }
+            };
+            // Test with n = 2*1728 = 3456, t=0 (chunk = 3456, halfChunk = 1728)
+            let n = 2 * 1728;
+            let t = 0;
+            let c = n;
+            let h = c / 2; // = 1728
+            // Build halverAtLevel manually with the expander halver at offset 0
+            let mut level_comps = Vec::new();
+            for comp in &exp_halver.comparators {
+                level_comps.push(Comparator { i: comp.i, j: comp.j });
+            }
+            let level_net = ComparatorNetwork { n, comparators: level_comps };
+
+            let mut rng: u64 = 12345;
+            let mut worst_ratio: f64 = 0.0;
+            let trials = 1000;
+            for _ in 0..trials {
+                let mut w1: Vec<usize> = (0..n).collect();
+                for i in (1..n).rev() {
+                    rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
+                    let j = rng as usize % (i + 1);
+                    w1.swap(i, j);
+                }
+                let mut w2 = w1.clone();
+                level_net.exec(&mut w2);
+
+                for k in (0..=h).step_by(h.max(1) / 20 + 1) {
+                    let a = (0..c).filter(|&pos| w1[pos] < k).count();
+                    let near = (h..c).filter(|&pos| w2[pos] < k).count();
+                    if a > 0 {
+                        let ratio = near as f64 / a as f64;
+                        if ratio > worst_ratio { worst_ratio = ratio; }
+                    }
+                }
+            }
+            println!("  n={n}, t={t}: worst near/a ratio = {worst_ratio:.4} (should be ≤ ε₁)");
+        } else {
+            println!("  (skipped: {graph_path} not found)");
+        }
+
+        println!("\n{}", if all_ok { "  All E2 tests passed!" } else { "  SOME E2 TESTS FAILED!" });
+    }
+
     println!("\n=== All tests complete ===");
 }
 
