@@ -317,17 +317,113 @@ theorem capacity_maintained {n : ℕ} {A ν lam : ℝ} {t : ℕ}
         bagCapacity n A ν t level / (2 * A) := by ring
     _ ≤ ν * bagCapacity n A ν t level := capacity_arithmetic hA hb_ge hC3
 
+/-- Union bound on stranger count of a rebag: sum of three source contributions. -/
+theorem rebag_strangerCount_le {n : ℕ} (perm : Fin n → Fin n)
+    (split : ℕ → ℕ → SplitResult n) (level idx j : ℕ) :
+    jStrangerCount n perm (rebag split level idx) level idx j ≤
+    jStrangerCount n perm ((split (level + 1) (2 * idx)).toParent) level idx j +
+    jStrangerCount n perm ((split (level + 1) (2 * idx + 1)).toParent) level idx j +
+    jStrangerCount n perm (fromParent split level idx) level idx j := by
+  unfold rebag
+  linarith [jStrangerCount_union_le perm
+      ((split (level+1) (2*idx)).toParent ∪ (split (level+1) (2*idx+1)).toParent)
+      (fromParent split level idx) level idx j,
+    jStrangerCount_union_le perm
+      ((split (level+1) (2*idx)).toParent)
+      ((split (level+1) (2*idx+1)).toParent) level idx j]
+
+/-- Parent capacity: `bagCapacity` at level `l-1` equals capacity at `l` divided by `A`,
+    for `l ≥ 1`. -/
+theorem bagCapacity_parent {n : ℕ} {A ν : ℝ} {t level : ℕ} (hA : 0 < A)
+    (hlev : 1 ≤ level) :
+    bagCapacity n A ν t (level - 1) = bagCapacity n A ν t level / A := by
+  simp only [bagCapacity]
+  have hpow : A ^ level = A ^ (level - 1) * A := by
+    conv_lhs => rw [show level = (level - 1) + 1 from by omega]
+    exact pow_succ A (level - 1)
+  rw [hpow]; field_simp
+
+/-- Core arithmetic for stranger bound (j ≥ 2): factoring out `lam·ε^(j-1)` and
+    applying C4 (`2Aε + 1/A ≤ ν`). -/
+private theorem stranger_gt1_arithmetic {A ν lam ε b : ℝ} {j : ℕ}
+    (hC4 : SatisfiesC4_gt1 A ν ε)
+    (hA : 0 < A) (hlam : 0 ≤ lam) (hε : 0 ≤ ε) (hb : 0 ≤ b)
+    (hj : 2 ≤ j) :
+    2 * lam * ε ^ j * (A * b) + lam * ε ^ (j - 1) * (b / A) ≤
+    lam * ε ^ (j - 1) * (ν * b) := by
+  have hpow : ε ^ j = ε ^ (j - 1) * ε := by
+    conv_lhs => rw [show j = (j - 1) + 1 from by omega]
+    exact pow_succ ε (j - 1)
+  rw [hpow]
+  suffices h : 0 ≤ lam * ε ^ (j - 1) * b * (ν - (2 * A * ε + 1 / A)) by
+    have hfact : lam * ε ^ (j - 1) * (ν * b) -
+        (2 * lam * (ε ^ (j - 1) * ε) * (A * b) + lam * ε ^ (j - 1) * (b / A))
+      = lam * ε ^ (j - 1) * b * (ν - (2 * A * ε + 1 / A)) := by field_simp
+    linarith
+  exact mul_nonneg (mul_nonneg (mul_nonneg hlam (pow_nonneg hε _)) hb)
+    (by unfold SatisfiesC4_gt1 at hC4; linarith)
+
 /-- Clause (4) maintenance for `j ≥ 2`: stranger bound at stage `t+1`.
     Sources: (j+1)-strangers from children kicked up + (j-1)-strangers from parent.
-    Requires constraint (C4, j>1): `2·A·ε + 1/A ≤ ν`. -/
+    Requires constraint (C4, j>1): `2·A·ε + 1/A ≤ ν`.
+
+    Hypotheses on the split (Seiferas Section 5):
+    - `hkick_stranger`: j-strangers among items kicked from each child, measured at
+      the receiving level, bounded by `lam·ε^j·bagCapacity(child_level)`.
+    - `hparent_stranger`: j-strangers among items from parent bounded by
+      `lam·ε^(j-1)·bagCapacity(parent_level)` (includes ε filtering factor). -/
 theorem stranger_bound_maintained_gt1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n}
     (split : ℕ → ℕ → SplitResult n)
-    (inv : SeifInvariant n A ν lam ε t perm (rebag split))
-    (hC4 : SatisfiesC4_gt1 A ν ε) (level idx j : ℕ) (hj : 2 ≤ j) :
+    (hC4 : SatisfiesC4_gt1 A ν ε)
+    (hA : 1 < A) (hν : 0 < ν) (hlam : 0 < lam) (hε : 0 ≤ ε)
+    (hkick_stranger : ∀ l i j, 1 ≤ j →
+      (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) j : ℝ) ≤
+      lam * ε ^ j * bagCapacity n A ν t l)
+    (hparent_stranger : ∀ level idx j, 2 ≤ j →
+      (jStrangerCount n perm (fromParent split level idx) level idx j : ℝ) ≤
+      lam * ε ^ (j - 1) * bagCapacity n A ν t (level - 1))
+    (level idx j : ℕ) (hj : 2 ≤ j) :
     (jStrangerCount n perm (rebag split level idx) level idx j : ℝ) ≤
     lam * ε ^ (j - 1) * bagCapacity n A ν (t + 1) level := by
-  sorry
+  have hA_pos : (0 : ℝ) < A := by linarith
+  -- Bound each source
+  have hleft : (jStrangerCount n perm ((split (level+1) (2*idx)).toParent)
+      level idx j : ℝ) ≤ lam * ε ^ j * (A * bagCapacity n A ν t level) := by
+    have := hkick_stranger (level + 1) (2 * idx) j (by omega)
+    rwa [show (level + 1) - 1 = level from by omega,
+         show 2 * idx / 2 = idx from by omega, bagCapacity_child] at this
+  have hright : (jStrangerCount n perm ((split (level+1) (2*idx+1)).toParent)
+      level idx j : ℝ) ≤ lam * ε ^ j * (A * bagCapacity n A ν t level) := by
+    have := hkick_stranger (level + 1) (2 * idx + 1) j (by omega)
+    rwa [show (level + 1) - 1 = level from by omega,
+         show (2 * idx + 1) / 2 = idx from by omega, bagCapacity_child] at this
+  have hpar : (jStrangerCount n perm (fromParent split level idx) level idx j : ℝ) ≤
+      lam * ε ^ (j - 1) * (bagCapacity n A ν t level / A) := by
+    by_cases hlev : level = 0
+    · subst hlev; simp only [fromParent, ite_true]
+      rw [jStrangerCount_empty]; simp only [Nat.cast_zero]
+      have hcap : (0 : ℝ) ≤ bagCapacity n A ν t 0 := by unfold bagCapacity; positivity
+      exact mul_nonneg (mul_nonneg hlam.le (pow_nonneg hε _))
+        (div_nonneg hcap (le_of_lt hA_pos))
+    · rw [← bagCapacity_parent hA_pos (by omega)]
+      exact hparent_stranger level idx j hj
+  -- Assemble via union bound + arithmetic
+  calc (jStrangerCount n perm (rebag split level idx) level idx j : ℝ)
+      ≤ ↑(jStrangerCount n perm ((split (level+1) (2*idx)).toParent) level idx j) +
+        ↑(jStrangerCount n perm ((split (level+1) (2*idx+1)).toParent) level idx j) +
+        ↑(jStrangerCount n perm (fromParent split level idx) level idx j) := by
+        exact_mod_cast rebag_strangerCount_le perm split level idx j
+    _ ≤ lam * ε ^ j * (A * bagCapacity n A ν t level) +
+        lam * ε ^ j * (A * bagCapacity n A ν t level) +
+        lam * ε ^ (j - 1) * (bagCapacity n A ν t level / A) := by linarith
+    _ = 2 * lam * ε ^ j * (A * bagCapacity n A ν t level) +
+        lam * ε ^ (j - 1) * (bagCapacity n A ν t level / A) := by ring
+    _ ≤ lam * ε ^ (j - 1) * (ν * bagCapacity n A ν t level) :=
+        stranger_gt1_arithmetic hC4 hA_pos hlam.le hε
+          (by unfold bagCapacity; positivity) hj
+    _ = lam * ε ^ (j - 1) * bagCapacity n A ν (t + 1) level := by
+        rw [bagCapacity_succ_stage]
 
 /-- Clause (4) maintenance for `j = 1`: 1-stranger bound at stage `t+1`.
     This is the hardest case (Seiferas Section 5). Three sources:
