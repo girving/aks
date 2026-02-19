@@ -8,11 +8,12 @@
   • `expanderHalver`: the bipartite halver comparator network
   • `expanderHalver_isEpsilonHalver`: expanders yield ε-halvers (proved via Tanner's bound)
   • `expanderHalver_size`: the network has exactly m·d comparators
-  • `exists_halver_depth_le`: depth ≤ d (sorry, needs König's edge coloring)
+  • `exists_halver_depth_le`: depth ≤ d (via König's edge coloring)
 -/
 
 import AKS.Halver.Defs
 import AKS.Halver.Tanner
+import AKS.Konig.Coloring
 import AKS.Sort.Depth
 import AKS.Tree.Sorting
 
@@ -658,6 +659,260 @@ theorem expanderHalver_size {m d : ℕ} (G : RegularGraph m d) :
     (expanderHalver G).size = m * d :=
   bipartiteComparators_length G
 
+/-! **Generalized Halver for Any Bipartite Network** -/
+
+/-- General initial halved: any function w on Fin (2m) with permutation-count
+    and edge-monotonicity properties satisfies the initial halver bound. -/
+private lemma general_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d)
+    (β : ℝ) (hβ : spectralGap G ≤ β) (hβ_nn : 0 ≤ β)
+    (w : Fin (2 * m) → Fin (2 * m))
+    (h_count : ∀ k : ℕ, k ≤ 2 * m →
+      (univ.filter (fun i : Fin (2 * m) ↦ (w i).val < k)).card = k)
+    (h_mono : ∀ v : Fin m, ∀ p : Fin d,
+      w ⟨v.val, by omega⟩ ≤ w ⟨m + (G.neighbor v p).val, by omega⟩) :
+    EpsilonInitialHalved w β := by
+  show ∀ k : ℕ, k ≤ Fintype.card (Fin (2 * m)) / 2 →
+    ((univ.filter (fun pos : Fin (2 * m) ↦
+        Fintype.card (Fin (2 * m)) / 2 ≤ rank pos ∧ rank (w pos) < k)).card : ℝ) ≤ β * k
+  simp only [Fintype.card_fin, show 2 * m / 2 = m from Nat.mul_div_cancel_left m (by omega)]
+  intro k hk
+  simp_rw [rank_fin]
+  set s := (univ.filter (fun pos : Fin (2 * m) ↦ m ≤ pos.val ∧ (w pos).val < k)).card
+  show (s : ℝ) ≤ β * ↑k
+  rcases Nat.eq_zero_or_pos k with rfl | hk_pos
+  · simp [show s = 0 from by
+      simp only [s, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
+      intro pos _; simp [Nat.not_lt_zero]]
+  have hm : 0 < m := by omega
+  set T : Finset (Fin m) := univ.filter (fun u : Fin m ↦ (w ⟨m + u.val, by omega⟩).val < k)
+  have hs_eq : s = T.card := by
+    simp only [s, T]
+    apply Finset.card_nbij'
+      (fun pos ↦ (⟨pos.val - m, by omega⟩ : Fin m))
+      (fun u ↦ (⟨m + u.val, by omega⟩ : Fin (2 * m)))
+    · intro pos hpos
+      simp only [mem_coe, mem_filter, mem_univ, true_and] at hpos ⊢
+      have heq : (⟨m + (pos.val - m), (by omega : m + (pos.val - m) < 2 * m)⟩ : Fin (2 * m)) =
+          pos := Fin.ext (by simp only [Fin.val_mk]; omega)
+      rw [heq]; exact hpos.2
+    · intro u hu
+      simp only [mem_coe, mem_filter, mem_univ, true_and] at hu ⊢
+      exact ⟨by omega, hu⟩
+    · intro pos hpos
+      simp only [mem_coe, mem_filter, mem_univ, true_and] at hpos
+      exact Fin.ext (by simp only [Fin.val_mk]; omega)
+    · intro u _; exact Fin.ext (by simp only [Fin.val_mk]; omega)
+  -- Neighborhood containment from edge monotonicity
+  have hN_sub : G.neighborSet T ⊆ univ.filter (fun v : Fin m ↦
+      (w ⟨v.val, by omega⟩).val < k) := by
+    intro v hv
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and]
+    simp only [RegularGraph.neighborSet, Finset.mem_filter, Finset.mem_univ, true_and] at hv
+    obtain ⟨p, hp⟩ := hv
+    simp only [T, mem_filter, mem_univ, true_and] at hp
+    exact lt_of_le_of_lt (Fin.le_def.mp (h_mono v p)) hp
+  -- Counting: exactly k positions have output val < k
+  have h_total : (univ.filter (fun i : Fin (2 * m) ↦ (w i).val < k)).card = k :=
+    h_count k (by omega)
+  have h_split := card_filter_fin_double (fun i : Fin (2 * m) ↦ (w i).val < k)
+  set top_count := (univ.filter (fun v : Fin m ↦ (w ⟨v.val, by omega⟩).val < k)).card
+  have h_total' : top_count + T.card = k := by rw [← h_split]; exact h_total
+  have hN_card : (G.neighborSet T).card ≤ k - T.card := by
+    have h1 : (G.neighborSet T).card ≤ top_count := Finset.card_le_card hN_sub
+    omega
+  -- Tanner contradiction
+  by_contra h_contra; push_neg at h_contra
+  rw [hs_eq] at h_contra
+  have hT_pos : 0 < T.card := by
+    rcases Nat.eq_zero_or_pos T.card with h0 | h0
+    · simp [h0] at h_contra; linarith [mul_nonneg hβ_nn (Nat.cast_nonneg k)]
+    · exact h0
+  have hsm : T.card ≤ m := Finset.card_filter_le _ _ |>.trans (by simp)
+  have hTk : T.card ≤ k := by omega
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · have h1 : 1 ≤ β := le_trans (one_le_spectralGap_of_d_eq_zero G hm) hβ
+    have : (T.card : ℝ) ≤ β * ↑k := by
+      calc (T.card : ℝ) ≤ ↑k := by exact_mod_cast hTk
+        _ = 1 * ↑k := (one_mul _).symm
+        _ ≤ β * ↑k := mul_le_mul_of_nonneg_right h1 (Nat.cast_nonneg k)
+    linarith
+  have h_tanner := tanner_bound G hd hm β hβ hβ_nn T hT_pos
+  have h_combined : (T.card : ℝ) * ↑m ≤
+      (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
+    have hsm' : (T.card : ℝ) ≤ ↑m := by exact_mod_cast hsm
+    calc (T.card : ℝ) * ↑m
+        ≤ ↑(G.neighborSet T).card * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := h_tanner
+      _ ≤ (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
+          apply mul_le_mul_of_nonneg_right _ (by nlinarith [sq_nonneg β])
+          exact_mod_cast hN_card
+  exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
+
+/-- General final halved: dual of initial halved via OrderDual. -/
+private lemma general_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
+    (β : ℝ) (hβ : spectralGap G ≤ β) (hβ_nn : 0 ≤ β)
+    (w : Fin (2 * m) → Fin (2 * m))
+    (h_count : ∀ k : ℕ, k ≤ 2 * m →
+      (univ.filter (fun i : Fin (2 * m) ↦ (w i).val < k)).card = k)
+    (h_mono : ∀ v : Fin m, ∀ p : Fin d,
+      w ⟨v.val, by omega⟩ ≤ w ⟨m + (G.neighbor v p).val, by omega⟩) :
+    EpsilonFinalHalved w β := by
+  unfold EpsilonFinalHalved
+  show ∀ k : ℕ, k ≤ Fintype.card (Fin (2 * m))ᵒᵈ / 2 →
+    ((univ.filter (fun pos : (Fin (2 * m))ᵒᵈ ↦
+        Fintype.card (Fin (2 * m))ᵒᵈ / 2 ≤ @rank (Fin (2 * m))ᵒᵈ _ _ pos ∧
+        @rank (Fin (2 * m))ᵒᵈ _ _ (w pos) < k)).card : ℝ) ≤ β * k
+  simp only [Fintype.card_fin, Fintype.card_orderDual,
+    show 2 * m / 2 = m from Nat.mul_div_cancel_left m (by omega)]
+  intro k hk
+  simp_rw [rank_orderDual_fin]
+  have h_filter_eq : (univ.filter (fun pos : (Fin (2 * m))ᵒᵈ ↦
+      m ≤ 2 * m - 1 - (OrderDual.ofDual pos).val ∧
+      2 * m - 1 - (OrderDual.ofDual (w pos)).val < k)).card =
+    (univ.filter (fun pos : Fin (2 * m) ↦
+      pos.val < m ∧ 2 * m - k ≤ (w pos).val)).card := by
+    apply Finset.card_nbij' (fun x => OrderDual.ofDual x) (fun x => OrderDual.toDual x)
+    · intro x hx; simp only [mem_coe, mem_filter, mem_univ, true_and] at hx ⊢
+      obtain ⟨h1, h2⟩ := hx
+      have hx_le : (OrderDual.ofDual x).val ≤ 2 * m - 1 := by omega
+      have hw_le : (OrderDual.ofDual (w x)).val ≤ 2 * m - 1 := by omega
+      have hm1 : 1 ≤ 2 * m := by omega
+      have hk_le : k ≤ 2 * m := by omega
+      constructor
+      · zify [hx_le, hm1] at h1; omega
+      · show 2 * m - k ≤ (OrderDual.ofDual (w x)).val
+        zify [hw_le, hm1, hk_le] at h2 ⊢; omega
+    · intro x hx; simp only [mem_coe, mem_filter, mem_univ, true_and] at hx ⊢
+      obtain ⟨h1, h2⟩ := hx
+      have hm1 : 1 ≤ 2 * m := by omega
+      have hk_le : k ≤ 2 * m := by omega
+      constructor
+      · show m ≤ 2 * m - 1 - x.val
+        zify [show x.val ≤ 2 * m - 1 from by omega, hm1]; omega
+      · show 2 * m - 1 - (w x).val < k
+        zify [show (w x).val ≤ 2 * m - 1 from by omega, hm1, hk_le] at h2 ⊢; omega
+    · intro x _; rfl
+    · intro x _; rfl
+  rw [h_filter_eq]
+  set s := (univ.filter (fun pos : Fin (2 * m) ↦
+    pos.val < m ∧ 2 * m - k ≤ (w pos).val)).card
+  show (s : ℝ) ≤ β * ↑k
+  rcases Nat.eq_zero_or_pos k with rfl | hk_pos
+  · simp [show s = 0 from by
+      simp only [s, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
+      intro pos _; omega]
+  have hm : 0 < m := by omega
+  set T : Finset (Fin m) := univ.filter (fun v : Fin m ↦ 2 * m - k ≤ (w ⟨v.val, by omega⟩).val)
+  have hs_eq : s = T.card := by
+    show (univ.filter (fun pos : Fin (2 * m) ↦
+      pos.val < m ∧ 2 * m - k ≤ (w pos).val)).card = T.card
+    rw [← Finset.filter_filter]
+    exact card_filter_top_half (fun i : Fin (2 * m) ↦ 2 * m - k ≤ (w i).val)
+  -- Neighborhood containment (≥ direction) from edge monotonicity
+  have hN_sub : G.neighborSet T ⊆ univ.filter (fun u : Fin m ↦
+      2 * m - k ≤ (w ⟨m + u.val, by omega⟩).val) := by
+    intro u hu
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and]
+    simp only [RegularGraph.neighborSet, Finset.mem_filter, Finset.mem_univ, true_and] at hu
+    obtain ⟨p, hp⟩ := hu
+    simp only [T, mem_filter, mem_univ, true_and] at hp
+    have h1 := hp
+    have h2 := Fin.le_def.mp (h_mono (G.neighbor u p) (G.reversePort u p))
+    simp only [G.neighbor_reversePort] at h2
+    exact le_trans h1 h2
+  -- Counting complement
+  have h_total_lt : (univ.filter (fun i : Fin (2 * m) ↦ (w i).val < 2 * m - k)).card =
+      2 * m - k := h_count (2 * m - k) (by omega)
+  have h_total : (univ.filter (fun i : Fin (2 * m) ↦ 2 * m - k ≤ (w i).val)).card = k := by
+    have hcomp := card_filter_add_card_filter_not
+      (fun i : Fin (2 * m) ↦ (w i).val < 2 * m - k) (s := univ)
+    simp only [card_univ, Fintype.card_fin] at hcomp
+    have : (univ.filter (fun i : Fin (2 * m) ↦ ¬(w i).val < 2 * m - k)).card = k := by omega
+    convert this using 1; congr 1; ext i; simp [Nat.not_lt]
+  have h_split := card_filter_fin_double (fun i : Fin (2 * m) ↦ 2 * m - k ≤ (w i).val)
+  set bottom_count := (univ.filter (fun u : Fin m ↦
+    2 * m - k ≤ (w ⟨m + u.val, by omega⟩).val)).card
+  have h_total' : T.card + bottom_count = k := by rw [← h_split]; exact h_total
+  have hN_card : (G.neighborSet T).card ≤ k - T.card := by
+    have h1 : (G.neighborSet T).card ≤ bottom_count := Finset.card_le_card hN_sub
+    omega
+  -- Tanner contradiction
+  by_contra h_contra; push_neg at h_contra
+  rw [hs_eq] at h_contra
+  have hT_pos : 0 < T.card := by
+    rcases Nat.eq_zero_or_pos T.card with h0 | h0
+    · simp [h0] at h_contra; linarith [mul_nonneg hβ_nn (Nat.cast_nonneg k)]
+    · exact h0
+  have hsm : T.card ≤ m := Finset.card_filter_le _ _ |>.trans (by simp)
+  have hTk : T.card ≤ k := by omega
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · have h1 : 1 ≤ β := le_trans (one_le_spectralGap_of_d_eq_zero G hm) hβ
+    have : (T.card : ℝ) ≤ β * ↑k := by
+      calc (T.card : ℝ) ≤ ↑k := by exact_mod_cast hTk
+        _ = 1 * ↑k := (one_mul _).symm
+        _ ≤ β * ↑k := mul_le_mul_of_nonneg_right h1 (Nat.cast_nonneg k)
+    linarith
+  have h_tanner := tanner_bound G hd hm β hβ hβ_nn T hT_pos
+  have h_combined : (T.card : ℝ) * ↑m ≤
+      (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
+    have hsm' : (T.card : ℝ) ≤ ↑m := by exact_mod_cast hsm
+    calc (T.card : ℝ) * ↑m
+        ≤ ↑(G.neighborSet T).card * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := h_tanner
+      _ ≤ (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
+          apply mul_le_mul_of_nonneg_right _ (by nlinarith [sq_nonneg β])
+          exact_mod_cast hN_card
+  exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
+
+/-- Any bipartite comparator network containing all edges of G is a β-halver.
+    The proof uses `foldl_member_order` for edge monotonicity (works for any
+    ordering of bipartite comparators) and the Tanner bound for the halver
+    counting argument. -/
+private theorem any_bipartite_isEpsilonHalver {m d : ℕ} (G : RegularGraph m d)
+    (β : ℝ) (hβ : spectralGap G ≤ β)
+    (net : ComparatorNetwork (2 * m))
+    (h_bip : ∀ c ∈ net.comparators, c.i.val < m ∧ m ≤ c.j.val)
+    (h_edges : ∀ v : Fin m, ∀ p : Fin d,
+      (⟨⟨v.val, by omega⟩, ⟨m + (G.neighbor v p).val, by omega⟩,
+        by simp [Fin.lt_def]; omega⟩ : Comparator (2 * m)) ∈ net.comparators) :
+    IsEpsilonHalver net β := by
+  have hβ_nn := le_trans (spectralGap_nonneg G) hβ
+  intro v
+  have h_mono : ∀ u : Fin m, ∀ p : Fin d,
+      net.exec (↑v) ⟨u.val, by omega⟩ ≤
+      net.exec (↑v) ⟨m + (G.neighbor u p).val, by omega⟩ :=
+    fun u p ↦ foldl_member_order net.comparators _ (h_edges u p) h_bip (↑v)
+  have h_count : ∀ k : ℕ, k ≤ 2 * m →
+      (univ.filter (fun i : Fin (2 * m) ↦ (net.exec (↑v) i).val < k)).card = k :=
+    fun k hk ↦ exec_perm_card_lt net v k hk
+  exact ⟨general_epsilon_initial_halved G β hβ hβ_nn _ h_count h_mono,
+         general_epsilon_final_halved G β hβ hβ_nn _ h_count h_mono⟩
+
+
+/-! **König Depth Bound** -/
+
+/-- A König matching layer: for each vertex v, the comparator pairing v with
+    the bottom vertex determined by the matching's port assignment. -/
+private def konigLayer {m d : ℕ} (G : RegularGraph m d)
+    (portOf : Fin m → Fin d) : List (Comparator (2 * m)) :=
+  (List.finRange m).map fun v ↦
+    ⟨⟨v.val, by omega⟩, ⟨m + (G.neighbor v (portOf v)).val, by omega⟩,
+     by simp [Fin.lt_def]; omega⟩
+
+/-- A matching layer is parallel: no two comparators share a wire. -/
+private lemma konigLayer_isParallel {m d : ℕ} (G : RegularGraph m d)
+    (portOf : Fin m → Fin d)
+    (h_inj : Function.Injective (fun v ↦ G.neighbor v (portOf v))) :
+    IsParallelLayer (konigLayer G portOf) := by
+  simp only [konigLayer, IsParallelLayer, List.pairwise_map]
+  apply List.Pairwise.imp _ (List.nodup_finRange m)
+  intro v₁ v₂ hne
+  unfold Comparator.overlaps; push_neg
+  have h_bot_ne : (G.neighbor v₁ (portOf v₁)).val ≠ (G.neighbor v₂ (portOf v₂)).val :=
+    fun h ↦ hne (h_inj (Fin.ext h))
+  exact ⟨by simp [Fin.ext_iff]; exact Fin.val_ne_of_ne hne,
+         by simp [Fin.ext_iff]; omega,
+         by simp [Fin.ext_iff]; omega,
+         by simp [Fin.ext_iff]; omega⟩
+
 /-- For any d-regular graph G with spectral gap ≤ β, there exists a β-halver
     of size m·d and depth at most d. The depth bound follows from König's edge
     coloring theorem: the bipartite comparator multigraph has max degree d on
@@ -669,7 +924,51 @@ theorem exists_halver_depth_le {m d : ℕ} (G : RegularGraph m d)
     (β : ℝ) (hβ : spectralGap G ≤ β) :
     ∃ (net : ComparatorNetwork (2 * m)),
       IsEpsilonHalver net β ∧ net.size ≤ m * d ∧ net.depth ≤ d := by
-  sorry
+  -- Case d = 0: use 0-layer parallel decomposition
+  rcases Nat.eq_zero_or_pos d with rfl | hd
+  · exact ⟨expanderHalver G, expanderHalver_isEpsilonHalver G β hβ,
+      le_of_eq (expanderHalver_size G),
+      depth_le_of_decomposition _ [] ⟨fun _ h ↦ (nomatch h),
+        by simp [expanderHalver, bipartiteComparators]⟩⟩
+  -- Case d > 0: use König's edge coloring
+  let B := RegBipartite.ofRegularGraph G
+  let matchings := B.konigMatchings hd
+  -- Build König layers: one per matching
+  let layers : List (List (Comparator (2 * m))) :=
+    (List.finRange d).map fun k ↦ konigLayer G (fun v ↦ (matchings k).portOf v)
+  let net : ComparatorNetwork (2 * m) := ⟨layers.flatten⟩
+  refine ⟨net, ?_, ?_, ?_⟩
+  · -- Halver property
+    apply any_bipartite_isEpsilonHalver G β hβ net
+    · -- All comparators are bipartite
+      intro c hc
+      simp only [net, layers, List.mem_flatten, List.mem_map, List.mem_finRange, true_and] at hc
+      obtain ⟨_, ⟨_, rfl⟩, hc'⟩ := hc
+      simp only [konigLayer, List.mem_map, List.mem_finRange, true_and] at hc'
+      obtain ⟨v, rfl⟩ := hc'
+      exact ⟨v.isLt, Nat.le_add_right m _⟩
+    · -- All edges are present: for each (v, p), the edge comparator is in the König list
+      intro v p
+      obtain ⟨k, hk⟩ := (B.konigMatchings_bijective hd v).2 p
+      dsimp only at hk; subst hk
+      show _ ∈ layers.flatten
+      exact List.mem_flatten.mpr
+        ⟨_, List.mem_map.mpr ⟨k, List.mem_finRange k, rfl⟩,
+         List.mem_map.mpr ⟨v, List.mem_finRange v, rfl⟩⟩
+  · -- Size bound
+    show layers.flatten.length ≤ m * d
+    simp only [layers, List.length_flatten, List.map_map, Function.comp_def,
+      konigLayer, List.length_map, List.length_finRange, List.map_const',
+      List.sum_replicate, smul_eq_mul]
+    exact Nat.mul_comm d m ▸ le_refl _
+  · -- Depth bound: d layers of parallel comparators
+    have hdecomp : IsParallelDecomposition net layers :=
+      ⟨fun layer hl ↦ by
+        simp only [layers, List.mem_map, List.mem_finRange, true_and] at hl
+        obtain ⟨k, rfl⟩ := hl
+        exact konigLayer_isParallel G _ (matchings k).injective, rfl⟩
+    calc net.depth ≤ layers.length := depth_le_of_decomposition net layers hdecomp
+      _ = d := by simp [layers, List.length_map, List.length_finRange]
 
 /-- Build a `HalverFamily` from an expander family. For each half-size `m > 0`,
     uses `exists_halver_depth_le` to choose a depth-optimal β-halver from the
