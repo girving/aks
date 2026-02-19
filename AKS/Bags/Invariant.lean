@@ -146,6 +146,23 @@ noncomputable def parentStrangerCoeff (A lam ε : ℝ) : ℝ :=
   2 * lam * ε * A / (1 - (2 * ε * A) ^ 2) +
   1 / (8 * A ^ 3 - 2 * A)
 
+/-- Coefficient for sibling-native items bound (measured at parent level).
+    Three sub-sources: halving errors `ε/2`, subtree stranger accumulation
+    `2λεA²/(1-(2εA)²)`, and above-parent items `1/(8A²-2)`. -/
+noncomputable def cnativeCoeff (A lam ε : ℝ) : ℝ :=
+  ε / 2 + 2 * lam * ε * A ^ 2 / (1 - (2 * ε * A) ^ 2) + 1 / (8 * A ^ 2 - 2)
+
+/-- `parentStrangerCoeff × A = lam*ε + cnativeCoeff`: the parent coefficient at child level
+    decomposes into the 2-stranger contribution plus sibling-native contribution. -/
+theorem parentStrangerCoeff_mul_A {A lam ε : ℝ} (hA : A ≠ 0) :
+    parentStrangerCoeff A lam ε * A = lam * ε + cnativeCoeff A lam ε := by
+  unfold parentStrangerCoeff cnativeCoeff
+  have hA2 : A ^ 2 ≠ 0 := pow_ne_zero 2 hA
+  have h8 : 8 * A ^ 3 - 2 * A = (8 * A ^ 2 - 2) * A := by ring
+  rw [h8]
+  field_simp
+  ring
+
 /-- The C4 (j=1) constraint decomposes as children + parent coefficient ≤ λν. -/
 theorem c4_eq1_decomposed {A ν lam ε : ℝ} (hC4 : SatisfiesC4_eq1 A ν lam ε) :
     2 * lam * ε * A + parentStrangerCoeff A lam ε ≤ lam * ν := by
@@ -516,24 +533,89 @@ theorem stranger_bound_maintained_eq1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       _ = lam * bagCapacity n A ν (t + 1) level := by
           rw [bagCapacity_succ_stage]
 
+/-- 1-strangers ≤ 2-strangers + sibling-native (unconditional filter partition bound). -/
+private theorem jStrangerCount_one_le_two_plus_sibling {n : ℕ} (perm : Fin n → Fin n)
+    (regs : Finset (Fin n)) (level idx : ℕ) :
+    jStrangerCount n perm regs level idx 1 ≤
+    jStrangerCount n perm regs level idx 2 + siblingNativeCount n perm regs level idx := by
+  simp only [jStrangerCount, siblingNativeCount]
+  -- filter(isJ 1) ⊆ filter(isJ 2) ∪ filter(isJ 1 ∧ ¬isJ 2)
+  calc (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1)).card
+      ≤ (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 2) ∪
+         regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1 ∧
+           ¬isJStranger n (perm i).val level idx 2)).card := by
+        apply Finset.card_le_card
+        intro x; simp only [Finset.mem_filter, Finset.mem_union]
+        intro ⟨hm, h1⟩
+        by_cases h2 : isJStranger n (perm x).val level idx 2
+        · exact Or.inl ⟨hm, h2⟩
+        · exact Or.inr ⟨hm, h1, h2⟩
+    _ ≤ (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 2)).card +
+        (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1 ∧
+          ¬isJStranger n (perm i).val level idx 2)).card :=
+        Finset.card_union_le _ _
+
 /-- Parent 1-stranger bound: among items sent from parent to child bag B,
     the 1-strangers are bounded by `parentStrangerCoeff × capacity`.
-    Combines four sub-sources (Seiferas Section 5):
-    (a) ε fraction of parent's 1-strangers escape filtering
+    Decomposes 1-strangers into 2-strangers + sibling-native items, then bounds
+    each component separately using the provided hypotheses.
+    The 2-stranger bound comes from the invariant's stranger bound at j=2.
+    The sibling-native bound requires three sub-sources (Seiferas Section 5):
     (b) Halving errors: C-native items on wrong side of separator
-    (c) Excess C-native from subtree stranger accumulation (geometric series with ratio `(2εA)²`)
+    (c) Excess C-native from subtree stranger accumulation (geometric series)
     (d) C-native items from levels above parent -/
 theorem parent_1stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n}
-    (bags : BagAssignment n)
     (split : ℕ → ℕ → SplitResult n)
-    (hA : 1 < A) (hlam : 0 < lam) (hε : 0 ≤ ε)
+    (hA : 1 < A) (hν : 0 < ν) (hlam : 0 ≤ lam) (hε : 0 ≤ ε)
     (h2εA : (2 * ε * A) ^ 2 < 1)
-    (hinv : SeifInvariant n A ν lam ε t perm bags)
+    -- Bound on 2-strangers among items from parent
+    (hparent_stranger_j2 : ∀ level idx,
+      (jStrangerCount n perm (fromParent split level idx) level idx 2 : ℝ) ≤
+      lam * ε * bagCapacity n A ν t (level - 1))
+    -- Bound on sibling-native items from parent
+    (hcnative_bound : ∀ level idx,
+      (siblingNativeCount n perm (fromParent split level idx) level idx : ℝ) ≤
+      cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1))
     (level idx : ℕ) :
     (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
     parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by
-  sorry
+  have hA_pos : (0 : ℝ) < A := by linarith
+  have hA_ne : A ≠ 0 := ne_of_gt hA_pos
+  -- Level 0: fromParent = ∅
+  by_cases hlev : level = 0
+  · subst hlev; simp only [fromParent, ite_true]
+    rw [jStrangerCount_empty]; simp only [Nat.cast_zero]
+    apply mul_nonneg
+    · unfold parentStrangerCoeff
+      have hd : (0 : ℝ) < 8 * A ^ 3 - 2 * A := by nlinarith [sq_nonneg A, sq_abs A]
+      have hden : (0 : ℝ) < 1 - (2 * ε * A) ^ 2 := by linarith
+      apply add_nonneg (add_nonneg (add_nonneg ?_ ?_) ?_) ?_
+      · exact div_nonneg (by positivity) (by linarith)
+      · exact div_nonneg (by positivity) (by linarith)
+      · exact div_nonneg (by positivity) (by linarith)
+      · exact div_nonneg (by linarith) (by linarith)
+    · unfold bagCapacity; positivity
+  -- Level ≥ 1: decompose and bound
+  · have hlev1 : 1 ≤ level := by omega
+    -- Use partition bound: 1-strangers ≤ 2-strangers + sibling-native
+    have hdecomp := jStrangerCount_one_le_two_plus_sibling perm
+      (fromParent split level idx) level idx
+    -- Combine: ≤ (lam*ε + cnativeCoeff) * cap(parent) = parentStrangerCoeff * cap(level)
+    calc (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ)
+        ≤ (jStrangerCount n perm (fromParent split level idx) level idx 2 : ℝ) +
+          (siblingNativeCount n perm (fromParent split level idx) level idx : ℝ) := by
+          exact_mod_cast hdecomp
+      _ ≤ lam * ε * bagCapacity n A ν t (level - 1) +
+          cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
+          linarith [hparent_stranger_j2 level idx, hcnative_bound level idx]
+      _ = (lam * ε + cnativeCoeff A lam ε) * bagCapacity n A ν t (level - 1) := by ring
+      _ = parentStrangerCoeff A lam ε * A * bagCapacity n A ν t (level - 1) := by
+          rw [parentStrangerCoeff_mul_A hA_ne]
+      _ = parentStrangerCoeff A lam ε * (A * bagCapacity n A ν t (level - 1)) := by ring
+      _ = parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by
+          conv_rhs => rw [show level = (level - 1) + 1 from by omega]
+          rw [bagCapacity_child]
 
 private lemma split_empty_of_bags_empty {n : ℕ}
     {bags : BagAssignment n}
