@@ -58,206 +58,202 @@ two-case proof:
 - Derived `hfrom_parent_empty` internally: when `cap(l) < A`,
   `cap(l-1) = cap(l)/A < 1`, so parent bag has card 0, hence empty
 
-## Work Packages
+## Parallel Part B Work: Two Instances
 
-### Part A: Low-Risk (known-correct statements, clear proof paths)
+The remaining Part B Lean formalization splits into two parallel streams that
+share only the **split definition** (which positions go to parent/left/right).
+
+### Shared Prerequisite: Split Definition
+
+Both instances use the same position-based split. Given a separator applied to
+a bag of `b` items at `(level, idx)`:
+- **toParent** (fringe): positions `0..⌊λ·b⌋` and `b - ⌊λ·b⌋..b` (bottom λ and top λ)
+- **toLeftChild**: positions `⌊λ·b⌋..⌊b/2⌋` (middle-left)
+- **toRightChild**: positions `⌊b/2⌋..b - ⌊λ·b⌋` (middle-right)
+
+This is defined per-bag. The `split : ℕ → ℕ → SplitResult n` function maps
+`(level, idx)` to the three components. For inactive bags (odd parity), the split
+is trivially `(∅, ∅, ∅)`.
+
+The split definition should go in a new file `AKS/Bags/Split.lean` that imports
+`AKS/Bags/Invariant.lean`. Both instances can create this file independently with
+the same content, or one can create it first and the other rebase.
+
+**Concrete Lean definition sketch:**
+```lean
+/-- Position-based split of a bag after separator application.
+    Given `b` items, the fringe is the bottom and top `⌊λ·b⌋` positions;
+    the middle is split at position `⌊b/2⌋`. -/
+def concreteSplit (n : ℕ) (lam : ℝ) (bags : BagAssignment n)
+    (output : Fin n → Fin n)  -- separator output permutation
+    (level idx : ℕ) : SplitResult n :=
+  let regs := bags level idx      -- registers in this bag
+  let b := regs.card               -- bag size
+  let fringeSize := ⌊lam * b⌋₊    -- items in each fringe
+  -- Sort positions within the bag by their output value
+  -- toParent = bottom fringeSize + top fringeSize positions
+  -- toLeftChild = positions fringeSize .. b/2
+  -- toRightChild = positions b/2 .. b - fringeSize
+  { toParent := ...
+    toLeftChild := ...
+    toRightChild := ... }
+```
+
+### Instance 1: Cardinality Bounds (position counting)
+
+**Goal:** Prove the cardinality hypotheses of `invariant_maintained` hold for
+the concrete split.
+
+**Hypotheses to prove:**
+```
+hsplit_sub  : ∀ l i, (split l i).toParent ⊆ bags l i ∧ ...
+hsplit_leaf : ∀ l i, maxLevel n ≤ l → (split l i).toLeftChild = ∅ ∧ ...
+hkick      : ∀ l i, ((split l i).toParent.card : ℝ) ≤ 2 * lam * bagCapacity n A ν t l + 1
+hsend_left : ∀ l i, ((split l i).toLeftChild.card : ℝ) ≤ bagCapacity n A ν t l / 2
+hsend_right: ∀ l i, ((split l i).toRightChild.card : ℝ) ≤ bagCapacity n A ν t l / 2
+hkick_pair : ∀ l i, bagCapacity n A ν t l < A →
+               ((split (l+1) (2*i)).toParent.card +
+                (split (l+1) (2*i+1)).toParent.card : ℝ) ≤
+               4 * lam * bagCapacity n A ν t (l+1)
+hrebag_uniform  : ∀ level i₁ i₂, ... → (rebag split level i₁).card = ...
+hrebag_disjoint : ∀ l₁ l₂ i₁ i₂, (l₁,i₁) ≠ (l₂,i₂) → Disjoint ...
+```
+
+**Mathematical content:** Pure position-range arithmetic.
+- `hkick`: fringe has `2 * ⌊λ·b⌋` items ≤ `2λb` (floor bound) — the +1 comes
+  from rounding. Since `b ≤ cap`, this gives `≤ 2λ·cap + 1`.
+- `hsend_left/right`: middle-left has `⌊b/2⌋ - ⌊λ·b⌋` items ≤ `b/2 ≤ cap/2`.
+- `hkick_pair`: when `cap < A`, both children have even item count (from uniform
+  size + power-of-2 divisibility), so `2·⌊λ·b⌋` is exact (no +1 rounding), giving
+  `4λ·A·cap` total for the pair.
+- `hsplit_sub`: by construction, all items come from the bag.
+- `hrebag_uniform`: from uniform bag sizes + uniform split.
+- `hrebag_disjoint`: from split being a partition of disjoint bags.
+
+**Key Lean tools:** `Nat.floor_le`, `Nat.div_le_self`, `Finset.card_filter_le`,
+`SeifInvariant.uniform_size`, `SeifInvariant.bags_disjoint`.
+
+**Does NOT reference:** `perm`, `nativeBagIdx`, `isJStranger`, `jStrangerCount`,
+`siblingNativeCount`, `parentStrangerCoeff`, `cnativeCoeff`.
+
+**File:** `AKS/Bags/SplitCard.lean` (new, imports `Split.lean` + `Invariant.lean`)
+
+### Instance 2: Stranger Bounds (rank structure)
+
+**Goal:** Prove the stranger-count hypotheses of `invariant_maintained` hold for
+the concrete split.
+
+**Hypotheses to prove:**
+```
+hkick_stranger    : ∀ l i j, 1 ≤ j →
+                      (jStrangerCount n perm (split l i).toParent (l-1) (i/2) j : ℝ) ≤
+                      lam * ε^j * bagCapacity n A ν t l
+hparent_stranger  : ∀ level idx j, 2 ≤ j →
+                      (jStrangerCount n perm (fromParent split level idx) level idx j : ℝ) ≤
+                      lam * ε^(j-1) * bagCapacity n A ν t (level-1)
+hparent_1stranger : ∀ level idx,
+                      (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
+                      parentStrangerCoeff A lam ε * bagCapacity n A ν t level
+```
+
+**Mathematical content:** Rank-based counting using the separator's (γ,ε) guarantee.
+
+- `hkick_stranger`: Fringe items are from the extreme positions of the separator
+  output. At the *parent* level `(l-1, i/2)`, most fringe items are native (they're
+  in the wrong child but right parent). The ε factor comes from: the separator's
+  error rate means only ε-fraction of items are on the wrong side of the separation
+  boundary. For j ≥ 2, the bound factors through `isJStranger_antitone`.
+  **Rust finding:** max ratio 0.0000, meaning fringe items have essentially 0
+  strangers at parent level. The proof should be: fringe items ⊆ bag items,
+  stranger count at parent level = 0 because fringe items are native to the
+  parent (being in the correct half of the parent's range).
+
+- `hparent_stranger` (j ≥ 2): Items from parent already satisfy the invariant's
+  stranger bound at the parent level. Pushing through `fromParent` (which selects
+  left/right child) preserves stranger counts via `jStrangerCount_mono` (subset).
+
+- `hparent_1stranger`: This is the hardest. Decomposes via `parent_1stranger_bound`
+  (already proved in `Invariant.lean`) into:
+  - `hparent_stranger_j2`: 2-strangers among fromParent ≤ `lam·ε·cap(parent)` — follows
+    from the invariant's stranger bound at j=2 + subset monotonicity.
+  - `hcnative_bound`: sibling-native among fromParent ≤ `cnativeCoeff·cap(parent)` — this
+    is the three-source decomposition (ε/2 halver misroutes + geometric series + ancestor items).
+
+**Key Lean tools:** `jStrangerCount_mono` (subset monotonicity), `isJStranger_antitone`,
+`jStrangerCount_one_eq_two_plus_sibling`, `parent_1stranger_bound` (already proved),
+`IsSeparator`/`IsApproxSep` (separator guarantee from `Separator/Defs.lean`).
+
+**Does NOT reference:** `Finset.card` bounds on split components (those are Instance 1's job).
+Uses only that fringe ⊆ bag (structural) and the invariant's existing stranger bounds.
+
+**File:** `AKS/Bags/SplitStranger.lean` (new, imports `Split.lean` + `Invariant.lean` + `Separator/Defs.lean`)
+
+### Assembly (after both instances complete)
+
+Once both instances deliver their results, a short assembly file combines them:
+
+**File:** `AKS/Bags/SplitProof.lean` (imports `SplitCard.lean` + `SplitStranger.lean`)
+
+```lean
+/-- The concrete split satisfies all hypotheses of `invariant_maintained`. -/
+theorem concrete_split_maintains_invariant ... :
+    SeifInvariant n A ν lam ε (t + 1) perm (rebag (concreteSplit ...)) :=
+  invariant_maintained (concreteSplit ...)
+    inv hparams
+    hsplit_sub_proof       -- from SplitCard
+    hsplit_leaf_proof      -- from SplitCard
+    hkick_proof            -- from SplitCard
+    hsend_left_proof       -- from SplitCard
+    hsend_right_proof      -- from SplitCard
+    hkick_pair_proof       -- from SplitCard
+    hkick_stranger_proof   -- from SplitStranger
+    hparent_stranger_proof -- from SplitStranger
+    hparent_1stranger_proof -- from SplitStranger
+    hrebag_uniform_proof   -- from SplitCard
+    hrebag_disjoint_proof  -- from SplitCard
+```
+
+This is ~20 lines of plumbing.
+
+## Work Packages (updated)
+
+### Part A: Low-Risk
 
 #### WP-A1: Fix `halverToSeparatorFamily'.isSep` with power-of-2 restriction
-
-**File:** `AKS/Seiferas.lean` (line 114–121)
-
-**Problem:** `SeparatorFamily` requires `IsSeparator` for *all* `n`, but
-`halverToSeparator_isSeparator` requires `2^t ∣ n`. For non-power-of-2 sizes,
-the separator property doesn't hold.
-
-**Solution:** Restrict the sorting network to power-of-2 sizes. This is standard:
-pad any input to the next power of 2, sort, extract. The top-level theorem already
-allows any `n ≥ 2` via the `C * n * log n` bound (padding at most doubles `n`).
-
-**Approach:** Change `halverToSeparatorFamily'` to produce a
-`SeparatorFamily` that works only at sizes divisible by `2^t`. Then modify
-`seiferas_implies_sorting_network` to:
-1. For input size `n`, round up to `n' = 2^⌈log₂ n⌉`
-2. Build the sorting network at size `n'`
-3. Embed the `n`-element input into `n'` wires (pad with ⊤)
-4. Extract the first `n` outputs
-
-The `halverToSeparator_isSeparator` theorem is already proved with the
-`2^t ∣ n` hypothesis, so the only work is plumbing the divisibility through.
-
-Alternatively (simpler): add a `(hdiv : 2^t ∣ n)` hypothesis to the top-level
-theorem. Since the AKS construction naturally works with powers of 2, this is
-mathematically clean. The O(n log n) bound absorbs the padding.
-
-**Risk:** LOW. Pure plumbing — `halverToSeparator_isSeparator` is fully proved.
-
-**Estimate:** ~50 lines changed across Seiferas.lean.
+(unchanged — see original description above)
 
 #### WP-A2: Implement `separatorStage` (real construction)
-
-**File:** `AKS/Bags/Stage.lean`
-
-**Problem:** `separatorStage` currently has `comparators := []`. It needs to
-apply the separator to each active bag at stage `t`.
-
-**Construction:** For each active bag `(level, idx)` at stage `t`:
-- The bag covers a contiguous range of registers (by the partition invariant)
-- Apply `sep.net bagSize` embedded via `shiftEmbed` at the bag's offset
-
-The key insight (Seiferas Section 7): active bags have **disjoint register sets**
-(from `SeifInvariant.bags_disjoint`), so all separators run in parallel.
-
-**Approach:** Use `halverAtLevel` from `Nearsort/Construction.lean` as a model.
-For each active level (where `(t + level) % 2 = 0`), iterate over bag indices
-`0..<2^level`, compute offset = `idx * bagSize n level`, embed `sep.net bagSize`
-at that offset. Concatenate across levels.
-
-**Key infrastructure that already exists:**
-- `shiftEmbed` (Sort/Defs.lean): embeds m-wire network at offset in n-wire network
-- `halverAtLevel` (Nearsort/Construction.lean): model for iterating over sub-intervals
-- `SeparatorFamily.net` returns `ComparatorNetwork n` for any `n`
-
-**Complication:** `SeparatorFamily.net` takes an arbitrary `n`, but we need
-it applied to `bagSize n level` (size of each bag at that level), then embedded
-into the full `n`-wire network. This requires `bagSize n level ≤ n` and
-alignment conditions.
-
-For power-of-2 `n` with `level ≤ log₂ n`: `bagSize n level = n / 2^level` and
-bags start at offsets `idx * (n / 2^level)`, each of size `n / 2^level`.
-
-**Risk:** LOW-MEDIUM. The construction is clear; the main work is proving
-the alignment conditions (`offset + bagSize ≤ n` for each bag) and that the
-resulting depth is ≤ `d_sep` (from disjointness of active bags).
-
-**Estimate:** ~100 lines.
+(unchanged — see original description above)
 
 #### WP-A3: Prove convergence → sorted
+(unchanged — see original description above)
 
-**File:** `AKS/Bags/TreeSort.lean`
+### Part B: Remaining Lean Formalization (two parallel streams)
 
-**Problem:** `separatorSortingNetwork_sorts` needs: after enough stages,
-all bags have ≤ 1 item → output is sorted.
+**WP-B-card (Instance 1):** Cardinality bounds on the concrete split.
+New file `AKS/Bags/SplitCard.lean`. ~150 lines.
 
-**Approach:** After convergence, every bag has ≤ 1 item. The partition property
-(items in bag `(level, idx)` have ranks in `[idx * bagSize, (idx+1) * bagSize)`)
-plus each bag having ≤ 1 item means items are sorted.
+**WP-B-stranger (Instance 2):** Stranger bounds on the concrete split.
+New file `AKS/Bags/SplitStranger.lean`. ~200 lines.
 
-More precisely: the 0-1 principle reduces to Boolean inputs. For Boolean `v`:
-- Each bag has ≤ 1 item after convergence
-- Items are partitioned correctly by the bag structure
-- Since each bag's native interval covers `bagSize` positions, and there are
-  `2^level` bags at each level, the partition at the leaf level has bags of
-  size 1 → items are in sorted order
+**WP-B-assembly:** Combine both into `concrete_split_maintains_invariant`.
+New file `AKS/Bags/SplitProof.lean`. ~20 lines. Depends on both streams.
 
-This requires connecting "zero strangers at convergence" to "sorted output."
-The 0-stranger condition means every item is in its native bag, which for
-single-item bags means every item is at its sorted position.
-
-**Actually:** The proof uses the 0-1 principle (already in `TreeSort.lean`):
-`zero_one_principle net (separatorSortingNetwork_sorts ...)`. So we need to
-prove: for 0-1 inputs, after enough stages, the output is monotone.
-
-The argument:
-1. Start with `SeifInvariant` at t=0 (proved: `initialInvariant`)
-2. Each stage maintains the invariant (proved: `invariant_maintained`, modulo
-   the `split` hypotheses which come from the real separator)
-3. After convergence, all bags have ≤ 1 item (proved: `separatorSortingNetwork_converges`)
-4. Zero strangers (from stranger bound with capacity < 2) → items in native bags
-5. Items in native single-item bags → sorted
-
-Steps 1-3 are essentially done. Step 4-5 needs: the `perm` tracked by the
-invariant corresponds to the actual execution of the comparator network.
-
-**Risk:** MEDIUM. The main gap is connecting `SeifInvariant`'s abstract `perm`
-and `bags` to the concrete execution of `separatorStage`. This requires proving
-that executing `separatorStage` on a vector produces the same result as the
-abstract rebagging operation.
-
-**Estimate:** ~150 lines for the connection + ~50 lines for the final assembly.
-
-### Part B: High-Risk (uncertain statements, need Rust exploration)
-
-**STATUS: Rust exploration COMPLETE. All hypotheses validated. Key Lean change done.**
-
-The `invariant_maintained` theorem no longer requires `hcap_ge`. The two-case
-capacity proof (Seiferas Section 5) handles both cap ≥ A and cap < A cases.
-
-#### WP-B1: Concrete `SplitResult` from separator execution
-
-**Rust validation complete.** Split into position-based fringe (top λ and bottom λ
-positions) + middle-left + middle-right. All cardinality and stranger bounds hold
-with large margin.
-
-**Remaining Lean work:** Define the concrete split operation and prove it satisfies
-the hypotheses of `invariant_maintained`. This is engineering work (connecting
-comparator network execution to the abstract split), not mathematical risk.
-
-#### WP-B2: Stranger bounds on kicked items (`hkick_stranger`)
-
-**Rust validation: trivially holds** (max ratio 0.0000). Kicked items are fringe
-items, which are from the extremes of the separator output. These items are native
-to the parent's ancestry (they're in the wrong child but right parent), so they
-have 0 j-strangers at the parent level for all j ≥ 1.
-
-**Remaining Lean work:** Formalize that fringe items (top/bottom λ positions of
-separator output) have the same stranger status as the original bag items. Since
-fringe items are a subset of the original bag, and the stranger count at the parent
-level is bounded by ε times the bag capacity (from the invariant), this follows from
-subset monotonicity + the existing `jStrangerCount_mono`.
-
-#### WP-B3: Sibling-native bound (`hcnative_bound`)
-
-**Rust validation complete.** Maximum empirical ratio: 0.179 (82% margin from bound).
-Three sub-sources decompose cleanly:
-- c1 (ε/2): halver misroutes — 18.3% of bound
-- c2 (geometric series): stranger displacement — 77.1% of bound
-- c3 (1/(8A²-2)): ancestor items — 4.5% of bound
-
-**Remaining Lean work:** Prove the three-source decomposition. Each source is a
-standard combinatorial argument about fringe selection + stranger counting.
-
-#### WP-B4: Connecting abstract invariant to concrete execution
-
-**Depends on:** WP-A2 (real separatorStage), WP-B1 (concrete split)
-
-The bridge between abstract `SeifInvariant` and concrete network execution.
-Given a vector `v` and the current invariant, executing `separatorStage` produces
-output consistent with `rebag split` where `split` satisfies all hypotheses of
-`invariant_maintained`.
-
-**Risk:** MEDIUM (reduced from HIGH). The Rust validation confirms all individual
-hypotheses hold. The remaining work is Lean formalization connecting:
-1. Comparator network execution semantics
-2. Position-based fringe selection = abstract toParent/toChild partition
-3. Separator error guarantee → stranger bound on fringe items
-
-## Dependency Graph
+## Dependency Graph (updated)
 
 ```
-WP-A1 (fix isSep)          -- independent, do first
-WP-A2 (implement stage)    -- independent, do first
+WP-A1 (fix isSep)              -- independent
+WP-A2 (implement stage)        -- independent
    ↓
-WP-B1 (concrete split)     -- needs WP-A2 (real separatorStage)
+Split definition (Split.lean)  -- shared prerequisite, ~30 lines
+   ↓                ↓
+WP-B-card        WP-B-stranger  -- PARALLEL
+(SplitCard.lean) (SplitStranger.lean)
+   ↓                ↓
+WP-B-assembly (SplitProof.lean) -- combines both
    ↓
-WP-B2 (kick stranger)      -- needs WP-B1 (split definition)
-WP-B3 (sibling-native)     -- needs WP-B1 (split definition)
-   ↓
-WP-B4 (abstract↔concrete)  -- needs WP-B1, WP-B2, WP-B3
-   ↓
-WP-A3 (convergence→sorted) -- needs WP-B4 (the full connection)
+WP-A3 (convergence→sorted)     -- final assembly
 ```
-
-## Parallelization Strategy
-
-**Instance 1 (low-risk):** WP-A1 + WP-A2
-- Fix `halverToSeparatorFamily'.isSep` with power-of-2 approach
-- Implement real `separatorStage` using `shiftEmbed` + `halverAtLevel` model
-
-**Instance 2 (high-risk exploration):** WP-B1 + WP-B2 + WP-B3
-- ~~Write Rust programs to validate the concrete split definition~~ **DONE**
-- ~~Test stranger bounds with realistic separator implementations~~ **DONE**
-- ~~Pin down exact partition rules and verify all hypotheses~~ **DONE**
-- Remaining: formalize the validated results in Lean
 
 ## Parameter Reference (Seiferas Section 5)
 
