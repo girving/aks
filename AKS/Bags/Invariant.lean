@@ -275,80 +275,107 @@ private theorem capacity_arithmetic {A ν lam b : ℝ}
     exact div_nonneg (by linarith) (by linarith)
   linarith
 
+/-- Case 2 arithmetic: if `ν ≥ 4λA + 5/(2A)`, then `4λAb ≤ νb`. -/
+private theorem capacity_arithmetic_small {A ν lam b : ℝ}
+    (hA : 0 < A) (hb : 0 ≤ b) (_ : 0 ≤ lam)
+    (hC3 : ν ≥ 4 * lam * A + 5 / (2 * A)) :
+    4 * lam * A * b ≤ ν * b := by
+  have : 4 * lam * A ≤ ν := by
+    have : 0 ≤ 5 / (2 * A) := div_nonneg (by positivity) (by positivity)
+    linarith
+  exact mul_le_mul_of_nonneg_right this hb
+
 /-- Clause (3) maintenance: capacity bound at stage `t+1`.
     Requires constraint (C3): `ν ≥ 4*lam*A + 5/(2*A)`.
-    Hypotheses on the split:
-    - `hkick`: each bag kicks ≤ `2λ·cap + 1` items to parent
-    - `hsend_left`/`hsend_right`: each bag sends ≤ `cap/2` items to each child
-    - `hcap_ge`: root capacity ≥ A (ensures the +2 additive term is absorbed) -/
+    Two-case proof (Seiferas Section 5):
+    - Case 1 (`b ≥ A`): `4λAb + 2 + b/(2A) ≤ νb` — the +2 from children kicks
+      and `b/(2A)` from parent are absorbed by the slack in C3.
+    - Case 2 (`b < A`): parent capacity `b/A < 1` so parent is empty (no items
+      from above). Children have even item counts (divisibility argument), so
+      no odd-item kicking. Total kick from children ≤ `4λAb` ≤ `νb`. -/
 theorem capacity_maintained {n : ℕ} {A ν lam : ℝ} {t : ℕ}
     (split : ℕ → ℕ → SplitResult n)
     (hC3 : SatisfiesC3 A ν lam)
-    (hA : 1 < A) (hν : 0 < ν)
-    (hcap_ge : A ≤ ↑n * ν ^ t)
+    (hA : 1 < A) (hν : 0 < ν) (hlam : 0 ≤ lam)
     (hkick : ∀ l i, ((split l i).toParent.card : ℝ) ≤
       2 * lam * bagCapacity n A ν t l + 1)
     (hsend_left : ∀ l i, ((split l i).toLeftChild.card : ℝ) ≤
       bagCapacity n A ν t l / 2)
     (hsend_right : ∀ l i, ((split l i).toRightChild.card : ℝ) ≤
-      bagCapacity n A ν t l / 2) :
+      bagCapacity n A ν t l / 2)
+    -- When cap(l) < A, the paired kick from both children has no +2 (even items)
+    (hkick_pair : ∀ l i, bagCapacity n A ν t l < A →
+      ((split (l + 1) (2 * i)).toParent.card +
+       (split (l + 1) (2 * i + 1)).toParent.card : ℝ) ≤
+      4 * lam * bagCapacity n A ν t (l + 1))
+    -- When cap(l) < A, the parent is empty so fromParent = ∅
+    (hfrom_parent_empty : ∀ l i, bagCapacity n A ν t l < A →
+      fromParent split l i = ∅) :
     ∀ level idx,
     ((rebag split level idx).card : ℝ) ≤ bagCapacity n A ν (t + 1) level := by
   intro level idx
   have hA_pos : (0 : ℝ) < A := by linarith
-  -- bagCapacity n A ν t level ≥ A (since A^level ≥ 1 and n * ν^t ≥ A)
-  have hb_ge : A ≤ bagCapacity n A ν t level := by
-    simp only [bagCapacity]
-    have h1 : 1 ≤ A ^ level := by
-      calc (1 : ℝ) = A ^ 0 := (pow_zero A).symm
-        _ ≤ A ^ level := pow_le_pow_right₀ (le_of_lt hA) (Nat.zero_le level)
-    nlinarith [mul_nonneg (sub_nonneg.mpr hcap_ge) (sub_nonneg.mpr h1)]
-  have hb_pos : (0 : ℝ) < bagCapacity n A ν t level := by linarith
-  -- cap(t+1, level) = ν * cap(t, level)
   rw [bagCapacity_succ_stage]
-  -- Union bound on card
-  have hcard := rebag_card_le split level idx
-  -- Bound children kicked up (cap at level+1 = A * cap(t, level))
-  have ha := hkick (level + 1) (2 * idx)
-  have hb' := hkick (level + 1) (2 * idx + 1)
-  rw [bagCapacity_child] at ha hb'
-  -- Bound parent contribution ≤ cap(t, level) / (2A)
-  have hparent : ((fromParent split level idx).card : ℝ) ≤
-      bagCapacity n A ν t level / (2 * A) := by
-    unfold fromParent
-    split_ifs with h₁ h₂
-    · -- level = 0: no parent
-      simp only [card_empty, Nat.cast_zero]
-      exact div_nonneg (le_of_lt hb_pos) (by linarith)
-    · -- level ≥ 1, even: left child from parent
-      calc ((split (level - 1) (idx / 2)).toLeftChild.card : ℝ)
-          ≤ bagCapacity n A ν t (level - 1) / 2 := hsend_left _ _
-        _ = bagCapacity n A ν t level / (2 * A) := by
-            simp only [bagCapacity]
-            have hpow : A ^ level = A ^ (level - 1) * A := by
-              conv_lhs => rw [show level = level - 1 + 1 from by omega]
-              exact pow_succ A (level - 1)
-            rw [hpow]; field_simp
-    · -- level ≥ 1, odd: right child from parent
-      calc ((split (level - 1) (idx / 2)).toRightChild.card : ℝ)
-          ≤ bagCapacity n A ν t (level - 1) / 2 := hsend_right _ _
-        _ = bagCapacity n A ν t level / (2 * A) := by
-            simp only [bagCapacity]
-            have hpow : A ^ level = A ^ (level - 1) * A := by
-              conv_lhs => rw [show level = level - 1 + 1 from by omega]
-              exact pow_succ A (level - 1)
-            rw [hpow]; field_simp
-  -- Combine: card ≤ 4*lam*A*cap + 2 + cap/(2*A) ≤ ν*cap
-  calc ((rebag split level idx).card : ℝ)
-      ≤ ↑(split (level + 1) (2 * idx)).toParent.card +
-        ↑(split (level + 1) (2 * idx + 1)).toParent.card +
-        ↑(fromParent split level idx).card := by exact_mod_cast hcard
-    _ ≤ (2 * lam * (A * bagCapacity n A ν t level) + 1) +
-        (2 * lam * (A * bagCapacity n A ν t level) + 1) +
-        bagCapacity n A ν t level / (2 * A) := by linarith
-    _ = 4 * lam * A * bagCapacity n A ν t level + 2 +
-        bagCapacity n A ν t level / (2 * A) := by ring
-    _ ≤ ν * bagCapacity n A ν t level := capacity_arithmetic hA hb_ge hC3
+  by_cases hb_ge : A ≤ bagCapacity n A ν t level
+  · -- Case 1: cap ≥ A (standard argument with +2)
+    have hb_pos : (0 : ℝ) < bagCapacity n A ν t level := by linarith
+    have hcard := rebag_card_le split level idx
+    have ha := hkick (level + 1) (2 * idx)
+    have hb' := hkick (level + 1) (2 * idx + 1)
+    rw [bagCapacity_child] at ha hb'
+    have hparent : ((fromParent split level idx).card : ℝ) ≤
+        bagCapacity n A ν t level / (2 * A) := by
+      unfold fromParent
+      split_ifs with h₁ h₂
+      · simp only [card_empty, Nat.cast_zero]
+        exact div_nonneg (le_of_lt hb_pos) (by linarith)
+      · calc ((split (level - 1) (idx / 2)).toLeftChild.card : ℝ)
+            ≤ bagCapacity n A ν t (level - 1) / 2 := hsend_left _ _
+          _ = bagCapacity n A ν t level / (2 * A) := by
+              simp only [bagCapacity]
+              have hpow : A ^ level = A ^ (level - 1) * A := by
+                conv_lhs => rw [show level = level - 1 + 1 from by omega]
+                exact pow_succ A (level - 1)
+              rw [hpow]; field_simp
+      · calc ((split (level - 1) (idx / 2)).toRightChild.card : ℝ)
+            ≤ bagCapacity n A ν t (level - 1) / 2 := hsend_right _ _
+          _ = bagCapacity n A ν t level / (2 * A) := by
+              simp only [bagCapacity]
+              have hpow : A ^ level = A ^ (level - 1) * A := by
+                conv_lhs => rw [show level = level - 1 + 1 from by omega]
+                exact pow_succ A (level - 1)
+              rw [hpow]; field_simp
+    calc ((rebag split level idx).card : ℝ)
+        ≤ ↑(split (level + 1) (2 * idx)).toParent.card +
+          ↑(split (level + 1) (2 * idx + 1)).toParent.card +
+          ↑(fromParent split level idx).card := by exact_mod_cast hcard
+      _ ≤ (2 * lam * (A * bagCapacity n A ν t level) + 1) +
+          (2 * lam * (A * bagCapacity n A ν t level) + 1) +
+          bagCapacity n A ν t level / (2 * A) := by linarith
+      _ = 4 * lam * A * bagCapacity n A ν t level + 2 +
+          bagCapacity n A ν t level / (2 * A) := by ring
+      _ ≤ ν * bagCapacity n A ν t level := capacity_arithmetic hA hb_ge hC3
+  · -- Case 2: cap < A (Seiferas Section 5: no +2, no parent contribution)
+    push_neg at hb_ge
+    have hfp := hfrom_parent_empty level idx hb_ge
+    have hpair := hkick_pair level idx hb_ge
+    rw [bagCapacity_child] at hpair
+    have hcard := rebag_card_le split level idx
+    rw [hfp] at hcard; simp only [card_empty] at hcard
+    have hkick_sum : ((split (level + 1) (2 * idx)).toParent.card : ℝ) +
+        ((split (level + 1) (2 * idx + 1)).toParent.card : ℝ) ≤
+        4 * lam * (A * bagCapacity n A ν t level) := by
+      exact_mod_cast hpair
+    calc ((rebag split level idx).card : ℝ)
+        ≤ ↑(split (level + 1) (2 * idx)).toParent.card +
+          ↑(split (level + 1) (2 * idx + 1)).toParent.card +
+          0 := by exact_mod_cast (by omega : (rebag split level idx).card ≤
+            (split (level + 1) (2 * idx)).toParent.card +
+            (split (level + 1) (2 * idx + 1)).toParent.card + 0)
+      _ ≤ 4 * lam * (A * bagCapacity n A ν t level) + 0 := by linarith
+      _ = 4 * lam * A * bagCapacity n A ν t level := by ring
+      _ ≤ ν * bagCapacity n A ν t level :=
+          capacity_arithmetic_small hA_pos (by unfold bagCapacity; positivity) hlam hC3
 
 /-- Union bound on stranger count of a rebag: sum of three source contributions. -/
 theorem rebag_strangerCount_le {n : ℕ} (perm : Fin n → Fin n)
@@ -485,7 +512,7 @@ theorem stranger_bound_maintained_eq1 {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n}
     (split : ℕ → ℕ → SplitResult n)
     (hC4 : SatisfiesC4_eq1 A ν lam ε)
-    (hA : 1 < A) (hν : 0 < ν) (hlam : 0 < lam) (hε : 0 ≤ ε)
+    (hA : 1 < A) (hν : 0 < ν) (hlam : 0 < lam) (_ : 0 ≤ ε)
     (hkick_stranger : ∀ l i,
       (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) 1 : ℝ) ≤
       lam * ε * bagCapacity n A ν t l)
@@ -674,8 +701,11 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       bagCapacity n A ν t l / 2)
     (hsend_right : ∀ l i, ((split l i).toRightChild.card : ℝ) ≤
       bagCapacity n A ν t l / 2)
-    -- Root capacity large enough
-    (hcap_ge : A ≤ ↑n * ν ^ t)
+    -- When cap(l) < A, paired kick from both children has no +2 (even items)
+    (hkick_pair : ∀ l i, bagCapacity n A ν t l < A →
+      ((split (l + 1) (2 * i)).toParent.card +
+       (split (l + 1) (2 * i + 1)).toParent.card : ℝ) ≤
+      4 * lam * bagCapacity n A ν t (l + 1))
     -- Stranger bounds on kicked items (from separator error)
     (hkick_stranger : ∀ l i j, 1 ≤ j →
       (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) j : ℝ) ≤
@@ -695,7 +725,26 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     (hrebag_disjoint : ∀ l₁ l₂ i₁ i₂,
       (l₁, i₁) ≠ (l₂, i₂) → Disjoint (rebag split l₁ i₁) (rebag split l₂ i₂)) :
     SeifInvariant n A ν lam ε (t + 1) perm (rebag split) := by
-  obtain ⟨hA, hν, _, _, _, hε_pos, hC3, hC4_gt1, hC4_eq1⟩ := hparams
+  obtain ⟨hA, hν, _, hlam_pos, _, hε_pos, hC3, hC4_gt1, hC4_eq1⟩ := hparams
+  have hA_pos : (0 : ℝ) < A := by linarith
+  -- Derive: when cap(l) < A, the parent bag is empty so fromParent = ∅
+  have hfrom_parent_empty : ∀ l i, bagCapacity n A ν t l < A →
+      fromParent split l i = ∅ := by
+    intro l i hcap_lt
+    apply fromParent_empty_of_parent_empty hsplit_sub
+    by_cases hl : l = 0
+    · exact Or.inl hl
+    · right
+      have hcap_parent : bagCapacity n A ν t (l - 1) < 1 := by
+        rw [bagCapacity_parent hA_pos (by omega)]
+        rwa [div_lt_one hA_pos]
+      have hcard := inv.capacity_bound (l - 1) (i / 2)
+      have hcard_zero : (bags (l - 1) (i / 2)).card = 0 := by
+        by_contra h
+        have h1 : 1 ≤ (bags (l - 1) (i / 2)).card := by omega
+        have : (1 : ℝ) ≤ ↑(bags (l - 1) (i / 2)).card := by exact_mod_cast h1
+        linarith
+      exact Finset.card_eq_zero.mp hcard_zero
   exact {
     alternating_empty := by
       intro level idx hparity
@@ -713,16 +762,17 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       simp
     uniform_size := hrebag_uniform
     capacity_bound :=
-      capacity_maintained split hC3 hA hν hcap_ge hkick hsend_left hsend_right
+      capacity_maintained split hC3 hA hν hlam_pos.le hkick hsend_left hsend_right
+        hkick_pair hfrom_parent_empty
     stranger_bound := by
       intro level idx j hj
       by_cases hj1 : j = 1
       · subst hj1
-        have h := stranger_bound_maintained_eq1 split hC4_eq1 hA hν ‹0 < lam› hε_pos.le
+        have h := stranger_bound_maintained_eq1 split hC4_eq1 hA hν hlam_pos hε_pos.le
           (fun l i ↦ by have h := hkick_stranger l i 1 (by omega); rwa [pow_one] at h)
           hparent_1stranger level idx
         simp only [Nat.sub_self, pow_zero, mul_one]; exact h
-      · exact stranger_bound_maintained_gt1 split hC4_gt1 hA hν ‹0 < lam› hε_pos.le
+      · exact stranger_bound_maintained_gt1 split hC4_gt1 hA hν hlam_pos hε_pos.le
           hkick_stranger hparent_stranger level idx j (by omega)
     bags_disjoint := hrebag_disjoint
     bounded_depth := by
