@@ -45,11 +45,11 @@ No tests or linters — correctness is verified through Lean's type checker.
 
 ### Exploratory Lean snippets
 
-Use `scripts/lean-test` to run ad-hoc Lean snippets (checking types, `#print`, `#check`, proof experiments). Pass snippets via heredoc to avoid needing temp files:
+Use `scripts/lean-test` to run ad-hoc Lean snippets (checking types, `#print`, `#check`, proof experiments). **Use `echo ... | scripts/lean-test`** (pipe form), not `<<<` heredoc — the `<<<` syntax doesn't match the allowed-command pattern in `.claude/settings.json` and triggers a permission prompt:
 ```bash
-scripts/lean-test <<< '#check @Finset.card_union_le'
-scripts/lean-test <<< 'import AKS.Bags.Defs
-#check @jStrangerCount_union_le'
+echo '#check @Finset.card_union_le' | scripts/lean-test
+echo 'import AKS.Bags.Defs
+#check @jStrangerCount_union_le' | scripts/lean-test
 ```
 
 ### `lake build` (fallback only)
