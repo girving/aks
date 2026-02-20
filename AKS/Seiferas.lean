@@ -115,9 +115,8 @@ noncomputable def halverToSeparatorFamily' {ε : ℝ} {d : ℕ}
     (family : HalverFamily ε d) (hε : 0 ≤ ε) (t : ℕ) :
     SeparatorFamily (1 / 2 ^ t) (↑t * ε) (t * d) where
   net n := halverToSeparator n family t
-  isSep n := by
-    -- Full proof requires 2^t ∣ n; for general n this needs padding
-    sorry
+  valid n := 2 ^ t ∣ n
+  isSep n hdiv := halverToSeparator_isSeparator n family t hε hdiv
   depth_le n := halverToSeparator_depth_le n family t
 
 
