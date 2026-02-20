@@ -413,7 +413,7 @@ const PROOF_DATA = {
 
     // ── Cert/FastProof.lean ──
     { id: "checkCertificate_eq_slow", file: "AKS/Cert/FastProof.lean", line: 46, status: "proved", kind: "theorem",
-      sig: "checkCertificate_eq_slow :\n  @checkCertificate = @checkCertificateSlow",
+      sig: "checkCertificate_eq_slow :\n  checkCertificate = checkCertificateSlow",
       desc: "Bridge: parallel fused checker = sequential checker. Proof: Task elimination, fused→unfused PSD rewrite, Boolean case splits, prefix-sum loop = checkPerRow via fused_norm_lookup." },
 
     // ── Random/Random16.lean ──
@@ -599,13 +599,13 @@ const PROOF_DATA = {
     { id: "concreteSplit_hsend_right", file: "AKS/Bags/SplitCard.lean", line: 336, status: "proved", kind: "theorem",
       sig: "concreteSplit_hsend_right : SeifInvariant ... →\n  toRightChild.card ≤ bagCapacity / 2",
       desc: "PROVED. Right child send bounded by capacity/2. Via childSendSize_le_half and invariant capacity bound." },
-    { id: "concreteSplit_hkick_pair", file: "AKS/Bags/SplitCard.lean", line: 355, status: "sorry", kind: "theorem",
+    { id: "concreteSplit_hkick_pair", file: "AKS/Bags/SplitCard.lean", line: 389, status: "sorry", kind: "theorem",
       sig: "concreteSplit_hkick_pair : bagCapacity < A →\n  paired kick ≤ 4·lam·bagCapacity",
       desc: "Paired kick from both children has no +2 additive term when cap < A. Requires even bag sizes at child level." },
-    { id: "concreteSplit_hrebag_uniform", file: "AKS/Bags/SplitCard.lean", line: 462, status: "proved", kind: "theorem",
+    { id: "concreteSplit_hrebag_uniform", file: "AKS/Bags/SplitCard.lean", line: 533, status: "proved", kind: "theorem",
       sig: "concreteSplit_hrebag_uniform :\n  (rebag ... level i₁).card = (rebag ... level i₂).card",
       desc: "All bags at a given level have equal size after rebagging. Proved via deterministic component sizes (rankInBag bijection) + invariant uniform_size." },
-    { id: "concreteSplit_hrebag_disjoint", file: "AKS/Bags/SplitCard.lean", line: 512, status: "proved", kind: "theorem",
+    { id: "concreteSplit_hrebag_disjoint", file: "AKS/Bags/SplitCard.lean", line: 583, status: "proved", kind: "theorem",
       sig: "concreteSplit_hrebag_disjoint : (l₁,i₁) ≠ (l₂,i₂) →\n  Disjoint (rebag ...) (rebag ...)",
       desc: "Bags at distinct positions are disjoint after rebagging. Proved via 9-case analysis using bags_disjoint + rank-range component disjointness." },
 
