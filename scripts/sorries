@@ -20,6 +20,10 @@ PATTERN = re.compile(
     r"(?<![`\w])(?P<marker>sorry|#exit|native_decide|axiom)\b"
 )
 
+# Files where native_decide is expected and should not be flagged.
+NATIVE_DECIDE_ALLOWED = {"AKS/Random/Random16.lean", "AKS/Random/Random1728.lean",
+                         "AKS/Random/Random20736.lean"}
+
 # Lines that are pure comments (start with -- after optional whitespace) or
 # inside /- -/ doc-strings should be skipped for "sorry" and "axiom" to avoid
 # false positives on prose like "left as `sorry`".
@@ -28,7 +32,7 @@ COMMENT_LINE = re.compile(r"^\s*--")
 
 def is_in_comment(line: str, marker: str) -> bool:
     """Heuristic: skip markers that appear only inside a line comment."""
-    if marker in ("sorry", "axiom"):
+    if marker in ("sorry", "axiom", "native_decide"):
         stripped = line.lstrip()
         if stripped.startswith("--") or stripped.startswith("/-"):
             return True
@@ -70,6 +74,8 @@ def main() -> None:
             for m in PATTERN.finditer(line):
                 marker = m.group("marker")
                 if is_in_comment(line, marker):
+                    continue
+                if marker == "native_decide" and relpath in NATIVE_DECIDE_ALLOWED:
                     continue
                 file_hits.append((i, marker))
                 counts[marker] += 1
