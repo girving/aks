@@ -16,16 +16,51 @@
 -/
 
 import AKS.Separator.Family
-import AKS.Nearsort.Construction
+import AKS.Halver.Defs
 import Mathlib.Algebra.Order.Floor.Semifield
 
 open Finset BigOperators
 
 
+/-! **Halver network construction (inlined from deleted Nearsort/Construction.lean)** -/
+
+/-- Apply a halver to sub-interval `[offset, offset + 2*m)` within an `n`-wire
+    network. The halver operates on `2*m` wires and is shifted to the correct
+    position via `shiftEmbed`. -/
+def applyHalverToSubinterval (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (m offset : ℕ) (h : offset + 2 * m ≤ n) : ComparatorNetwork n :=
+  (halvers m).shiftEmbed n offset h
+
+/-- Apply halvers to all sub-intervals at a given tree level.
+    At level `l`: there are `2^l` sub-intervals, each of size `⌊n / 2^l⌋`.
+    Each sub-interval is halved by applying the appropriate halver
+    via `shiftEmbed`. -/
+def halverAtLevel (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (level : ℕ) : ComparatorNetwork n :=
+  let chunkSize := n / 2 ^ level
+  let halfChunk := chunkSize / 2
+  let numChunks := 2 ^ level
+  { comparators := (List.range numChunks).flatMap fun k ↦
+      let offset := k * chunkSize
+      if h : offset + 2 * halfChunk ≤ n then
+        (applyHalverToSubinterval n halvers halfChunk offset h).comparators
+      else [] }
+
+/-- The recursive halver network: applies halvers at each tree level
+    from coarsest (level 0) to finest (level depth-1). -/
+def halverNetwork (n : ℕ)
+    (halvers : (m : ℕ) → ComparatorNetwork (2 * m))
+    (depth : ℕ) : ComparatorNetwork n :=
+  { comparators := (List.range depth).flatMap fun l ↦
+      (halverAtLevel n halvers l).comparators }
+
+
 /-! **Construction** -/
 
 /-- Build a separator from a halver family by iterating `t` levels of
-    recursive halving. Reuses `halverNetwork` from `Nearsort/Construction.lean`. -/
+    recursive halving. -/
 def halverToSeparator {ε : ℝ} {d : ℕ} (n : ℕ) (family : HalverFamily ε d)
     (t : ℕ) : ComparatorNetwork n :=
   halverNetwork n family.net t

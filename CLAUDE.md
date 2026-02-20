@@ -18,15 +18,11 @@ The key papers are checked into the repo:
 
 **Always consult these PDFs first** when checking theorem statements, proof strategies, or definitions. Read the relevant section of the paper before doing web searches — the papers are the ground truth and web sources frequently get details wrong.
 
-### Two Paths to Tree-Based Sorting
+### Correctness Path: Seiferas (2009) Separator-Based
 
-The project explores two parallel approaches for the tree-based correctness proof (halvers → sorting network):
+The correctness proof uses the **Paterson/Seiferas separator-based** approach (`AKS/Separator/`, `AKS/Bags/`): replaces ε-nearsorts with (γ,ε)-separators + outsider counting with Seiferas's single potential function. See `docs/separator-plan.md` for the full design.
 
-1. **AKS original** (`TreeSorting.lean`, `Nearsort/Defs.lean`): ε-nearsorts + four-lemma tree-distance wrongness argument (AKS Sections 5–8). Extensive infrastructure (~2600 lines), several sorry's remaining.
-
-2. **Paterson/Seiferas separator-based** (`AKS/Separator/`): replaces ε-nearsorts with (γ,ε)-separators + outsider counting with Seiferas's single potential function. Definitions in place; downstream files not yet implemented. See `docs/separator-plan.md` for the full design.
-
-Both paths share: `IsEpsilonHalver` (halver definition), expander infrastructure (`RegularGraph.lean`, `ZigZag/Expanders.lean`), and `ComparatorNetwork.lean`. The separator path may be simpler to complete due to cleaner abstractions (outsider counting vs. tree-distance wrongness).
+The original AKS ε-nearsort + tree-distance wrongness path (`Nearsort/`, `Tree/`) has been removed — the separator path has cleaner abstractions (outsider counting vs. tree-distance wrongness).
 
 ## Build Commands
 
@@ -123,7 +119,7 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 
 ## Architecture
 
-**Entry point:** `AKS.lean` — imports all modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
+**Entry point:** `AKS.lean` — imports all modules. Top-level theorem: `seiferas_sorting_networks_exist` in `AKS/Seiferas.lean`.
 
 **Detailed subsystem docs** — per-section files with architecture, conventions, and proof tactics:
 - [`docs/certificate-bridge.md`](docs/certificate-bridge.md) — Certificate bridge (`CertCheck`, `AKS/Cert/`, `AKS/Random/`, `Bench/`)
@@ -135,26 +131,6 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 
 ### `AKS/Misc/Fin.lean` — `Fin` Arithmetic Helpers
 Reusable encode/decode lemmas for `Fin n × Fin d` ↔ `Fin (n * d)` product indexing: `Fin.pair_lt`, `fin_encode_fst`, `fin_encode_snd`, `fin_div_add_mod`.
-
-### `AKS/ComparatorNetwork.lean` — Comparator Network Theory
-Foundational theory of comparator networks:
-1. **Comparator networks** — `Comparator`, `ComparatorNetwork` (flat list of comparators), execution model
-2. **Monotonicity preservation** — helper lemmas for comparator operations
-3. **0-1 principle** — reduces sorting correctness to Boolean inputs
-4. **Complexity notation** — `IsBigO` for stating asymptotic bounds
-
-### `AKS/AKSNetwork.lean` — AKS Sorting Network Construction
-The Ajtai–Komlós–Szemerédi construction and analysis:
-1. **AKS construction** — recursive build: split → recurse → merge with halvers
-2. **Size analysis** — `AKS.size_nlogn` (O(n log n) comparators)
-3. **Correctness** — `AKS.sorts` (network correctly sorts all inputs)
-4. **Main theorem** — `aks_tree_sorting` (sorry — assembly), `zigzag_implies_aks_network`
-
-### `AKS/TreeDamageStability.lean` — Lemma 2a (Parallel Work Target)
-`parity_nearsort_has_bounded_tree_damage` (sorry): parity-restricted nearsort → `HasBoundedTreeDamage`. Stability property. Imports only `TreeSorting.lean`.
-
-### `AKS/TreeDamageImprovement.lean` — Lemma 2b (Parallel Work Target)
-`parity_nearsort_has_improved_bound` (sorry): even-level nearsort → `HasImprovedBound`. Cherry-parity improvement property. Imports only `TreeSorting.lean`.
 
 ### `AKS/Graph/` — Core Regular Graph Theory, Squaring, Complete Graph
 `RegularGraph`, `spectralGap`, graph squaring, complete graph. See [`docs/halver-expander.md`](docs/halver-expander.md).
@@ -183,19 +159,14 @@ Not part of the proof. See [`docs/certificate-bridge.md`](docs/certificate-bridg
 ### `AKS/ZigZag/Expanders.lean` — Expander Families (~115 lines)
 `zigzag_spectral_bound`, `zigzagFamily`, `explicit_expanders_exist_zigzag`. See [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md).
 
-### `AKS/Separator/Defs.lean` — (γ, ε)-Separator Definitions (~50 lines)
-ε-approximate γ-separation (Seiferas 2009, Section 6). Alternative to the
-ε-nearsort path in `Nearsort/Defs.lean`; both paths share `IsEpsilonHalver`.
-1. **`SepInitial`**, **`SepFinal`** — one-sided separation (initial/final via `αᵒᵈ`)
-2. **`IsApproxSep`** — both-sided ε-approximate γ-separation
-3. **`IsSeparator`** — network-level property (quantified over permutations)
+### `AKS/Separator/` — (γ, ε)-Separator Infrastructure
+ε-approximate γ-separation (Seiferas 2009, Section 6).
+1. **`Defs.lean`** — `SepInitial`, `SepFinal`, `IsApproxSep`, `IsSeparator`
+2. **`Family.lean`** — `SeparatorFamily` structure (analogous to `HalverFamily`)
+3. **`FromHalver.lean`** — `halverToSeparator` computable construction, `halver_isSeparator_half` (proved), inductive separator correctness
 For γ = 1/2 this reduces to `IsEpsilonHalver`. Uses Seiferas's two-parameter
 (γ, ε) formulation, not Paterson's three-parameter (λ, ε, ε₀).
-
-### `AKS/Separator/` — Remaining Files (Planned)
-See `docs/separator-plan.md` for full design. Planned files:
-1. **`Family.lean`** — `SeparatorFamily` structure (analogous to `HalverFamily`)
-2. **`FromHalver.lean`** — `halverToSeparator` computable construction (Seiferas Section 6)
+See `docs/separator-plan.md` for full design.
 
 ### `AKS/Bags/` — Bag-Tree Sorting (~450 lines)
 Seiferas's bag-based tree argument: separators → O(log n) depth sorting network.
@@ -209,22 +180,23 @@ All definitions validated by Rust simulation (`rust/test-bags.rs`).
 ```
 Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ ZigZag/Expanders.lean
                                → Graph/Complete.lean           ↓
-                              → Halver/Mixing.lean ─→ Halver/Tanner.lean  AKS.lean
-                              → Cert/WalkBound.lean ──→ Cert/Bridge.lean
-                              → ZigZag/Operators.lean ──→     ↑
-                                  ZigZag/Spectral.lean ─↗ Sort/*.lean ─→ Tree/AKSNetwork.lean
-           Random/*.lean ──────────────────────────↗          ↑
-           ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗  Halver/*.lean ─→ Halver/ExpanderToHalver.lean
-           CertCheck.lean ──→ Cert/Defs.lean ──→ Cert/Bridge.lean  Halver/Tanner.lean ─↗
+                              → Halver/Mixing.lean ─→ Halver/Tanner.lean    Seiferas.lean
+                              → Cert/WalkBound.lean ──→ Cert/Bridge.lean       ↑
+                              → ZigZag/Operators.lean ──→                      ↑
+                                  ZigZag/Spectral.lean ─↗ Sort/*.lean          ↑
+           Random/*.lean ──────────────────────────↗          ↑                ↑
+           ZigZag/RVWInequality.lean ─→ ZigZag/RVWBound.lean ─↗               ↑
+           CertCheck.lean ──→ Cert/Defs.lean ──→ Cert/Bridge.lean              ↑
+                                                                               ↑
+           Halver/*.lean ──→ Halver/ExpanderToHalver.lean ─→ Separator/FromHalver.lean
                                                                     ↓
                                                          Separator/Defs.lean
                                                          Separator/Family.lean
-                                                         Separator/FromHalver.lean
                                                                     ↓
                                                          Bags/Defs.lean
                                                          Bags/Invariant.lean
                                                          Bags/Stage.lean
-                                                         Bags/TreeSort.lean ──→ Tree/AKSNetwork.lean
+                                                         Bags/TreeSort.lean ──→ Seiferas.lean
 ```
 
 ## Style
@@ -254,9 +226,9 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 
 ## Proof Workflow
 
-**Skeleton correctness takes priority over filling in sorries.** A sorry with a correct statement is valuable (it documents what remains to prove); a sorry with a wrong statement is actively harmful (it creates false confidence and wasted work downstream). When auditing reveals incorrect lemma statements, fix them before working on other tractable sorries — even in other files. An honest skeleton with more sorries beats a dishonest one with fewer. See `docs/treesorting-audit.md` for the case study.
+**Skeleton correctness takes priority over filling in sorries.** A sorry with a correct statement is valuable (it documents what remains to prove); a sorry with a wrong statement is actively harmful (it creates false confidence and wasted work downstream). When auditing reveals incorrect lemma statements, fix them before working on other tractable sorries — even in other files. An honest skeleton with more sorries beats a dishonest one with fewer.
 
-**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. E.g., the original single-halver composition approach was mis-formulated from informal understanding; reading AKS (1983) revealed the tree structure is essential (now in `TreeSorting.lean`). Read primary sources at the design stage.
+**Verify theorem statements against the source paper early.** Before building infrastructure, read the primary source to confirm: (1) single application or repeated/recursive? (2) essential tree structures or bookkeeping? (3) definitions match exactly? Informal sources can mislead about the precise result. Read primary sources at the design stage.
 
 **Formalization adds lemmas for implicit hypotheses.** When an informal proof says "X follows because the construction has property P," the formal proof needs an explicit predicate for P and a lemma proving the construction satisfies it. Having more intermediate lemmas than the paper is EXPECTED — the extra lemmas make implicit paper assumptions explicit. Don't conflate "fewer lemmas" with "closer to the paper"; the paper's argument structure matters more than its lemma count. E.g., the AKS paper's Lemma 3 implicitly assumes zig operates on even-level cherries; the formalization needs `HasImprovedBound` as an explicit predicate + `parity_nearsort_has_improved_bound` proving the construction satisfies it.
 
@@ -403,17 +375,17 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. Halver/expander infrastructure fully proved, see [`docs/halver-expander.md`](docs/halver-expander.md). `zigzag_spectral_bound` proved (assembly), see [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md). Base expander: fully proved, see [`docs/certificate-bridge.md`](docs/certificate-bridge.md). The old single-halver composition approach has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. Halver/expander infrastructure fully proved, see [`docs/halver-expander.md`](docs/halver-expander.md). `zigzag_spectral_bound` proved (assembly), see [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md). Base expander: fully proved, see [`docs/certificate-bridge.md`](docs/certificate-bridge.md). The correctness proof uses the Seiferas separator-based approach (`Separator/`, `Bags/`, `Seiferas.lean`).
 
 ## Proof Status by Difficulty
 
-**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, `rvw_quadratic_ineq` (core scalar inequality, in `ZigZag/RVWInequality.lean`), all ZigZag/Operators + ZigZag/Spectral sublemmas (0 sorry each), `displacement_from_wrongness`, `zigzag_decreases_wrongness_v2`, `tanner_bound` (Tanner's vertex expansion), `expander_gives_halver` (expander → ε-halver bridge)
+**Done:** `zero_one_principle`, `RegularGraph.square`, `RegularGraph.zigzag`, `completeGraph.rot_involution`, `spectralGap_nonneg`, `spectralGap_le_one`, `adjMatrix_square_eq_sq`, `spectralGap_square`, `spectralGap_complete`, `zigzagFamily`, `zigzagFamily_gap`, `expander_mixing_lemma`, `zigzag_spectral_bound` (assembly), `rvw_operator_norm_bound`, `rvw_quadratic_ineq` (core scalar inequality, in `ZigZag/RVWInequality.lean`), all ZigZag/Operators + ZigZag/Spectral sublemmas (0 sorry each), `tanner_bound` (Tanner's vertex expansion), `expander_gives_halver` (expander → ε-halver bridge), `halver_isSeparator_half` (halver → separator bridge), `seiferas_implies_sorting_network` (size bound proved, correctness sorry'd)
 
-**Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`. Also deleted: `HasCherryShiftDamage`, `cherry_shift_implies_bounded_tree`, `cherry_shift_damage_gives_zigzag` (not in AKS paper; `r→r+1` comes from partition offset in Lemma 3)
+**Deleted:** The original AKS ε-nearsort + tree-distance wrongness path (`Nearsort/`, `Tree/`, `Main.lean`) has been removed in favor of the Seiferas separator-based approach.
 
 **Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound` (11/16 done, 5 medium). See [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md) for decomposition.
 
-**Substantial (months):** **Proved:** `expander_gives_halver` (in `Halver/ExpanderToHalver.lean`, via Tanner's bound), `tanner_bound` (in `Halver/Tanner.lean`), `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
+**Substantial (months):** Bag-tree invariant maintenance (`Bags/Invariant.lean`), especially `stranger_bound_maintained_eq1` (j=1 case). `separatorSortingNetwork_sorts` (assembly, `Bags/TreeSort.lean`).
 
 **Engineering (weeks, fiddly):** reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
