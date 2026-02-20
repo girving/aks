@@ -1,13 +1,12 @@
 /-
   # Graph Quotient (Vertex Merging)
 
-  Given a `d`-regular graph on `n` vertices and parameters `m`, `r` with
-  `n ≤ m * r`, merge vertices into `m` classes of size (at most) `r`,
-  yielding a `(d * r)`-regular multigraph on `m` vertices.
+  Given a `d`-regular graph on `n` vertices and a target size `m ≤ n`,
+  merge vertices into `m` classes of size `⌈n/m⌉`, yielding a
+  `(d * ⌈n/m⌉)`-regular multigraph on `m` vertices.
 
-  When `n < m * r`, some classes have fewer than `r` real vertices;
-  the excess ports act as self-loops. When `n = m * r`, all classes
-  are full and there are no self-loops.
+  When `m ∤ n`, some classes have fewer real vertices than others;
+  excess ports act as self-loops.
 
   This is the key construction for building expander families at arbitrary
   sizes from the zig-zag family (which only produces graphs at sizes D^(4(k+1))).
@@ -18,6 +17,21 @@
 import AKS.Graph.Regular
 
 open Matrix BigOperators Finset
+
+
+/-! **Ceiling Division** -/
+
+/-- Ceiling division: `⌈n/m⌉ = (n + m - 1) / m`. -/
+private abbrev ceilDiv (n m : ℕ) : ℕ := (n + m - 1) / m
+
+private theorem ceilDiv_pos {n m : ℕ} (hm : 0 < m) (hmn : m ≤ n) : 0 < ceilDiv n m :=
+  Nat.div_pos (by omega) hm
+
+private theorem le_mul_ceilDiv {n m : ℕ} (hm : 0 < m) : n ≤ m * ceilDiv n m := by
+  show n ≤ m * ((n + m - 1) / m)
+  have h1 := Nat.div_add_mod (n + m - 1) m
+  have h2 := Nat.mod_lt (n + m - 1) hm
+  omega
 
 
 /-! **Nat-Level Encode/Decode Helpers** -/
@@ -33,7 +47,7 @@ private theorem encode_mod {r : ℕ} (a b : ℕ) (hb : b < r) :
   rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt hb]
 
 
-/-! **Graph Quotient** -/
+/-! **Internal Quotient Machinery** -/
 
 /-- The original vertex index recovered from a quotient vertex-port pair.
     Vertex `u ∈ Fin m` and port `j ∈ Fin (d * r)` decode to original vertex
@@ -129,19 +143,24 @@ private theorem quotientRot_involution {n d : ℕ} (G : RegularGraph n d) {m r :
   · -- Virtual vertex: self-loop
     rw [quotientRot_neg G hr hmr x h, quotientRot_neg G hr hmr x h]
 
-/-- The quotient graph: given a `d`-regular graph on `n` vertices and parameters
-    `m`, `r` with `n ≤ m * r`, produces a `(d * r)`-regular multigraph on `m` vertices.
 
-    Each quotient vertex `u ∈ Fin m` represents original vertices
-    `{u*r, ..., u*r+r-1} ∩ {0, ..., n-1}`. When `n < m * r`, some classes
-    have fewer than `r` real vertices, and excess ports act as self-loops.
+/-! **Graph Quotient** -/
+
+/-- The quotient graph: given a `d`-regular graph on `n` vertices and a target
+    size `m ≤ n`, produces a `(d * ⌈n/m⌉)`-regular multigraph on `m` vertices.
+
+    Each quotient vertex `u ∈ Fin m` represents original vertices in the class
+    `{u * r, ..., u * r + r - 1} ∩ {0, ..., n - 1}` where `r = ⌈n/m⌉`.
+    When `m ∤ n`, some classes have fewer than `r` real vertices, and excess
+    ports act as self-loops.
 
     Self-loops and multi-edges are allowed
     (which is fine: `RegularGraph` is defined via rotation maps, not simple graphs). -/
 def RegularGraph.quotient {n d : ℕ} (G : RegularGraph n d)
-    {m r : ℕ} (hr : 0 < r) (hmr : n ≤ m * r) : RegularGraph m (d * r) where
-  rot := quotientRot G hr hmr
-  rot_involution := quotientRot_involution G hr hmr
+    (m : ℕ) (hm : 0 < m) (hmn : m ≤ n) :
+    RegularGraph m (d * ceilDiv n m) where
+  rot := quotientRot G (ceilDiv_pos hm hmn) (le_mul_ceilDiv hm)
+  rot_involution := quotientRot_involution G (ceilDiv_pos hm hmn) (le_mul_ceilDiv hm)
 
 /-- The spectral gap can only decrease under quotient: λ(G/∼) ≤ λ(G).
 
@@ -150,6 +169,6 @@ def RegularGraph.quotient {n d : ℕ} (G : RegularGraph n d)
     within each class. By Jensen's inequality on the per-class averaging,
     ‖(W_quotient - P) f‖² ≤ (1/r) ‖(W_G - P) f̃‖² ≤ (spectralGap G)² · ‖f‖². -/
 theorem spectralGap_quotient {n d : ℕ} (G : RegularGraph n d)
-    {m r : ℕ} (hr : 0 < r) (hmr : n ≤ m * r) :
-    spectralGap (G.quotient hr hmr) ≤ spectralGap G := by
+    (m : ℕ) (hm : 0 < m) (hmn : m ≤ n) :
+    spectralGap (G.quotient m hm hmn) ≤ spectralGap G := by
   sorry
