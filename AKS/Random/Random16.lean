@@ -14,8 +14,8 @@ namespace Random16
 
 #eval ensureCertificateData 16 4
 
-def rotData : String := bin_base85% "data/16/rot_map.bin"
-def certData : String := bin_base85% "data/16/cert_z.bin"
+def rotData : String := bin_base85% "data/16/rot_map.b85"
+def certData : String := bin_base85% "data/16/cert_z.b85"
 
 theorem involution_check : checkInvolutionSpec (rotData.toUTF8) 16 4 = true := by
   native_decide

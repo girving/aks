@@ -61,6 +61,13 @@ def jStrangerCount (n : ℕ) (perm : Fin n → Fin n)
     (regs : Finset (Fin n)) (level idx j : ℕ) : ℕ :=
   (regs.filter (fun i ↦ isJStranger n (perm i).val level idx j)).card
 
+/-- Items that are 1-strangers but not 2-strangers: native to parent's bag
+    but native to sibling at child level. -/
+def siblingNativeCount (n : ℕ) (perm : Fin n → Fin n)
+    (regs : Finset (Fin n)) (level idx : ℕ) : ℕ :=
+  (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1 ∧
+    ¬isJStranger n (perm i).val level idx 2)).card
+
 /-! **Basic Lemmas** -/
 
 @[simp] theorem bagSize_zero (n : ℕ) : bagSize n 0 = n := by
@@ -126,6 +133,36 @@ theorem not_isJStranger_at_root (n rank idx j : ℕ) :
     ¬isJStranger n rank 0 idx j := by
   simp only [isJStranger, not_and, not_not]
   omega
+
+/-- 1-strangers = 2-strangers + sibling-native (for power-of-2 `n`, level ≥ 2). -/
+theorem jStrangerCount_one_eq_two_plus_sibling {n : ℕ} (perm : Fin n → Fin n)
+    (regs : Finset (Fin n)) {level idx : ℕ}
+    (hn : ∃ k, n = 2 ^ k) (hlev : 2 ≤ level) (hpow : 2 ^ level ≤ n) :
+    jStrangerCount n perm regs level idx 1 =
+    jStrangerCount n perm regs level idx 2 + siblingNativeCount n perm regs level idx := by
+  simp only [jStrangerCount, siblingNativeCount]
+  -- Partition filter(isJ 1) into filter(isJ 2) ∪ filter(isJ 1 ∧ ¬isJ 2)
+  have hdisj : Disjoint
+      (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 2))
+      (regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1 ∧
+        ¬isJStranger n (perm i).val level idx 2)) := by
+    simp only [Finset.disjoint_filter]
+    exact fun _ _ h2 ⟨_, h2'⟩ ↦ h2' h2
+  have hunion :
+      regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1) =
+      regs.filter (fun i ↦ isJStranger n (perm i).val level idx 2) ∪
+      regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1 ∧
+        ¬isJStranger n (perm i).val level idx 2) := by
+    ext x; simp only [Finset.mem_filter, Finset.mem_union]
+    constructor
+    · intro ⟨hm, h1⟩
+      by_cases h2 : isJStranger n (perm x).val level idx 2
+      · exact Or.inl ⟨hm, h2⟩
+      · exact Or.inr ⟨hm, h1, h2⟩
+    · rintro (⟨hm, h2⟩ | ⟨hm, h1, _⟩)
+      · exact ⟨hm, isJStranger_antitone hn hpow (by omega) (by omega) h2⟩
+      · exact ⟨hm, h1⟩
+  rw [hunion, Finset.card_union_of_disjoint hdisj]
 
 theorem jStrangerCount_empty (n : ℕ) (perm : Fin n → Fin n)
     (level idx j : ℕ) : jStrangerCount n perm ∅ level idx j = 0 := by

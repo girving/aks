@@ -276,6 +276,12 @@ const PROOF_DATA = {
     { id: "expanderHalverFamily", file: "AKS/Halver/ExpanderToHalver.lean", line: 976, status: "proved", kind: "def",
       sig: "expanderHalverFamily {d : ℕ} (β : ℝ)\n  (graphs : ∀ m, m > 0 → RegularGraph m d)\n  (hgaps : ∀ m (hm : m > 0), spectralGap (graphs m hm) ≤ β) :\n  HalverFamily β d",
       desc: "Builds a HalverFamily from an expander family via exists_halver_depth_le." },
+    { id: "shrinkHalver", file: "AKS/Halver/Shrink.lean", line: 37, status: "proved", kind: "definition",
+      sig: "shrinkHalver (net : ComparatorNetwork (2 * M)) (n : ℕ) (hn : n ≤ M) :\n  ComparatorNetwork (2 * n)",
+      desc: "Restrict a bipartite halver on 2M wires to 2n wires, keeping only comparators with both endpoints in first n wires per half." },
+    { id: "shrinkHalver_isEpsilonHalver", file: "AKS/Halver/Shrink.lean", line: 569, status: "proved", kind: "theorem",
+      sig: "shrinkHalver_isEpsilonHalver : IsEpsilonHalver (shrinkHalver net n hnM) (ε * (M - n + 1))",
+      desc: "Shrinking preserves halver quality: if net is an ε-halver on 2M, shrinkHalver is an ε*(M-n+1)-halver on 2n. Proved via padding argument + injection." },
     { id: "tanner_bound", file: "AKS/Halver/Tanner.lean", line: 216, status: "proved", kind: "theorem",
       sig: "tanner_bound (G : RegularGraph n d) (β : ℝ) (hβ : spectralGap G ≤ β) (T : Finset (Fin n)) :\n  |T|·n ≤ |N(T)|·(|T| + β²(n-|T|))",
       desc: "Tanner's vertex expansion bound: for any T in a d-regular graph with spectral gap ≤ β, |N(T)| ≥ |T|·n/(|T| + β²(n-|T|)). Proved via Cauchy-Schwarz on codegree distribution + orthogonal decomposition." },
@@ -299,16 +305,16 @@ const PROOF_DATA = {
       sig: "halverNetwork_size (n : ℕ) (halvers : (m : ℕ) → ComparatorNetwork (2 * m))\n  (d : ℕ) (hhalver_size : ∀ m, (halvers m).size ≤ m * d) (depth : ℕ) :\n  (halverNetwork n halvers depth).size ≤ depth * (n * d)",
       desc: "Total halver network size is at most depth * (n * d). Sums halverAtLevel_size over all levels." },
     // ── Nearsort/Correctness.lean ──
-    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 425, status: "sorry", kind: "theorem",
+    { id: "farSmallCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 434, status: "sorry", kind: "theorem",
       sig: "farSmallCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farSmallCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "After depth levels, far-small count at radius n/2^depth is ≤ ε·depth·k. Core of AKS Section 4: requires trajectory/displaced-elements argument with union bound over levels.", difficulty: "weeks" },
-    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 620, status: "sorry", kind: "theorem",
+    { id: "farLargeCount_depth_bound", file: "AKS/Nearsort/Correctness.lean", line: 629, status: "sorry", kind: "theorem",
       sig: "farLargeCount_depth_bound {n : ℕ} (ε : ℝ) (depth : ℕ) ... :\n  farLargeCount (halverNetwork.exec v) k (n / 2^depth) ≤ ε * depth * k",
       desc: "Dual of farSmallCount_depth_bound for end segments.", difficulty: "weeks" },
-    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 531, status: "proved", kind: "theorem",
+    { id: "halverNetwork_initialNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 540, status: "proved", kind: "theorem",
       sig: "halverNetwork_initialNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  InitialNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Initial-segment nearsort bound. Reformulates as farSmallCount via sdiff_image_card_eq_far_count, then applies depth bound + blowup_covers_displacement." },
-    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 702, status: "proved", kind: "theorem",
+    { id: "halverNetwork_finalNearsorted", file: "AKS/Nearsort/Correctness.lean", line: 711, status: "proved", kind: "theorem",
       sig: "halverNetwork_finalNearsorted {n : ℕ} (ε : ℝ) (depth d : ℕ)\n  (hε : 0 < ε) (hε1 : ε < 1 / 2) ... (v : Equiv.Perm (Fin n)) :\n  FinalNearsorted ((halverNetwork n halvers depth).exec v) (ε * ↑depth)",
       desc: "Dual: final-segment nearsortedness via farLargeCount_depth_bound and rank_fin_od_val." },
     // ── Nearsort/HalverToNearsort.lean ──
@@ -469,12 +475,12 @@ const PROOF_DATA = {
       desc: "Spectral gap bound via certificate bridge. Fully proved: certificate (n=1728) verified by native_decide." },
 
     // ── Random/Random20736.lean ──
-    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 31, status: "proved", kind: "def",
+    { id: "Random20736.graph", file: "AKS/Random/Random20736.lean", line: 26, status: "proved", kind: "def",
       sig: "def Random20736.graph : RegularGraph 20736 12",
       desc: "Concrete 12-regular graph on 20736 = 12⁴ vertices. Rotation map loaded from data file, involution verified by native_decide." },
-    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 41, status: "sorry", kind: "theorem",
+    { id: "Random20736.gap", file: "AKS/Random/Random20736.lean", line: 37, status: "proved", kind: "theorem",
       sig: "theorem Random20736.gap : spectralGap graph ≤ 10/12",
-      desc: "Spectral gap bound via certificate bridge. Sorry: PSD certificate (821 MB) too large to embed on 16 GB machine.", difficulty: "weeks" },
+      desc: "Spectral gap bound via certificate bridge. PSD certificate (821 MB) verified by native_decide." },
     // Retired nodes — hidden in live view, visible when scrubbing to historical snapshots
     { id: "baseExpander", file: "AKS/Random/Random20736.lean", line: 31, status: "retired", kind: "axiom",
       sig: "axiom baseExpander : RegularGraph 20736 12",
@@ -518,6 +524,20 @@ const PROOF_DATA = {
     { id: "aks_sorting_networks_exist", file: "AKS/Main.lean", line: 106, status: "proved", kind: "theorem",
       sig: "aks_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
       desc: "AKS (1983): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + tree sorting." },
+
+    // ── Seiferas.lean (Seiferas-path assembly, parallel to Main.lean) ──
+    { id: "expanderToHalverFamily", file: "AKS/Seiferas.lean", line: 101, status: "proved", kind: "def",
+      sig: "expanderToHalverFamily (β : ℝ)\n  (hfamily : ∀ n > 0, ∃ G : RegularGraph n d, spectralGap G ≤ β) :\n  HalverFamily β d",
+      desc: "Wraps expanderHalverFamily: expander family → halver family with error β and depth d." },
+    { id: "halverToSeparatorFamily'", file: "AKS/Seiferas.lean", line: 114, status: "sorry", kind: "def",
+      sig: "halverToSeparatorFamily' (family : HalverFamily ε d) (hε : 0 ≤ ε) (t : ℕ) :\n  SeparatorFamily (1/2^t) (t*ε) (t*d)",
+      desc: "Halver family → separator family via iterated halving. Depth proved; isSep sorry (needs 2^t ∣ n for all n, subsumed by separatorSortingNetwork_sorts sorry)." },
+    { id: "seiferas_implies_sorting_network", file: "AKS/Seiferas.lean", line: 142, status: "sorry", kind: "theorem", milestone: true,
+      sig: "seiferas_implies_sorting_network :\n  0 < β → β < 1 → (∃ d, ∀ n > 0, ∃ G, spectralGap G ≤ β) →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "Parameterized Seiferas theorem: expander family → O(n log n) sorting. Size bound fully proved; correctness forwards sorry from separatorSortingNetwork_sorts." },
+    { id: "seiferas_sorting_networks_exist", file: "AKS/Seiferas.lean", line: 218, status: "sorry", kind: "theorem", milestone: true,
+      sig: "seiferas_sorting_networks_exist :\n  ... → 0 < c → c < 1 →\n  ∃ C > 0, ∀ n ≥ 2, ∃ net, IsSortingNetwork net ∧ net.size ≤ C·n·log n",
+      desc: "Seiferas (2009): O(n log n) sorting networks exist, from base expander + zig-zag + squaring + separator/bags path. Parallel to aks_sorting_networks_exist." },
 
     // ── Tree/Sorting.lean ──
     { id: "TreeNode", file: "AKS/Tree/Sorting.lean", line: 105, status: "definition", kind: "structure",
@@ -598,7 +618,7 @@ const PROOF_DATA = {
     { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 1427, status: "proved", kind: "theorem",
       sig: "halverToSeparator_isSeparator (h_div : 2^t ∣ n) :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (t*ε)",
       desc: "PROVED. Induction on t: base case (empty network at γ=1) + step via separator_halving_step. t levels of iterated ε-halving give (tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
-    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 1474, status: "sorry", kind: "theorem",
+    { id: "halverToSeparator_props", file: "AKS/Separator/FromHalver.lean", line: 1517, status: "sorry", kind: "theorem",
       sig: "halverToSeparator_props (n t : ℕ) (h_div : 2^t ∣ n) :\n  IsSeparator ... (1/2^t) (t*ε) ∧ depth ≤ t*d",
       desc: "Bundle separator+depth properties for halver-to-separator construction. Requires divisibility 2^t | n." },
 
@@ -615,7 +635,7 @@ const PROOF_DATA = {
     { id: "jStrangerCount", file: "AKS/Bags/Defs.lean", line: 60, status: "definition", kind: "def",
       sig: "jStrangerCount (n : ℕ) (perm : Fin n → Fin n)\n  (regs : Finset (Fin n)) (level idx j : ℕ) : ℕ",
       desc: "Count of j-strangers among items in a bag. Key measure for the Seiferas invariant." },
-    { id: "isJStranger_antitone", file: "AKS/Bags/Defs.lean", line: 108, status: "proved", kind: "theorem",
+    { id: "isJStranger_antitone", file: "AKS/Bags/Defs.lean", line: 115, status: "proved", kind: "theorem",
       sig: "isJStranger_antitone : isJStranger n rank level idx (j+1) →\n  isJStranger n rank level idx j",
       desc: "(j+1)-strange implies j-strange: divergence propagates via nativeBagIdx_div_two and div_pow_pred_div_two. Requires n power of 2 and 2^level ≤ n." },
 
@@ -623,24 +643,24 @@ const PROOF_DATA = {
     { id: "SeifInvariant", file: "AKS/Bags/Invariant.lean", line: 95, status: "definition", kind: "structure",
       sig: "SeifInvariant (n : ℕ) (A ν lam ε : ℝ) (t : ℕ)\n  (perm : Fin n → Fin n) (bags : BagAssignment n) : Prop",
       desc: "Seiferas four-clause invariant: (1) alternating empty, (2) uniform size, (3) capacity ≤ n·ν^t·A^level, (4) j-strangers ≤ lam·ε^(j-1)·capacity." },
-    { id: "initialInvariant", file: "AKS/Bags/Invariant.lean", line: 169, status: "proved", kind: "theorem",
+    { id: "initialInvariant", file: "AKS/Bags/Invariant.lean", line: 186, status: "proved", kind: "theorem",
       sig: "initialInvariant (n : ℕ) (A ν lam ε : ℝ) (perm : Fin n → Fin n) :\n  SeifInvariant n A ν lam ε 0 perm (initialBags n)",
       desc: "PROVED. Initial invariant holds at t=0: all items in root, zero strangers. Direct from definitions." },
-    { id: "capacity_maintained", file: "AKS/Bags/Invariant.lean", line: 267, status: "proved", kind: "theorem",
+    { id: "capacity_maintained", file: "AKS/Bags/Invariant.lean", line: 296, status: "proved", kind: "theorem",
       sig: "capacity_maintained : SatisfiesC3 A ν lam → ... →\n  (rebag split level idx).card ≤ bagCapacity n A ν (t+1) level",
       desc: "PROVED. Clause (3) capacity maintained via rebag + C3 arithmetic. Defines SplitResult/rebag to make bags' concrete." },
-    { id: "stranger_bound_maintained_gt1", file: "AKS/Bags/Invariant.lean", line: 391, status: "proved", kind: "theorem",
+    { id: "stranger_bound_maintained_gt1", file: "AKS/Bags/Invariant.lean", line: 435, status: "proved", kind: "theorem",
       sig: "stranger_bound_maintained_gt1 : SatisfiesC4_gt1 A ν ε → j ≥ 2 →\n  jStrangerCount ≤ lam·ε^(j-1)·bagCapacity(t+1)",
       desc: "PROVED. Clause (4) j≥2 via rebag_strangerCount_le + stranger_gt1_arithmetic + C4." },
-    { id: "stranger_bound_maintained_eq1", file: "AKS/Bags/Invariant.lean", line: 467, status: "proved", kind: "theorem",
+    { id: "stranger_bound_maintained_eq1", file: "AKS/Bags/Invariant.lean", line: 511, status: "proved", kind: "theorem",
       sig: "stranger_bound_maintained_eq1 : SatisfiesC4_eq1 A ν lam ε →\n  jStrangerCount ... 1 ≤ lam·bagCapacity(t+1)",
       desc: "PROVED. Clause (4) j=1 via rebag_strangerCount_le + stranger_eq1_arithmetic + C4_eq1. Takes explicit hkick_stranger and hparent_1stranger hypotheses." },
-    { id: "parent_1stranger_bound", file: "AKS/Bags/Invariant.lean", line: 526, status: "sorry", kind: "theorem",
+    { id: "parent_1stranger_bound", file: "AKS/Bags/Invariant.lean", line: 594, status: "proved", kind: "theorem",
       sig: "parent_1stranger_bound :\n  jStrangerCount (fromParent ...) 1 ≤ parentStrangerCoeff·bagCapacity",
-      desc: "Parent 1-stranger bound: four sub-sources (Seiferas Section 5). Geometric series with ratio (2εA)²." },
-    { id: "invariant_maintained", file: "AKS/Bags/Invariant.lean", line: 541, status: "sorry", kind: "theorem",
+      desc: "PROVED. Parent 1-stranger bound via decomposition into 2-strangers + sibling-native items, using parentStrangerCoeff_mul_A identity." },
+    { id: "invariant_maintained", file: "AKS/Bags/Invariant.lean", line: 683, status: "proved", kind: "theorem",
       sig: "invariant_maintained : SeifInvariant ... t ... →\n  SeifInvariant ... (t+1) ...",
-      desc: "Full invariant maintained after one stage. Assembles all clause maintenance sublemmas." },
+      desc: "Full invariant maintained after one stage. Assembles all clause maintenance sublemmas (proved)." },
 
     // ── Bags/Stage.lean ──
     { id: "separatorStage", file: "AKS/Bags/Stage.lean", line: 46, status: "definition", kind: "def",
@@ -669,6 +689,26 @@ const PROOF_DATA = {
     { id: "separatorSortingNetwork_depth_bound", file: "AKS/Bags/TreeSort.lean", line: 94, status: "proved", kind: "theorem",
       sig: "separatorSortingNetwork_depth_bound :\n  depth ≤ C * d_sep * Nat.log 2 n",
       desc: "PROVED. O(log n) depth bound. Direct from depth_le + numStages = C·log₂(n)." },
+
+    // Split stranger bounds (Instance 2 of Part B)
+    { id: "jStrangerCount_level_shift", file: "AKS/Bags/SplitStranger.lean", line: 39, status: "proved", kind: "theorem",
+      sig: "jStrangerCount_level_shift :\n  jStrangerCount perm S (l-1) (i/2) j = jStrangerCount perm S l i (j+1)",
+      desc: "PROVED. Level-shift identity: j-strangers at parent (l-1,i/2) = (j+1)-strangers at child (l,i). Pure Nat arithmetic." },
+    { id: "kick_stranger_bound", file: "AKS/Bags/SplitStranger.lean", line: 68, status: "proved", kind: "theorem",
+      sig: "kick_stranger_bound :\n  jStrangerCount (split l i).toParent (l-1) (i/2) j ≤ lam·ε^j·cap(l)",
+      desc: "PROVED. hkick_stranger hypothesis: fringe items have few strangers at parent level. Via level shift + subset mono + invariant." },
+    { id: "fromParent_stranger_filtered", file: "AKS/Bags/SplitStranger.lean", line: 120, status: "sorry", kind: "theorem",
+      sig: "fromParent_stranger_filtered :\n  jStrangerCount (fromParent split l i) (l-1) (i/2) j ≤ ε·jStrangerCount bags(l-1,i/2) j",
+      desc: "Separator filtering: at most ε fraction of parent's strangers leak past fringe to children. Needs SepInitial/SepFinal connection." },
+    { id: "parent_stranger_bound", file: "AKS/Bags/SplitStranger.lean", line: 141, status: "sorry", kind: "theorem",
+      sig: "parent_stranger_bound :\n  jStrangerCount (fromParent split l i) l i j ≤ lam·ε^(j-1)·cap(l-1)",
+      desc: "hparent_stranger hypothesis (j≥2). Proof complete: level shift + filtering + invariant. Sorry from fromParent_stranger_filtered." },
+    { id: "cnative_from_parent_bound", file: "AKS/Bags/SplitStranger.lean", line: 201, status: "sorry", kind: "theorem",
+      sig: "cnative_from_parent_bound :\n  siblingNativeCount (fromParent split l i) l i ≤ cnativeCoeff·cap(l-1)",
+      desc: "Sibling-native bound among items from parent. Three sub-sources: halving errors + geometric series + above-parent items." },
+    { id: "parent_1stranger_from_inv", file: "AKS/Bags/SplitStranger.lean", line: 217, status: "sorry", kind: "theorem",
+      sig: "parent_1stranger_from_inv :\n  jStrangerCount (fromParent split l i) l i 1 ≤ parentStrangerCoeff·cap(l)",
+      desc: "hparent_1stranger hypothesis. Assembly proved: level shift + filtering + invariant + parent_1stranger_bound. Sorry from sub-lemmas." },
 
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
@@ -962,6 +1002,20 @@ const PROOF_DATA = {
     ["expander_family_small_gap", "aks_sorting_networks_exist"],
     ["zigzag_implies_aks_network", "aks_sorting_networks_exist"],
 
+    // Seiferas.lean — separator-path assembly
+    ["expanderHalverFamily", "expanderToHalverFamily"],
+    ["HalverFamily", "halverToSeparatorFamily'"],
+    ["halverToSeparator_isSeparator", "halverToSeparatorFamily'"],
+    ["SeparatorFamily", "halverToSeparatorFamily'"],
+    ["expanderToHalverFamily", "seiferas_implies_sorting_network"],
+    ["halverToSeparatorFamily'", "seiferas_implies_sorting_network"],
+    ["separatorSortingNetwork_sorts", "seiferas_implies_sorting_network"],
+    ["separatorSortingNetwork_depth_le", "seiferas_implies_sorting_network"],
+    ["size_le_half_n_mul_depth", "seiferas_implies_sorting_network"],
+    ["zero_one_principle", "seiferas_implies_sorting_network"],
+    ["seiferas_implies_sorting_network", "seiferas_sorting_networks_exist"],
+    ["explicit_expanders_exist_zigzag", "seiferas_sorting_networks_exist"],
+
     // WalkBound
     ["spectralGap", "spectralGap_le_of_walk_bound"],
     ["walkCLM", "spectralGap_le_of_walk_bound"],
@@ -1083,7 +1137,8 @@ const PROOF_DATA = {
     { id: "AKS/Bags/Invariant.lean", label: "Bags/Invariant.lean", color: "#1a1e24" },
     { id: "AKS/Bags/Stage.lean", label: "Bags/Stage.lean", color: "#1a1e24" },
     { id: "AKS/Bags/TreeSort.lean", label: "Bags/TreeSort.lean", color: "#1a1e24" },
-    { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" }
+    { id: "AKS/Main.lean", label: "Main.lean", color: "#1a1e24" },
+    { id: "AKS/Seiferas.lean", label: "Seiferas.lean", color: "#1a1e24" }
   ]
 };
 // ═══════════════════════════════════════════════════════

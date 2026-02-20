@@ -470,10 +470,25 @@ fn verify_columns(
         )
 }
 
-/// Write a slice of i32 values as little-endian bytes in a single bulk write.
-fn write_i32_bulk(path: &std::path::Path, data: &[i32]) {
-    let bytes: &[u8] = bytemuck::cast_slice(data);
-    fs::write(path, bytes).unwrap_or_else(|e| panic!("Cannot write {}: {}", path.display(), e));
+/// Encode a slice of i32 values as base-85 text (same format as Lean's `bin_base85%`).
+/// Each i32 (reinterpreted as u32) becomes 5 ASCII chars (codepoints 33–117).
+fn encode_base85(data: &[i32]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(data.len() * 5);
+    for &val in data {
+        let mut v = val as u32;
+        for _ in 0..5 {
+            result.push((v % 85 + 33) as u8);
+            v /= 85;
+        }
+    }
+    result
+}
+
+/// Write a slice of i32 values as base-85 encoded text.
+fn write_base85(path: &std::path::Path, data: &[i32]) {
+    let encoded = encode_base85(data);
+    fs::write(path, &encoded)
+        .unwrap_or_else(|e| panic!("Cannot write {}: {}", path.display(), e));
 }
 
 fn main() {
@@ -569,7 +584,7 @@ fn main() {
     );
 
     // Streaming pipeline: for each block of z_packed columns, solve L^T · X = I,
-    // pack to i32, refine (2 passes), verify, and write to cert_z.bin.
+    // pack to i32, refine (2 passes), verify, and write to cert_z.b85.
     // z_packed is never fully resident — only one block at a time.
     // Peak memory: M + TRSM block ≈ 1.74 GB at n=20736.
     let total = n * (n + 1) / 2;
@@ -583,7 +598,7 @@ fn main() {
     let t0 = Instant::now();
 
     fs::create_dir_all(&output_dir).expect("Cannot create output dir");
-    let cert_path = output_dir.join("cert_z.bin");
+    let cert_path = output_dir.join("cert_z.b85");
     let cert_file = fs::File::create(&cert_path)
         .unwrap_or_else(|e| panic!("Cannot create {}: {}", cert_path.display(), e));
     let mut cert_writer = std::io::BufWriter::new(cert_file);
@@ -630,12 +645,12 @@ fn main() {
         global_min_diag = global_min_diag.min(block_min);
         global_eps_max = global_eps_max.max(block_eps);
 
-        // Write block to cert_z.bin (blocks are contiguous and sequential).
+        // Write block to cert_z.b85 (blocks are contiguous and sequential).
         {
             use std::io::Write;
-            let bytes: &[u8] = bytemuck::cast_slice(&packed_block);
+            let encoded = encode_base85(&packed_block);
             cert_writer
-                .write_all(bytes)
+                .write_all(&encoded)
                 .unwrap_or_else(|e| panic!("Write failed: {}", e));
         }
         total_entries += packed_block.len();
@@ -685,18 +700,20 @@ fn main() {
     }
 
     // Write rotation map
-    let rot_path = output_dir.join("rot_map.bin");
+    let rot_path = output_dir.join("rot_map.b85");
     eprintln!("Writing rotation map to {}...", rot_path.display());
-    write_i32_bulk(&rot_path, &rot);
+    write_base85(&rot_path, &rot);
     eprintln!(
-        "  {} ({} entries)",
+        "  {} ({} entries, {} base85)",
         fmt_bytes(rot.len() as u64 * 4),
-        rot.len()
+        rot.len(),
+        fmt_bytes(rot.len() as u64 * 5)
     );
     eprintln!(
-        "  cert_z.bin: {} ({} entries)",
+        "  cert_z.b85: {} ({} entries, {} base85)",
         fmt_bytes(total_entries as u64 * 4),
-        total_entries
+        total_entries,
+        fmt_bytes(total_entries as u64 * 5)
     );
 
     // Summary

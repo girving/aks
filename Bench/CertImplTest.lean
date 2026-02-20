@@ -7,10 +7,10 @@ import AKS.Cert.Read
 #eval ensureCertificateData 16 4
 #eval ensureCertificateData 1728 12
 
-def rotData16t : String := bin_base85% "data/16/rot_map.bin"
-def certData16t : String := bin_base85% "data/16/cert_z.bin"
-def rotData1728t : String := bin_base85% "data/1728/rot_map.bin"
-def certData1728t : String := bin_base85% "data/1728/cert_z.bin"
+def rotData16t : String := bin_base85% "data/16/rot_map.b85"
+def certData16t : String := bin_base85% "data/16/cert_z.b85"
+def rotData1728t : String := bin_base85% "data/1728/rot_map.b85"
+def certData1728t : String := bin_base85% "data/1728/cert_z.b85"
 
 -- n=16
 theorem cert16 : checkCertificateSlow rotData16t certData16t 16 4 216 9 1 = true := by
