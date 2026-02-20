@@ -355,22 +355,159 @@ since LHS = 0.
 
 **Goal:** Prove `concreteSplit_cnative_bound`.
 
-**Strategy (bound halving error):**
+**Confidence: 75%.** Statement correct (validated by Rust). The mathematical
+argument is Seiferas's benchmark distribution comparison (Section 5, p.5).
 
-**Step 1:** Understand `siblingNativeCount` definition in `Defs.lean`:
-items that are 1-strangers at level `l+1` but native to level `l` (parent).
-These are items assigned to the wrong child by the split.
+#### Mathematical Analysis
 
-**Step 2:** Prove: sibling-native items have `perm` values near the
-`bagSize/2` boundary. Their `nativeBagIdx` at level `l+1` differs from
-their rank-based child assignment (threshold at `f + h`).
+**Setup.** Parent bag D = bags(level-1, p) has b items. The `concreteSplit`
+sorts items by `rankInBag perm` (exact sorted order within D), removes the
+fringe (lowest f and highest f ranked items to grandparent), and splits the
+middle into left child (rank [f, f+h)) and right child (rank [f+h, f+2h))
+where f = ⌊λ·b⌋ and f+h = ⌊b/2⌋.
 
-**Step 3:** Count: the number of items near the boundary is bounded by
-the separator's epsilon error. Specifically, items where rank-based
-assignment disagrees with native assignment are bounded by `eps * b / 2`.
+**Four contiguous groups.** Items in D sorted by perm value partition into:
+- `s_lo`: below-strangers (perm < p·bs, native to bags left of D)
+- `n_L`: left-native (perm ∈ [p·bs, p·bs + bs/2), native to left child)
+- `n_R`: right-native (perm ∈ [p·bs + bs/2, (p+1)·bs), native to right child)
+- `s_hi`: above-strangers (perm ≥ (p+1)·bs, native to bags right of D)
 
-**Step 4:** Show the `cnativeCoeff` bound absorbs the halving error:
-`eps * b / 2 <= cnativeCoeff * cap(parent)`.
+where bs = bagSize n (level-1). Ranks in D match sorted perm order, so:
+ranks [0, s_lo) → s_lo items; [s_lo, s_lo+n_L) → n_L; etc.
+
+**Key quantity:** C = s_lo + n_L = count of items with perm below the child
+boundary. The split point between left/right children is at rank ⌊b/2⌋.
+
+**Rank-structure bound (Sub-lemma A, proved in Rust):**
+```
+siblingNativeCount(toLeftChild, level, 2p)
+    = |{right-native items with rank ∈ [f, f+h)}|
+    = |[C, C+n_R) ∩ [f, f+h)|
+    ≤ max(0, ⌊b/2⌋ - C)     -- upper bound, exact when C ≥ f
+```
+
+Similarly for the right child: siblingNativeCount ≤ max(0, C - ⌈b/2⌉).
+
+**Deviation formula:**
+```
+⌊b/2⌋ - C = ⌊(s_lo + n_L + n_R + s_hi)/2⌋ - (s_lo + n_L)
+           = (n_R - n_L + s_hi - s_lo)/2     (when b is even)
+```
+
+So siblingNativeCount ≤ |C - ⌊b/2⌋| ≤ (|n_L - n_R| + |s_lo - s_hi|) / 2
+                                        ≤ (|n_L - n_R| + s_lo + s_hi) / 2.
+
+#### Rust Validation (`rust/test-cnative-decompose.rs`)
+
+Empirical results (n = 8..16384, all stages until convergence):
+
+| Quantity | Max ratio | Denominator | Status |
+|----------|-----------|-------------|--------|
+| sn / (cnc·cap) | 0.035 | cnativeCoeff·cap(parent) | **OK** (bound holds) |
+| \|n_L-n_R\| / cap | 0.0018 | cap(parent) | Native imbalance is tiny |
+| \|s_lo-s_hi\| / (λ·cap) | 0.013 | λ·cap(parent) | Stranger asymmetry tiny |
+| native_contrib | 0.033 | 2·cnc·cap | **Dominates** (93% of bound) |
+| stranger_contrib | 0.002 | 2·cnc·cap | Small (7% of bound) |
+
+Worst case: n=16384 t=20 lev=5 idx=0, sn=29 b=974 s_lo=0 n_L=458 n_R=512
+s_hi=4 C=458 b/2=487 cap=29695.
+
+**Key finding:** Formula mismatches (1068) are all cases where formula > actual
+(the fringe captures some sibling-native items). The formula is always an upper
+bound. The mismatches do not affect correctness.
+
+#### Proof Decomposition
+
+**Sub-lemma A (Rank Structure, ~Medium):** In `Split.lean`.
+```lean
+theorem siblingNativeCount_fromParent_le_deviation
+    ... (level idx : ℕ) (hlev : 1 ≤ level) :
+    siblingNativeCount n perm (fromParent (concreteSplit lam perm bags) level idx) level idx ≤
+    let B := bags (level - 1) (idx / 2)
+    let boundary := (idx / 2) * bagSize n (level - 1) + bagSize n level
+    let C := (B.filter (fun i => (perm i).val < boundary)).card
+    Int.natAbs (↑C - ↑(B.card / 2))
+```
+
+Proof sketch:
+1. Unfold fromParent → toLeftChild or toRightChild of parent bag
+2. Items in toLeftChild have rank ∈ [f, f+h) where f+h = ⌊b/2⌋
+3. Sibling-native items are right-native (perm ≥ boundary) with rank < ⌊b/2⌋
+4. Count = max(0, ⌊b/2⌋ - C) since right-native items occupy ranks [C, C+n_R)
+5. max(0, ⌊b/2⌋ - C) ≤ |C - ⌊b/2⌋|
+
+Uses: `rankInBag_lt_count_below`, `rankInBag_ge_count_below`, exact rank
+counting from `SplitCard.lean`.
+
+**Sub-lemma B (Deviation Bound, ~Hard):** In `SplitStranger.lean`.
+```lean
+theorem below_boundary_deviation
+    (inv : SeifInvariant ...) (hparams : SatisfiesConstraints ...)
+    (level idx : ℕ) (hlev : 1 ≤ level) :
+    let B := bags (level - 1) (idx / 2)
+    let boundary := ...
+    let C := (B.filter ...).card
+    (Int.natAbs (↑C - ↑(B.card / 2)) : ℝ) ≤
+    cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1)
+```
+
+This is the HARD sub-lemma. Proof strategy (Seiferas Section 5, p.5):
+
+**Decompose** |C - b/2| = |(n_L - n_R + s_lo - s_hi)| / 2 into:
+
+**(B1) Stranger contribution:** |s_lo - s_hi| / 2 ≤ (s_lo + s_hi) / 2
+    ≤ λ/2 · cap(parent) [from invariant clause 4 at j=1].
+    This contributes ≤ λ/2 ≈ 0.00505 to the coefficient.
+
+**(B2) Native imbalance:** |n_L - n_R| / 2 ≤ ?
+    Bounded by Seiferas's benchmark distribution comparison:
+
+    Compare actual tree to a "benchmark" where each bag C' at this level
+    has only C'-native items below it and d/2 C'-native items in its parent.
+    In the benchmark, n_L = n_R exactly. Excess comes from two sources:
+
+    **(B2a) Subtree stranger displacement:** Non-native items entering C's
+    subtree displace C-native items upward. At each level l in C's subtree,
+    at most λε^(j-1)·cap(l) strangers. Summing the cascade:
+    ≤ 2λεA·cap(level) / (1-(2εA)²) = 2λεA²·cap(parent) / (1-(2εA)²)
+    Contributes ≈ 0.000211 to the coefficient.
+
+    **(B2b) Above-parent items:** C-native items on levels above D
+    contribute to n_R imbalance. Bounded by geometric series in 1/(2A)²:
+    ≤ cap(level) / (8A³-2A) = cap(parent) / (8A²-2)
+    Contributes ≈ 0.00125 to the coefficient.
+
+    **(B2c) Halving adjustment:** For the exact sort, the rank-based split
+    at ⌊b/2⌋ is exact (no separator error), but the ε/2 term in
+    cnativeCoeff provides additional slack. Total needed:
+    λ/2 + (B2a) + (B2b) ≤ cnativeCoeff = ε/2 + 2λεA²/(1-(2εA)²) + 1/(8A²-2).
+    Since λ = ε in Seiferas's parameters, λ/2 ≤ ε/2. ✓
+
+**Risk assessment:** Sub-lemma A is MEDIUM (standard Finset combinatorics).
+Sub-lemma B is HIGH — the benchmark distribution argument requires multi-level
+tree accounting. B2a and B2b each need geometric series summing stranger
+bounds across levels. This is the hardest single proof in the entire Bags
+subsystem.
+
+**Fallback:** If the benchmark argument proves too complex to formalize,
+we can sorry Sub-lemma B and prove Sub-lemma A + assembly. This reduces the
+sorry surface from one opaque `concreteSplit_cnative_bound` to one clean
+mathematical statement (deviation bound) with validated semantics.
+
+**Alternative approach:** Strengthen `SeifInvariant` with a native-balance
+clause (track |n_L - n_R| explicitly). This would make Sub-lemma B trivial
+but requires modifying the invariant (interaction with S1 work).
+
+#### Recommended Execution Order
+
+1. Prove level=0 case (trivial: fromParent = ∅) — 5 min
+2. Prove Sub-lemma A (rank structure) — 1-2 weeks
+3. Factor Sub-lemma B into B1 + B2a + B2b — 1 week
+4. Prove B1 (stranger contribution from invariant) — 1 week
+5. Prove B2a + B2b (benchmark argument) or sorry — 2-4 weeks
+6. Assemble the full theorem — 1 day
+
+**Total estimate:** 4-8 weeks (2-3 if B2 is sorry'd).
 
 **Shared infrastructure with I2:** Both need rank-perm ordering lemmas
 from `Split.lean`. If I2 and I3 run in parallel, coordinate so that shared
