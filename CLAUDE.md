@@ -91,9 +91,9 @@ Track tool performance against these baselines. If a command exceeds its expecte
 
 ### Git
 
-Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
+Use merge, not rebase: `git pull --no-rebase`.
 
-**When the user says "commit", always push immediately after committing.** The standard workflow is: commit → pull if needed → push. Don't wait for explicit permission to push.
+**When the user says "commit", always push immediately after committing.** The standard workflow is: commit → pull if needed → push.
 
 **Show a diffstat before committing.** Run `git diff --stat` (for staged+unstaged changes) so the user can see which files changed and how many lines were added/removed before the commit is created.
 
@@ -103,7 +103,7 @@ Use merge, not rebase: `git pull --no-rebase`. Never use `git pull --rebase`.
 
 ### Resource Constraints
 
-**Never increase precision or memory usage without explicit permission.** If the user asks for f32, use f32. If they ask for low memory, keep it low. Do not silently switch from f32 to f64 or allocate larger buffers "because the margin is better." OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.
+**Never increase numerical precision or memory usage without explicit permission.** OOM crashes waste more time than a tight margin. If you believe higher precision is truly needed, **ask first** — explain the tradeoff and let the user decide.
 
 **Check for zombie processes on startup/resume.** Long-running Rust or Lean processes from previous sessions can linger and consume GB of memory. On session start: `ps aux | grep -E 'certificate|lake|lean' | grep -v grep` and kill stale ones with `pkill -f lean` / `pkill -f lake` before launching new heavy jobs.
 
@@ -201,12 +201,12 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 
 ## Style
 
-- **Remove unused hypotheses from proved theorems.** Don't prefix with `_` — delete the argument entirely and update all callers. Unused arguments are dead weight that obscures what a theorem actually needs.
+- **Remove unused hypotheses from proved theorems.** Don't prefix with `_` — delete the argument entirely and update all callers.
 - Use `↦` (not `=>`) for lambda arrows: `fun x ↦ ...`
 - In markdown/comments, backtick-quote Lean identifiers and filenames: `` `Fin` ``, not `Fin`; `` `ZigZag.lean` ``, not `ZigZag.lean`
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines
 - Move reusable helpers into their own files (e.g., `Fin` arithmetic → `AKS/Misc/Fin.lean`). Iterate in-file during development, extract before committing.
-- Split files beyond ~300 lines. Smaller files = faster incremental checking (imports are precompiled; only the current file re-elaborates from the change point).
+- Split files beyond ~300 lines for faster incremental checking.
 - **Use subdirectories for cohesive subsystems.** Group related files under `AKS/Name/*.lean`. Consumers import leaf modules directly. When moving files into a subdirectory: (1) `git mv` the files, (2) update imports in moved files and all dependents, (3) update `file:` paths in `docs/index.html` PROOF_DATA, (4) update CLAUDE.md architecture section, (5) run `scripts/update-viz-lines`.
 - Prefer algebraic notation over explicit constructor names: `1` not `ContinuousLinearMap.id ℝ _`, `a * b` not `ContinuousLinearMap.comp a b`. Don't add type ascriptions when the other operand pins the type.
 - **Parameterize theorems over abstract bounds, not hard-coded constants.** Take spectral gap bounds (β, c, etc.) as parameters with hypotheses, not baked-in fractions. Chain `.trans` through hypotheses, not `norm_num`. Prefer explicit types/degrees (`D * D`) over `∃ d`, and concrete objects as parameters over axioms in statements. Motivation: we want explicit, computable, extractable constants.
@@ -222,7 +222,7 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - Depends on **Mathlib v4.27.0** — when updating, check import paths as they frequently change between versions (this has caused build breaks before)
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 - **Avoid `native_decide`** — sidesteps the kernel's trust boundary. Prefer `decide +kernel` when `decide` is too slow. Only use `native_decide` as a last resort.
-- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
+- **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
 
 ## Proof Workflow
 
@@ -248,7 +248,7 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 
 **Prefer point-free (abstract) formulations over coordinate-based ones.** Before diving into a coordinate proof, ask whether an operator identity makes the key result fall out algebraically. Abstract identities compose cleanly; coordinate proofs each require their own index bookkeeping. **Exception:** when there's a canonical basis and the proof is naturally a finite computation (e.g., `adjMatrix_row_sum`).
 
-**When a user suggests an approach or lesson, rephrase it for CLAUDE.md** rather than copying verbatim. Lessons should be concise, actionable, and fit the existing style. This also applies to self-generated lessons: distill the insight before recording it.
+**When a user suggests an approach or lesson, rephrase it for CLAUDE.md** rather than copying verbatim. Lessons should be concise, actionable, and fit the existing style.
 
 **Work autonomously on low-risk tasks once the path is clear.** When reduced to well-understood engineering (Mathlib interfacing, type bridging, assembling existing components), continue autonomously. Check in when hitting unexpected obstacles, discovering the approach won't work, or completing major milestones. Progress over permission when risk is low.
 
@@ -286,7 +286,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Nested if-then-else: manual `by_cases` over `split_ifs`.** `split_ifs` generates fragile hypothesis names. Instead: `by_cases h : condition` then `rw [if_pos h]`/`rw [if_neg h]` for each branch. Use `‹fact›` to reference anonymous `have` statements. Pattern: `by_cases h : a = c.i; · rw [if_pos h]; ...; · rw [if_neg h]; ...`.
 
-**When stuck after 2-3 attempts, step back and refactor** rather than trying more tactic variations on the same structure. Repeated `omega`/`simp` failures usually indicate the definitions need restructuring, not a cleverer tactic combination.
+**When stuck after 2-3 attempts, step back and reason mathematically** rather than trying more tactic variations on the same structure. (1) Write out what you're proving and why it's true, (2) identify key sublemmas, (3) implement as separate helper lemmas, (4) reassemble.
 
 **Define CLMs in three layers: standalone function → LinearMap → CLM.** (1) Standalone `def` on `Fin n → ℝ` for easy `simp`/`unfold`. (2) Wrap as `→ₗ[ℝ]` using `WithLp.toLp 2`/`WithLp.ofLp`; prove `map_add'`/`map_smul'` via `apply PiLp.ext; intro v; simp [myFun, ...]`. (3) Promote to `→L[ℝ]` via `LinearMap.toContinuousLinearMap`. Add `@[simp]` lemma `myCLM_apply` (typically `rfl`). See `walkFun`/`walkLM`/`walkCLM` in `Graph/Regular.lean`.
 
@@ -324,9 +324,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **`linarith` can't handle division.** `1/↑n > 0` doesn't follow from `↑n > 0` in `linarith`'s linear fragment. Provide it as `have : (0:ℝ) < 1 / ↑n := by positivity`. Similarly, `(↑n + 1)/↑n = 1 + 1/↑n` needs `field_simp` to make `linarith`-accessible.
 
-**Make helper definitions public when downstream proofs need them.** Remove `private` and add `@[simp]` lemmas when multiple files need encode/decode helpers. The larger API surface is outweighed by enabling downstream `simp`.
-
-**When hitting technical obstacles, step back and reason mathematically first.** After 2-3 failed tactic attempts, don't revert to `sorry`. Instead: (1) write out what you're proving and why it's true, (2) identify key sublemmas, (3) implement as separate helper lemmas, (4) reassemble. Helpers are reusable and make the main proof readable.
+**Make helper definitions public when downstream proofs need them.** Remove `private` and add `@[simp]` lemmas.
 
 **`omega` can't see through Fin literal `.val`.** `omega` treats `(⟨x, proof⟩ : Fin n).val` as an opaque atom, not as `x`. Fixes: (1) `show x - y < z; omega` forces Lean to check definitional equality, reducing the Fin val; (2) for Fin equalities `⟨a, _⟩ = ⟨b, _⟩`, use `ext; show a = b; omega`; (3) for nested Fin terms like `(M - n) + (v ⟨n + (M + j - M), _⟩).val`, use `congr 3; ext; show n + (M + j - M) = n + j; omega` — `congr` peels through `+`, `.val`, function application to reach the Fin constructor.
 
