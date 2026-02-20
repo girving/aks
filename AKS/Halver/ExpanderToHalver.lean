@@ -35,7 +35,7 @@ private def bipartiteComparators {m d : ℕ} (G : RegularGraph m d) :
 private lemma bipartiteComparators_length {m d : ℕ} (G : RegularGraph m d) :
     (bipartiteComparators G).length = m * d := by
   simp [bipartiteComparators, List.length_flatMap, List.length_map,
-    List.length_finRange, List.map_const', List.sum_replicate, Nat.mul_comm]
+    List.length_finRange, List.map_const', List.sum_replicate]
 
 /-- All comparators in the bipartite network are bipartite: top wire < m ≤ bottom wire. -/
 private lemma bipartiteComparators_bipartite {m d : ℕ} (G : RegularGraph m d)
@@ -57,7 +57,7 @@ def expanderHalver {m d : ℕ} (G : RegularGraph m d) : ComparatorNetwork (2 * m
 /-- Applying a bipartite comparator: top values can only decrease. -/
 private lemma bipartite_apply_top_le {n m : ℕ} {α : Type*} [LinearOrder α]
     (c : Comparator n)
-    (hci : c.i.val < m) (hcj : m ≤ c.j.val)
+    (hcj : m ≤ c.j.val)
     (w : Fin n → α) (k : Fin n) (hk : k.val < m) :
     c.apply w k ≤ w k := by
   have hkj : k ≠ c.j := fun h => absurd (h ▸ hk) (by omega)
@@ -68,7 +68,7 @@ private lemma bipartite_apply_top_le {n m : ℕ} {α : Type*} [LinearOrder α]
 /-- Applying a bipartite comparator: bottom values can only increase. -/
 private lemma bipartite_apply_bot_ge {n m : ℕ} {α : Type*} [LinearOrder α]
     (c : Comparator n)
-    (hci : c.i.val < m) (hcj : m ≤ c.j.val)
+    (hci : c.i.val < m)
     (w : Fin n → α) (k : Fin n) (hk : m ≤ k.val) :
     w k ≤ c.apply w k := by
   have hki : k ≠ c.i := fun h => absurd (h ▸ hk) (by omega)
@@ -100,8 +100,8 @@ private lemma foldl_bipartite_preserves_le {n m : ℕ} {α : Type*} [LinearOrder
     simp only [List.foldl_cons]
     apply ih (fun c' hc' => hcs c' (.tail c hc'))
     have ⟨hci, hcj⟩ := hcs c (.head rest)
-    exact le_trans (bipartite_apply_top_le c hci hcj w top htop)
-      (le_trans h (bipartite_apply_bot_ge c hci hcj w bot hbot))
+    exact le_trans (bipartite_apply_top_le c hcj w top htop)
+      (le_trans h (bipartite_apply_bot_ge c hci w bot hbot))
 
 /-- If a comparator c₀ is in a list of bipartite comparators, then after
     executing the list, output[c₀.i] ≤ output[c₀.j]. -/
@@ -240,7 +240,7 @@ private lemma edge_mono_neighborhood_subset {m d : ℕ} (G : RegularGraph m d)
     When `s > β·k` and the Tanner bound `s·m ≤ (k-s)·(s + β²(m-s))` holds,
     we derive False. The key is `(s - βk)² > 0` combined with `k ≤ m`. -/
 private lemma tanner_halver_contradiction {s m k : ℕ} {β : ℝ}
-    (hm : 0 < m) (hk : 0 < k) (hkm : k ≤ m)
+    (hm : 0 < m) (hkm : k ≤ m)
     (hs : (s : ℝ) > β * ↑k)
     (hβ_nn : 0 ≤ β) (hsm : s ≤ m)
     (h_tanner : (s : ℝ) * ↑m ≤ (↑k - ↑s) * (↑s + β ^ 2 * (↑m - ↑s))) :
@@ -287,7 +287,7 @@ private lemma rank_fin {n : ℕ} (a : Fin n) : rank a = a.val := by
 private lemma card_fin_filter_lt {n : ℕ} {k : ℕ} (hk : k ≤ n) :
     (univ.filter (fun x : Fin n ↦ x.val < k)).card = k := by
   rcases eq_or_lt_of_le hk with rfl | hlt
-  · simp [Finset.filter_true_of_mem (fun (x : Fin k) _ ↦ x.isLt)]
+  · simp
   · rw [show univ.filter (fun x : Fin n ↦ x.val < k) = Finset.Iio (⟨k, hlt⟩ : Fin n) from by
       ext x; simp [Finset.mem_Iio, Fin.lt_def]]
     simp [Fin.card_Iio]
@@ -323,7 +323,7 @@ private lemma exec_perm_card_lt {n : ℕ} (net : ComparatorNetwork n)
     rw [card_fin_filter_lt hk] at hcomp
     have hge : (univ.filter (fun x : Fin n ↦ ¬x.val < k)).card = n - k := by
       simp only [Finset.card_univ, Fintype.card_fin] at hcomp; omega
-    convert hge using 1; congr 1; ext x; simp [Nat.not_lt]
+    convert hge using 1; congr 1; ext x; simp only [not_lt]
   -- countOnes (g ∘ exec v) = n - k
   have h_co : countOnes (g ∘ net.exec (↑v)) = n - k := by
     have : g ∘ net.exec (↑v) = net.exec (g ∘ ↑v) := hcomm
@@ -334,7 +334,7 @@ private lemma exec_perm_card_lt {n : ℕ} (net : ComparatorNetwork n)
     (fun i : Fin n ↦ k ≤ (net.exec (↑v) i).val) (s := univ)
   rw [h_co, Finset.card_univ, Fintype.card_fin] at hcomp
   have hresult : (univ.filter (fun i : Fin n ↦ ¬k ≤ (net.exec (↑v) i).val)).card = k := by omega
-  convert hresult using 1; congr 1; ext i; simp [Nat.not_le]
+  convert hresult using 1; congr 1; ext i; simp only [not_le]
 
 /-- When d = 0, the spectral gap is at least 1 (for m > 0). -/
 private lemma one_le_spectralGap_of_d_eq_zero {m : ℕ} (G : RegularGraph m 0) (hm : 0 < m) :
@@ -353,7 +353,7 @@ private lemma one_le_spectralGap_of_d_eq_zero {m : ℕ} (G : RegularGraph m 0) (
   have hPe : (meanCLM m : _ →L[ℝ] _) e = e := by
     apply PiLp.ext; intro v; simp only [meanCLM_apply]
     change (∑ _ : Fin m, (1 : ℝ)) / ↑m = 1
-    simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, one_mul]
+    simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
     have : (0 : ℝ) < m := Nat.cast_pos.mpr hm
     field_simp
   have h := (meanCLM m : EuclideanSpace ℝ (Fin m) →L[ℝ] _).le_opNorm e
@@ -381,7 +381,7 @@ private lemma bipartite_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d
   rcases Nat.eq_zero_or_pos k with rfl | hk_pos
   · simp [show s = 0 from by
       simp only [s, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
-      intro pos _; simp [Nat.not_lt_zero]]
+      intro pos _; simp]
   -- m > 0 (since k > 0 and k ≤ m)
   have hm : 0 < m := by omega
   -- T = {u : Fin m | (w ⟨m + u.val, _⟩).val < k} (bottom-half positions with small output)
@@ -395,15 +395,15 @@ private lemma bipartite_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d
     · intro pos hpos
       simp only [mem_coe, mem_filter, mem_univ, true_and] at hpos ⊢
       have heq : (⟨m + (pos.val - m), (by omega : m + (pos.val - m) < 2 * m)⟩ : Fin (2 * m)) =
-          pos := Fin.ext (by simp only [Fin.val_mk]; omega)
+          pos := Fin.ext (by dsimp; omega)
       rw [heq]; exact hpos.2
     · intro u hu
       simp only [mem_coe, mem_filter, mem_univ, true_and] at hu ⊢
       exact ⟨by omega, hu⟩
     · intro pos hpos
       simp only [mem_coe, mem_filter, mem_univ, true_and] at hpos
-      exact Fin.ext (by simp only [Fin.val_mk]; omega)
-    · intro u _; exact Fin.ext (by simp only [Fin.val_mk]; omega)
+      exact Fin.ext (by dsimp; omega)
+    · intro u _; exact Fin.ext (by dsimp; omega)
   -- Edge monotonicity: pass the INPUT (↑v) so foldl(↑v) = w
   -- neighborSet(T) ⊆ {top | w(top) < ⟨k, _⟩}
   have hN_sub := edge_mono_neighborhood_subset G (↑v : Fin (2 * m) → Fin (2 * m))
@@ -456,7 +456,7 @@ private lemma bipartite_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d
       _ ≤ (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
           apply mul_le_mul_of_nonneg_right _ (by nlinarith [sq_nonneg β])
           exact_mod_cast hN_card
-  exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
+  exact tanner_halver_contradiction hm hk h_contra hβ_nn hsm h_combined
 
 /-- For `(Fin n)ᵒᵈ`, rank equals `n - 1 - val`. -/
 private lemma rank_orderDual_fin {n : ℕ} (a : (Fin n)ᵒᵈ) :
@@ -572,7 +572,7 @@ private lemma bipartite_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
   rcases Nat.eq_zero_or_pos k with rfl | hk_pos
   · simp [show s = 0 from by
       simp only [s, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
-      intro pos _; omega]
+      intro pos _; simp]
   -- m > 0 (since k > 0 and k ≤ m)
   have hm : 0 < m := by omega
   -- T = {v : Fin m | (w ⟨v.val, _⟩).val ≥ 2m - k} (top-half positions with large output)
@@ -599,7 +599,7 @@ private lemma bipartite_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
       (fun i : Fin (2 * m) ↦ (w i).val < 2 * m - k) (s := univ)
     simp only [card_univ, Fintype.card_fin] at hcomp
     have : (univ.filter (fun i : Fin (2 * m) ↦ ¬(w i).val < 2 * m - k)).card = k := by omega
-    convert this using 1; congr 1; ext i; simp [Nat.not_lt]
+    convert this using 1; congr 1; ext i; simp only [not_lt]
   -- Split into top and bottom halves
   have h_split := card_filter_fin_double (fun i : Fin (2 * m) ↦ 2 * m - k ≤ (w i).val)
   -- bottom_count + T.card = k
@@ -640,7 +640,7 @@ private lemma bipartite_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
       _ ≤ (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
           apply mul_le_mul_of_nonneg_right _ (by nlinarith [sq_nonneg β])
           exact_mod_cast hN_card
-  exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
+  exact tanner_halver_contradiction hm hk h_contra hβ_nn hsm h_combined
 
 /-! **Public API** -/
 
@@ -682,7 +682,7 @@ private lemma general_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d)
   rcases Nat.eq_zero_or_pos k with rfl | hk_pos
   · simp [show s = 0 from by
       simp only [s, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
-      intro pos _; simp [Nat.not_lt_zero]]
+      intro pos _; simp]
   have hm : 0 < m := by omega
   set T : Finset (Fin m) := univ.filter (fun u : Fin m ↦ (w ⟨m + u.val, by omega⟩).val < k)
   have hs_eq : s = T.card := by
@@ -693,15 +693,15 @@ private lemma general_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d)
     · intro pos hpos
       simp only [mem_coe, mem_filter, mem_univ, true_and] at hpos ⊢
       have heq : (⟨m + (pos.val - m), (by omega : m + (pos.val - m) < 2 * m)⟩ : Fin (2 * m)) =
-          pos := Fin.ext (by simp only [Fin.val_mk]; omega)
+          pos := Fin.ext (by dsimp; omega)
       rw [heq]; exact hpos.2
     · intro u hu
       simp only [mem_coe, mem_filter, mem_univ, true_and] at hu ⊢
       exact ⟨by omega, hu⟩
     · intro pos hpos
       simp only [mem_coe, mem_filter, mem_univ, true_and] at hpos
-      exact Fin.ext (by simp only [Fin.val_mk]; omega)
-    · intro u _; exact Fin.ext (by simp only [Fin.val_mk]; omega)
+      exact Fin.ext (by dsimp; omega)
+    · intro u _; exact Fin.ext (by dsimp; omega)
   -- Neighborhood containment from edge monotonicity
   have hN_sub : G.neighborSet T ⊆ univ.filter (fun v : Fin m ↦
       (w ⟨v.val, by omega⟩).val < k) := by
@@ -745,7 +745,7 @@ private lemma general_epsilon_initial_halved {m d : ℕ} (G : RegularGraph m d)
       _ ≤ (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
           apply mul_le_mul_of_nonneg_right _ (by nlinarith [sq_nonneg β])
           exact_mod_cast hN_card
-  exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
+  exact tanner_halver_contradiction hm hk h_contra hβ_nn hsm h_combined
 
 /-- General final halved: dual of initial halved via OrderDual. -/
 private lemma general_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
@@ -799,7 +799,7 @@ private lemma general_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
   rcases Nat.eq_zero_or_pos k with rfl | hk_pos
   · simp [show s = 0 from by
       simp only [s, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
-      intro pos _; omega]
+      intro pos _; simp]
   have hm : 0 < m := by omega
   set T : Finset (Fin m) := univ.filter (fun v : Fin m ↦ 2 * m - k ≤ (w ⟨v.val, by omega⟩).val)
   have hs_eq : s = T.card := by
@@ -827,7 +827,7 @@ private lemma general_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
       (fun i : Fin (2 * m) ↦ (w i).val < 2 * m - k) (s := univ)
     simp only [card_univ, Fintype.card_fin] at hcomp
     have : (univ.filter (fun i : Fin (2 * m) ↦ ¬(w i).val < 2 * m - k)).card = k := by omega
-    convert this using 1; congr 1; ext i; simp [Nat.not_lt]
+    convert this using 1; congr 1; ext i; simp only [not_lt]
   have h_split := card_filter_fin_double (fun i : Fin (2 * m) ↦ 2 * m - k ≤ (w i).val)
   set bottom_count := (univ.filter (fun u : Fin m ↦
     2 * m - k ≤ (w ⟨m + u.val, by omega⟩).val)).card
@@ -860,7 +860,7 @@ private lemma general_epsilon_final_halved {m d : ℕ} (G : RegularGraph m d)
       _ ≤ (↑k - ↑T.card) * (↑T.card + β ^ 2 * (↑m - ↑T.card)) := by
           apply mul_le_mul_of_nonneg_right _ (by nlinarith [sq_nonneg β])
           exact_mod_cast hN_card
-  exact tanner_halver_contradiction hm hk_pos hk h_contra hβ_nn hsm h_combined
+  exact tanner_halver_contradiction hm hk h_contra hβ_nn hsm h_combined
 
 /-- Any bipartite comparator network containing all edges of G is a β-halver.
     The proof uses `foldl_member_order` for edge monotonicity (works for any

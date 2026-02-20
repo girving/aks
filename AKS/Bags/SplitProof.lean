@@ -9,12 +9,10 @@
   - `concreteSplit_maintains_invariant`: the invariant holds at stage `t+1`
     on `rebag (concreteSplit lam perm bags)`
 
-  Sorry status (5 remaining, all in concrete-split-specific lemmas):
-  - `concreteSplit_fromParent_filtered` (SplitStranger.lean) — ε-filtering
-  - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound
-  - `concreteSplit_hkick_pair` (SplitCard.lean) — paired kick without +2
-  - `concreteSplit_hrebag_uniform` (SplitCard.lean) — uniform rebag sizes
-  - `concreteSplit_hrebag_disjoint` (SplitCard.lean) — disjoint rebag bags
+  Sorry status (3 remaining):
+  - `concreteSplit_fromParent_filtered` (SplitStranger.lean) — ε-filtering (sorry)
+  - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound (sorry)
+  - `concreteSplit_hkick_pair` (SplitCard.lean) — paired kick without +2 (sorry)
 -/
 
 import AKS.Bags.SplitCard
@@ -63,7 +61,7 @@ theorem concreteSplit_maintains_invariant {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
     (fun l i j hj ↦ concreteSplit_parent_stranger_bound inv hlam hε l i j hj)
     -- hparent_1stranger: parent 1-strangers (uses filtering + cnative sorry's)
     (fun l i ↦ concreteSplit_parent_1stranger inv hparams l i)
-    -- hrebag_uniform: uniform rebag sizes (sorry)
-    concreteSplit_hrebag_uniform
-    -- hrebag_disjoint: disjoint rebag bags (sorry)
-    concreteSplit_hrebag_disjoint
+    -- hrebag_uniform: uniform rebag sizes (proved)
+    (concreteSplit_hrebag_uniform inv hperm (by linarith [hparams.2.2.2.2.1]))
+    -- hrebag_disjoint: disjoint rebag bags (proved)
+    (concreteSplit_hrebag_disjoint inv)

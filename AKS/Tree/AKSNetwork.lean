@@ -26,8 +26,8 @@ open Finset BigOperators Real
 
 /-- Executing `epsHalverMerge` is the same as iterating the halver's `exec`. -/
 theorem epsHalverMerge_exec_eq_iterate {n : ℕ} {α : Type*} [LinearOrder α]
-    (halver : ComparatorNetwork n) (ε : ℝ) (k : ℕ) (v : Fin n → α) :
-    (epsHalverMerge n ε k halver).exec v =
+    (halver : ComparatorNetwork n) (k : ℕ) (v : Fin n → α) :
+    (epsHalverMerge n k halver).exec v =
     Nat.iterate (fun w ↦ halver.exec w) k v := by
   induction k generalizing v with
   | zero => rfl
@@ -38,8 +38,8 @@ theorem epsHalverMerge_exec_eq_iterate {n : ℕ} {α : Type*} [LinearOrder α]
     exact ih (halver.exec v)
 
 /-- The size of `epsHalverMerge` is `k * halver.size`. -/
-theorem epsHalverMerge_size {n : ℕ} (halver : ComparatorNetwork n) (ε : ℝ) (k : ℕ) :
-    (epsHalverMerge n ε k halver).size = k * halver.size := by
+theorem epsHalverMerge_size {n : ℕ} (halver : ComparatorNetwork n) (k : ℕ) :
+    (epsHalverMerge n k halver).size = k * halver.size := by
   simp only [epsHalverMerge, ComparatorNetwork.size, List.length_flatten,
     List.map_replicate, List.sum_replicate, smul_eq_mul]
 

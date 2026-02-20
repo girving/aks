@@ -106,6 +106,7 @@ theorem rankInBag_ge_count_below {n : ℕ} {perm : Fin n → Fin n}
   simp only [mem_filter] at hk ⊢
   exact ⟨hk.1, hk.2.trans_le hge⟩
 
+
 /-! **Split Parameters** -/
 
 /-- Fringe size: number of items kicked to parent from each end. -/

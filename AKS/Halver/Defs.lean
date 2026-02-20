@@ -136,7 +136,7 @@ def IsEpsilonHalver {n : ℕ} (net : ComparatorNetwork n) (ε : ℝ) : Prop :=
 /-- Merge two sorted halves using iterated ε-halvers.
     After k rounds of ε-halving, the "unsortedness" decreases
     geometrically: at most (2ε)^k · n elements are out of place. -/
-def epsHalverMerge (n : ℕ) (ε : ℝ) (k : ℕ)
+def epsHalverMerge (n : ℕ) (k : ℕ)
     (halver : ComparatorNetwork n) : ComparatorNetwork n :=
   { comparators := (List.replicate k halver.comparators).flatten }
 
