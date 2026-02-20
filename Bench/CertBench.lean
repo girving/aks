@@ -56,7 +56,7 @@ def benchSuite (label : String) (rotStr certStr : String)
     s!"ok={checkCertificateSlow rotStr certStr n d c₁ c₂ c₃}"
 
   timed "prod fast        " fun () =>
-    s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
+    s!"ok={checkCertificate rotStr certStr n d c₁ c₂ c₃}"
 
   -- Parallel PSD-only (no column-norm check)
   for numChunks in [4, 64] do
@@ -79,7 +79,7 @@ def benchFastOnly (label : String) (rotStr certStr : String)
   IO.println s!"--- {label} (n={n}, d={d}) ---"
 
   timed "prod fast        " fun () =>
-    s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
+    s!"ok={checkCertificate rotStr certStr n d c₁ c₂ c₃}"
 
   IO.println ""
 
@@ -105,7 +105,7 @@ def main : IO UInt32 := do
   IO.println s!" [{fmtNs (t1 - t0)}]"
 
   timed "prod fast        " fun () =>
-    s!"ok={checkCertificateFast rotStr certStr 20736 12 792 9 2}"
+    s!"ok={checkCertificate rotStr certStr 20736 12 792 9 2}"
 
   IO.println ""
   IO.println "Done."

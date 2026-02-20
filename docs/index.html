@@ -412,8 +412,8 @@ const PROOF_DATA = {
       desc: "Full bridge: certificate → spectral gap bound. Chains walk bound, spectralGap_le_of_walk_bound, and sqrt_coeff_le_frac.", milestone: true },
 
     // ── Cert/FastProof.lean ──
-    { id: "checkCertificateFast_eq_slow", file: "AKS/Cert/FastProof.lean", line: 46, status: "proved", kind: "theorem",
-      sig: "checkCertificateFast_eq_slow :\n  @checkCertificateFast = @checkCertificateSlow",
+    { id: "checkCertificate_eq_slow", file: "AKS/Cert/FastProof.lean", line: 46, status: "proved", kind: "theorem",
+      sig: "checkCertificate_eq_slow :\n  @checkCertificate = @checkCertificateSlow",
       desc: "Bridge: parallel fused checker = sequential checker. Proof: Task elimination, fused→unfused PSD rewrite, Boolean case splits, prefix-sum loop = checkPerRow via fused_norm_lookup." },
 
     // ── Random/Random16.lean ──
@@ -809,20 +809,20 @@ const PROOF_DATA = {
     ["zigzagFamily", "explicit_expanders_exist_zigzag"],
 
     // Cert/FastProof
-    ["certificate_bridge", "checkCertificateFast_eq_slow"],
+    ["certificate_bridge", "checkCertificate_eq_slow"],
 
     // Base expanders (Random16, Random1728, Random20736)
     ["RegularGraph", "Random16.graph"],
     ["certificate_bridge", "Random16.gap"],
-    ["checkCertificateFast_eq_slow", "Random16.gap"],
+    ["checkCertificate_eq_slow", "Random16.gap"],
     ["Random16.graph", "Random16.gap"],
     ["RegularGraph", "Random1728.graph"],
     ["certificate_bridge", "Random1728.gap"],
-    ["checkCertificateFast_eq_slow", "Random1728.gap"],
+    ["checkCertificate_eq_slow", "Random1728.gap"],
     ["Random1728.graph", "Random1728.gap"],
     ["RegularGraph", "Random20736.graph"],
     ["certificate_bridge", "Random20736.gap"],
-    ["checkCertificateFast_eq_slow", "Random20736.gap"],
+    ["checkCertificate_eq_slow", "Random20736.gap"],
     ["Random20736.graph", "Random20736.gap"],
     ["Random20736.gap", "explicit_expanders_exist_zigzag"],
     // Retired edges (for historical snapshots)

@@ -1,5 +1,5 @@
 /-
-  # Bridge: `checkCertificateFast = checkCertificateSlow`
+  # Bridge: `checkCertificate = checkCertificateSlow`
 
   Proves that the merged parallel certificate checker produces the same result
   as the sequential one. The proof is structural (not `native_decide`), so
@@ -30,7 +30,7 @@ private theorem map_task_spawn_get {α β : Type} (f : α → β) (arr : Array �
 /-! **Bridge theorem** -/
 
 set_option maxHeartbeats 6400000 in
-/-- Top-level bridge: `checkCertificateFast = checkCertificateSlow`.
+/-- Top-level bridge: `checkCertificate = checkCertificateSlow`.
 
     The fast version fuses PSD + column-norm computation into parallel tasks
     via `checkPSDColumnsFull`, then does an inline prefix-sum check using
@@ -43,10 +43,10 @@ set_option maxHeartbeats 6400000 in
     `merged.first`). All but one case are trivially `false = false`. The
     non-trivial case reduces to `prefixSumLoop = checkPerRow` via
     `prefixSumLoop_eq_checkPerRow` with norms from `fused_norm_lookup`. -/
-theorem checkCertificateFast_eq_slow :
-    @checkCertificateFast = @checkCertificateSlow := by
+theorem checkCertificate_eq_slow :
+    @checkCertificate = @checkCertificateSlow := by
   funext rotStr certStr n d c₁ c₂ c₃
-  simp only [checkCertificateFast, checkCertificateSlow,
+  simp only [checkCertificate, checkCertificateSlow,
     map_task_spawn_get,
     checkPSDCertificate, checkColumnNormBound, checkPSDThreshold,
     String.toUTF8]
