@@ -128,6 +128,7 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 **Detailed subsystem docs** — per-section files with architecture, conventions, and proof tactics:
 - [`docs/certificate-bridge.md`](docs/certificate-bridge.md) — Certificate bridge (`CertCheck`, `AKS/Cert/`, `AKS/Random/`, `Bench/`)
 - [`docs/rvw-inequality.md`](docs/rvw-inequality.md) — RVW scalar inequality and operator bound (`AKS/ZigZag/RVWInequality.lean`, `RVWBound.lean`)
+- [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md) — Zig-zag product spectral analysis (`AKS/ZigZag/Operators.lean`, `Spectral.lean`, `Expanders.lean`)
 
 **Modules with bottom-up dependency:**
 
@@ -200,21 +201,8 @@ Fully proved expander mixing lemma via indicator vectors + Cauchy-Schwarz + oper
 ### `AKS/Random/` — Base Expander for Zig-Zag Construction
 Concrete base expander certified via davidad's triangular-inverse method. See [`docs/certificate-bridge.md`](docs/certificate-bridge.md).
 
-### `AKS/ZigZag/Operators.lean` — Zig-Zag Product and Walk Operators (~230 lines)
-Defines the zig-zag product and the three CLM operators for its spectral analysis:
-1. **Zig-zag product** — `G₁.zigzag G₂`, the three-step walk (zig-step-zag)
-2. **Cluster encoding** — `cluster`/`port`/`encode` helpers for `Fin (n₁ * d₁)` ↔ `Fin n₁ × Fin d₁`
-3. **Within-cluster walk** — `withinClusterCLM` (`B = I ⊗ W_{G₂}`)
-4. **Step permutation** — `stepPermCLM` (`Σ`: permutes via `G₁.rot`)
-5. **Cluster mean** — `clusterMeanCLM` (`Q`: averages within each cluster)
-6. **Walk factorization** — `zigzag_walkCLM_eq`: `W_Z = B · Σ · B`
-
-### `AKS/ZigZag/Spectral.lean` — Zig-Zag Operator Properties (~130 lines)
-Algebraic identities and spectral bounds for the zig-zag operators:
-1. **Algebraic properties** — `Q² = Q`, `Q* = Q`, `B* = B`, `Σ² = 1`, `Σ* = Σ`, `BQ = QB = Q`
-2. **Tilde contraction** — `‖B(I-Q)‖ ≤ spectralGap G₂`
-3. **Hat block norm** — `‖QΣQ - P‖ ≤ spectralGap G₁`
-4. **Global mean decomposition** — `P·Q = Q·P = P`
+### `AKS/ZigZag/Operators.lean`, `Spectral.lean` — Zig-Zag Product and Spectral Properties
+Zig-zag product, walk operators (B, Σ, Q), algebraic identities, spectral bounds. See [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md).
 
 ### `AKS/ZigZag/RVWInequality.lean`, `RVWBound.lean` — RVW Inequality and Operator Bound
 Fully proved. See [`docs/rvw-inequality.md`](docs/rvw-inequality.md).
@@ -229,10 +217,7 @@ Proves `for k in [:n] do` in `Id` monad equals `Nat.fold` + partition-fold lemma
 Not part of the proof. See [`docs/certificate-bridge.md`](docs/certificate-bridge.md).
 
 ### `AKS/ZigZag/Expanders.lean` — Expander Families (~115 lines)
-Assembles the spectral bound and builds the iterated construction:
-1. **Spectral composition theorem** — `zigzag_spectral_bound` (assembles sublemmas)
-2. **Iterated construction** — `zigzagFamily`: square → zig-zag → repeat
-3. **Main result** — `explicit_expanders_exist_zigzag`
+`zigzag_spectral_bound`, `zigzagFamily`, `explicit_expanders_exist_zigzag`. See [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md).
 
 ### `AKS/Separator/Defs.lean` — (γ, ε)-Separator Definitions (~50 lines)
 ε-approximate γ-separation (Seiferas 2009, Section 6). Alternative to the
@@ -409,15 +394,9 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Indicator vector pattern for combinatorial-spectral bridges.** (1) Define `indicatorVec S` via `(WithLp.equiv 2 _).symm (fun v ↦ if v ∈ S then 1 else 0)` with `@[simp]` apply lemma; (2) `‖indicatorVec S‖ = √↑S.card` via `EuclideanSpace.norm_sq_eq` + `sum_boole`; (3) express edge count as `⟨1_S, A(1_T)⟩` using `ite_mul`/`sum_filter`/`sum_boole`; (4) apply `abs_real_inner_le_norm` + `le_opNorm`. Key: `simp_rw [ite_mul, one_mul, zero_mul]; rw [← Finset.sum_filter]; have : univ.filter (· ∈ S) = S := by ext; simp`.
 
-**Algebraic CLM identities via `ext + simp + field_simp`.** For operator equalities (Q² = Q, BQ = Q, QP = P): (1) `ext f vk`, (2) `simp only [operator_apply, ...]`, (3) `field_simp`. For complex cases, insert `rw [Finset.sum_div]` between simp and field_simp. See `ZigZag/Spectral.lean`.
-
-**Sum bijection helpers for reorganizing double sums.** For `Fin n₁ × Fin d₁ ≃ Fin (n₁ * d₁)`: use `Finset.sum_bij'` helpers (see `sum_encode_eq_sum`, `sum_over_cluster` in `ZigZag/Operators.lean`). Apply via `conv_lhs => rw [bijection_lemma]` in calc-style proofs.
-
 **Make helper definitions public when downstream proofs need them.** Remove `private` and add `@[simp]` lemmas when multiple files need encode/decode helpers. The larger API surface is outweighed by enabling downstream `simp`.
 
 **Rotation bijection for walk/neighbor sum equality.** Use `RegularGraph.sum_neighbor_eq G (fun v => f v)` to show `∑ v ∑ i, f(G.neighbor v i) = ∑ v ∑ i, f v` (from `G.rot` involution). Chain with `Finset.sum_const` + `Finset.card_fin` for the d₂ factor.
-
-**Block-diagonal operator norms via calc + per-block bounds.** (1) `opNorm_le_bound` → show `‖Bf‖ ≤ ‖f‖`, (2) expand `‖·‖²` via `EuclideanSpace.norm_sq_eq`, (3) regroup by blocks via bijection helpers, (4) `Finset.sum_le_sum` per-block, (5) connect to per-block norm bound. Use `Real.sqrt_le_sqrt` once. See `withinClusterCLM_norm_le_one` in `ZigZag/Spectral.lean`.
 
 **When hitting technical obstacles, step back and reason mathematically first.** After 2-3 failed tactic attempts, don't revert to `sorry`. Instead: (1) write out what you're proving and why it's true, (2) identify key sublemmas, (3) implement as separate helper lemmas, (4) reassemble. Helpers are reusable and make the main proof readable.
 
@@ -468,7 +447,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZag/Spectral sublemmas through `rvw_operator_norm_bound`. ZigZag/Operators.lean: 0 sorry. ZigZag/Spectral.lean: 0 sorry. ZigZag/RVWBound.lean: 0 sorry (scalar inequality proved in `ZigZag/RVWInequality.lean`). Base expander: fully proved, see [`docs/certificate-bridge.md`](docs/certificate-bridge.md). The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly), see [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md). Base expander: fully proved, see [`docs/certificate-bridge.md`](docs/certificate-bridge.md). The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
@@ -476,10 +455,7 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 **Deleted (orphaned by tree-based approach):** `halver_composition`, `halver_convergence`, `halver_decreases_wrongness`, `wrongness`, `displaced`, `wrongHalfTop`/`wrongHalfBottom` — the single-halver composition approach was superseded by the tree-based AKS Section 8 proof in `TreeSorting.lean`. Also deleted: `HasCherryShiftDamage`, `cherry_shift_implies_bounded_tree`, `cherry_shift_damage_gives_zigzag` (not in AKS paper; `r→r+1` comes from partition offset in Lemma 3)
 
-**Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound`, decomposed as follows:
-- *Done (11/16):* `clusterMeanCLM_idempotent` (Q² = Q), `stepPermCLM_sq_eq_one` (Σ² = 1), `withinCluster_comp_clusterMean` (BQ = Q), `clusterMean_comp_meanCLM` (QP = P), `clusterMean_comp_withinCluster` (QB = Q), `meanCLM_eq_clusterMean_comp` (PQ = P), `withinClusterCLM_norm_le_one` (‖B‖ ≤ 1), `rvwBound_mono_left`, `rvwBound_mono_right`, `hat_block_norm` (‖QΣQ - P‖ ≤ spectralGap G₁), `withinCluster_tilde_contraction` (‖B(I-Q)‖ ≤ spectralGap G₂, 1 sorry in d₂=0 degenerate case)
-- *Medium (1-2 weeks):* `clusterMeanCLM_isSelfAdjoint` (sum reorganization), `withinClusterCLM_isSelfAdjoint` (rotation bijection), `stepPermCLM_isSelfAdjoint` (involution → self-adjoint, needs bijection reindexing lemma), `zigzag_walkCLM_eq`, assembly of `zigzag_spectral_bound`
-- *Done:* `rvw_quadratic_ineq` (proved in `ZigZag/RVWInequality.lean` via a-quadratic case analysis)
+**Achievable (weeks each):** The 16 sublemmas of `zigzag_spectral_bound` (11/16 done, 5 medium). See [`docs/zigzag-spectral.md`](docs/zigzag-spectral.md) for decomposition.
 
 **Substantial (months):** **Proved:** `expander_gives_halver` (in `Halver/ExpanderToHalver.lean`, via Tanner's bound), `tanner_bound` (in `Halver/Tanner.lean`), `zigzag_decreases_wrongness_v2` (from `HasBoundedZigzagDamage`), `bounded_tree_damage_pair_gives_zigzag` (Lemma 3: `HasImprovedBound` + `HasBoundedTreeDamage` → `HasBoundedZigzagDamage`, algebraic). **Sorry (in separate files for parallel work):** `parity_nearsort_has_bounded_tree_damage` (Lemma 2a, `TreeDamageStability.lean`), `parity_nearsort_has_improved_bound` (Lemma 2b, `TreeDamageImprovement.lean`), `aks_tree_sorting` (assembly, `AKSNetwork.lean`). Full audit: [`docs/treesorting-audit.md`](docs/treesorting-audit.md).
 
