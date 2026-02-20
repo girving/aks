@@ -293,7 +293,11 @@ def find_project_files():
 
 
 def check_all():
-    """Check all project .lean files. Auto-starts daemon if needed."""
+    """Check all project .lean files in parallel. Auto-starts daemon if needed.
+
+    All files are sent to the daemon concurrently. The daemon's coordinator
+    caps concurrency (default: min(nproc, 4), override with LEAN_DAEMON_JOBS)
+    and queues excess checks. Results are printed as they arrive."""
     if not daemon_running():
         if not start_daemon():
             sys.exit(2)
@@ -303,52 +307,69 @@ def check_all():
         print("No .lean files found.")
         sys.exit(2)
 
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+
     print(f"Checking {len(files)} file(s)...\n")
     total_errors = 0
     total_warnings = 0
     failed_files = []
+    completed_count = 0
+    print_lock = threading.Lock()
 
-    for i, filepath in enumerate(files):
-        # Show current file being checked
-        progress = f"[{i+1}/{len(files)}]"
-        print(f"  ...  {filepath} {progress}", end="", flush=True)
-        t0 = time.time()
-        # close_after=True releases the LSP worker after each file,
-        # preventing memory accumulation (each worker uses 100-3000 MB)
-        result = send_command({"command": "check", "file": filepath, "close_after": True})
-        wall_time = time.time() - t0
-        # Clear progress line before printing result
-        print(f"\r\033[2K", end="", flush=True)
+    def check_one(filepath):
+        # close_after=True releases the LSP worker after each file
+        return send_command(
+            {"command": "check", "file": filepath, "close_after": True},
+            timeout=600,
+        )
 
-        if "error" in result:
-            print(f"  FAIL  {filepath}: {result['error']}")
-            failed_files.append(filepath)
-            total_errors += 1
-            continue
+    t0_all = time.time()
 
-        diagnostics = result.get("diagnostics", [])
-        server_time = result.get("time_seconds", "?")
-        errors = [d for d in diagnostics if d.get("severity", 0) == 1]
-        warnings = [d for d in diagnostics if d.get("severity", 0) == 2]
+    with ThreadPoolExecutor(max_workers=len(files)) as pool:
+        futures = {pool.submit(check_one, f): f for f in files}
+        for future in as_completed(futures):
+            filepath = futures[future]
+            try:
+                result = future.result()
+            except Exception as e:
+                result = {"error": str(e)}
 
-        status = "FAIL" if errors else "  ok"
-        parts = [f"{status}  {filepath} ({server_time}s)"]
-        if errors:
-            parts.append(f" — {len(errors)} error(s)")
-            failed_files.append(filepath)
-        if warnings:
-            parts.append(f" — {len(warnings)} warning(s)")
-        print("".join(parts))
+            with print_lock:
+                completed_count += 1
+                progress = f"[{completed_count}/{len(files)}]"
 
-        if errors:
-            for d in errors:
-                print(f"        {format_diagnostic(d)}")
+                if "error" in result:
+                    print(f"  FAIL  {filepath}: {result['error']}  {progress}")
+                    failed_files.append(filepath)
+                    total_errors += 1
+                    continue
 
-        total_errors += len(errors)
-        total_warnings += len(warnings)
+                diagnostics = result.get("diagnostics", [])
+                server_time = result.get("time_seconds", "?")
+                errors = [d for d in diagnostics if d.get("severity", 0) == 1]
+                warnings = [d for d in diagnostics if d.get("severity", 0) == 2]
 
+                status = "FAIL" if errors else "  ok"
+                parts = [f"{status}  {filepath} ({server_time}s)"]
+                if errors:
+                    parts.append(f" — {len(errors)} error(s)")
+                    failed_files.append(filepath)
+                if warnings:
+                    parts.append(f" — {len(warnings)} warning(s)")
+                parts.append(f"  {progress}")
+                print("".join(parts))
+
+                if errors:
+                    for d in errors:
+                        print(f"        {format_diagnostic(d)}")
+
+                total_errors += len(errors)
+                total_warnings += len(warnings)
+
+    wall_time = time.time() - t0_all
     print(f"\n{'='*50}")
-    print(f"{len(files)} files checked, {total_errors} error(s), {total_warnings} warning(s)")
+    print(f"{len(files)} files checked in {wall_time:.0f}s, {total_errors} error(s), {total_warnings} warning(s)")
     if failed_files:
         print(f"Failed: {', '.join(failed_files)}")
     sys.exit(1 if failed_files else 0)
