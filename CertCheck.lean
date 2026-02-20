@@ -352,50 +352,62 @@ def checkPSDCertificatePar (rotBytes certBytes : ByteArray)
     let results := tasks.map Task.get
     checkPSDThreshold results n
 
-/-- Per-column PSD + column ℓ₁-norm, fused into a single cert decode pass.
-    Returns updated PSD state and `∑_{k≤j} |Z[k,j]|`. -/
-@[inline] def psdColumnStepFull (neighbors : Array Nat) (d : Nat)
-    (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) : PSDChunkResult × Int :=
-  let colStart := j * (j + 1) / 2
-  let (zCol, colSum, colNorm) := Id.run do
-    let mut arr := Array.replicate n (0 : Int)
-    let mut s : Int := 0
-    let mut norm : Int := 0
-    for k in [:j+1] do
-      let v := decodeBase85Int certBytes (colStart + k)
-      arr := arr.set! k v
-      s := s + v
-      norm := norm + intAbs v
-    return (arr, s, norm)
-  let bz := mulAdjPre neighbors zCol n d
-  let state' := Id.run do
-    let mut epsMax := state.epsMax
-    let mut minDiag := state.minDiag
-    let mut first := state.first
-    for i in [:j+1] do
-      let pij := c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
-      if i == j then
-        if first then minDiag := pij; first := false
-        else if pij < minDiag then minDiag := pij
-      else if i < j then
-        let absPij := if pij >= 0 then pij else -pij
-        if absPij > epsMax then epsMax := absPij
-    return { epsMax, minDiag, first }
-  (state', colNorm)
-
-/-- Process columns: PSD + column ℓ₁-norms in a single fused pass. -/
+/-- Process columns: PSD + column ℓ₁-norms in a single fused pass.
+    Preallocates `zCol` and `bz` buffers outside the column loop and reuses them.
+    The scatter is fused into the decode loop: for each decoded `z[k]`, we
+    immediately distribute `z[k]` to `bz[neighbors[k*d+p]]` for all ports `p`.
+    `B²z[i]` is then gathered inline from `bz`. -/
 def checkPSDColumnsFull (neighbors : Array Nat) (certBytes : ByteArray)
     (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) :
     PSDChunkResult × Array Int :=
   Id.run do
-    let mut state : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
-    let mut norms : Array Int := Array.mkEmpty columns.size
+    let mut epsMax : Int := 0
+    let mut minDiag : Int := 0
+    let mut first := true
+    let mut colNorms : Array Int := Array.mkEmpty columns.size
+    let mut zCol := Array.replicate n (0 : Int)
+    let mut bz := Array.replicate n (0 : Int)
+
     for j in columns do
-      let (state', norm) := psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ state j
-      state := state'
-      norms := norms.push norm
-    return (state, norms)
+      let colStart := j * (j + 1) / 2
+
+      -- Zero bz for this column (zCol is overwritten before read, no zeroing needed)
+      for v in [:n] do
+        bz := bz.set! v 0
+
+      -- Fused decode + scatter: build zCol, accumulate colSum/colNorm, scatter into bz
+      let mut colSum : Int := 0
+      let mut colNorm : Int := 0
+      for k in [:j+1] do
+        let zk := decodeBase85Int certBytes (colStart + k)
+        zCol := zCol.set! k zk
+        colSum := colSum + zk
+        colNorm := colNorm + intAbs zk
+        for p in [:d] do
+          let w := neighbors[k * d + p]!
+          bz := bz.set! w (bz[w]! + zk)
+
+      -- PSD update with inline B²z[i] gathered from bz
+      for i in [:j+1] do
+        let mut b2zi : Int := 0
+        for p in [:d] do
+          let w := neighbors[i * d + p]!
+          b2zi := b2zi + bz[w]!
+        let pij := c₁ * zCol[i]! - c₂ * b2zi + c₃ * colSum
+        if i == j then
+          if first then
+            minDiag := pij
+            first := false
+          else if pij < minDiag then
+            minDiag := pij
+        else if i < j then
+          let absPij := if pij >= 0 then pij else -pij
+          if absPij > epsMax then
+            epsMax := absPij
+
+      colNorms := colNorms.push colNorm
+
+    return ({ epsMax, minDiag, first }, colNorms)
 
 /-- Merged parallel certificate check: PSD + column-norm bound in one parallel pass.
     Same result as `checkCertificateSlow` (proved in `AKS/Cert/FastProof.lean`).

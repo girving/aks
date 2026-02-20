@@ -49,11 +49,14 @@ theorem checkCertificateFast_eq_slow :
   simp only [checkCertificateFast, checkCertificateSlow,
     map_task_spawn_get,
     checkPSDCertificate, checkColumnNormBound, checkPSDThreshold,
-    fused_map_fst_eq, String.toUTF8]
-  -- Case split on checkInvolution
-  cases checkInvolution rotStr.toByteArray n d
+    String.toUTF8]
+  -- Case split on checkInvolution (must come first to derive NeighborSymm)
+  cases hinv : checkInvolution rotStr.toByteArray n d
   · simp
-  · simp only [Bool.true_and]
+  · -- checkInvolution = true → derive NeighborSymm for scatter = gather bridge
+    have hsym := checkInvolution_implies_neighborSymm rotStr.toByteArray n d hinv
+    simp only [Bool.true_and,
+      fused_map_fst_eq _ _ _ _ _ _ _ hsym]
     -- Case split on size check
     cases (certStr.toByteArray.size != n * (n + 1) / 2 * 5 : Bool)
     · -- Size OK: if (false = true) → else branch
@@ -81,7 +84,7 @@ theorem checkCertificateFast_eq_slow :
                 certStr.toByteArray n d c₁ c₂ c₃)
               (buildColumnLists n 64))[i % 64]!.snd[i / 64]!)
             (fun i hi => fused_norm_lookup (decodeNeighbors rotStr.toByteArray n d)
-              certStr.toByteArray n d c₁ c₂ c₃ i hi)
+              certStr.toByteArray n d c₁ c₂ c₃ i hi hsym)
         · -- merged.first = true: both sides false
           simp
     · -- Size bad: both sides false
