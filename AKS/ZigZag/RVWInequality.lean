@@ -24,7 +24,7 @@ import Mathlib.Tactic
 /-! **Quadratic Helpers** -/
 
 private lemma quad_nonneg_of_vertex_ge_one (c₂ c₁ c₀ a : ℝ)
-    (hc₂ : 0 ≤ c₂) (ha_lo : 0 ≤ a) (ha_hi : a ≤ 1)
+    (hc₂ : 0 ≤ c₂) (ha_hi : a ≤ 1)
     (hf1 : 0 ≤ c₂ + c₁ + c₀)
     (hvertex : c₁ + 2 * c₂ ≤ 0) :
     0 ≤ c₂ * a ^ 2 + c₁ * a + c₀ := by
@@ -139,7 +139,7 @@ theorem rvw_reduced_ineq (α wh zh a : ℝ)
         show 2 * (α * (1 - α) * (2 - t ^ 2)) = 2 * α * (1 - α) * (2 - t ^ 2) from by ring]
     by_cases hXh_pos : 0 < Xh
     · -- Xh > 0, vertex ≥ 1: show c₁+2c₂ ≤ 0
-      apply quad_nonneg_of_vertex_ge_one _ _ _ a hc₂ ha_lo ha_hi hf1
+      apply quad_nonneg_of_vertex_ge_one _ _ _ a hc₂ ha_hi hf1
       -- c₁+2c₂ = Xh·(inner+2α²Xh); Xh>0 so need inner+2α²Xh ≤ 0
       have hv : inner + 2 * α ^ 2 * Xh ≤ 0 := by
         nlinarith [sq_nonneg (α * t),
