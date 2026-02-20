@@ -66,6 +66,46 @@ theorem rankInBag_injOn {n : ℕ} {perm : Fin n → Fin n}
   · exact absurd heq (Nat.ne_of_lt (rankInBag_strictMono hi hlt))
   · exact absurd heq (Nat.ne_of_gt (rankInBag_strictMono hj hgt))
 
+/-! **Rank Ordering by Perm Value**
+
+Items with perm values below a threshold have lower ranks than items
+at or above the threshold. This is the structural basis for showing
+that parent-level strangers (with extreme perm values) occupy extreme
+ranks and are thus captured by the fringe. -/
+
+/-- Items with perm value below threshold have rank strictly less than the
+    count of below-threshold items. Follows from: the items counted by
+    `rankInBag i` form a strict subset of the below-threshold items
+    (since `i` itself is below but not counted). -/
+theorem rankInBag_lt_count_below {n : ℕ} {perm : Fin n → Fin n}
+    {regs : Finset (Fin n)} {i : Fin n} {a : ℕ}
+    (hi : i ∈ regs) (hlt : (perm i).val < a) :
+    rankInBag perm regs i <
+      (regs.filter (fun j ↦ (perm j).val < a)).card := by
+  simp only [rankInBag]
+  apply card_lt_card
+  refine ⟨fun k hk ↦ ?_, fun hsub ↦ ?_⟩
+  · simp only [mem_filter] at hk ⊢
+    exact ⟨hk.1, hk.2.trans hlt⟩
+  · have hmem : i ∈ regs.filter (fun j ↦ (perm j).val < a) :=
+      mem_filter.mpr ⟨hi, hlt⟩
+    exact absurd (mem_filter.mp (hsub hmem)).2 (lt_irrefl _)
+
+/-- Items with perm value at or above threshold have rank at least the
+    count of below-threshold items. Follows from: all below-threshold
+    items have perm value strictly less than `perm i`, so they are all
+    counted by `rankInBag i`. -/
+theorem rankInBag_ge_count_below {n : ℕ} {perm : Fin n → Fin n}
+    {regs : Finset (Fin n)} {i : Fin n} {a : ℕ}
+    (_ : i ∈ regs) (hge : a ≤ (perm i).val) :
+    (regs.filter (fun j ↦ (perm j).val < a)).card ≤
+      rankInBag perm regs i := by
+  simp only [rankInBag]
+  apply card_le_card
+  intro k hk
+  simp only [mem_filter] at hk ⊢
+  exact ⟨hk.1, hk.2.trans_le hge⟩
+
 /-! **Split Parameters** -/
 
 /-- Fringe size: number of items kicked to parent from each end. -/
