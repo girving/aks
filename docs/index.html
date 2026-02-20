@@ -195,6 +195,43 @@ const PROOF_DATA = {
       sig: "spectralGap_complete : spectralGap (completeGraph n) = 1 / n",
       desc: "The complete graph K_{n+1} has spectral gap exactly 1/n." },
 
+    // ── Graph/Graph.lean ──
+    { id: "Graph", file: "AKS/Graph/Graph.lean", line: 32, status: "definition", kind: "structure",
+      sig: "structure Graph (n : ℕ) where\n  halfs : ℕ\n  src : Fin halfs → Fin n\n  rot : Fin halfs → Fin halfs\n  rot_involution : ...",
+      desc: "General graph on n vertices via half-edges with pairing involution. Allows irregular degree." },
+    { id: "Graph.contract", file: "AKS/Graph/Graph.lean", line: 69, status: "definition", kind: "def",
+      sig: "Graph.contract (G : Graph n) (s : Fin n → Fin m) : Graph m",
+      desc: "Contract a graph by relabeling vertices via a surjection. Self-loops/multi-edges arise." },
+    { id: "RegularGraph.toGraph", file: "AKS/Graph/Graph.lean", line: 146, status: "definition", kind: "def",
+      sig: "RegularGraph.toGraph (G : RegularGraph n d) : Graph n",
+      desc: "Embed a RegularGraph into the general Graph type." },
+
+    // ── Graph/Walk.lean ──
+    { id: "Graph.normalizedWalkCLM", file: "AKS/Graph/Walk.lean", line: 52, status: "definition", kind: "def",
+      sig: "Graph.normalizedWalkCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Normalized walk operator D^{-1/2} A D^{-1/2} for general (irregular) graphs." },
+    { id: "Graph.degreeMeanCLM", file: "AKS/Graph/Walk.lean", line: 91, status: "definition", kind: "def",
+      sig: "Graph.degreeMeanCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Degree-weighted mean projection onto √deg direction for general graphs." },
+    { id: "Graph.spectralGap", file: "AKS/Graph/Walk.lean", line: 108, status: "definition", kind: "def",
+      sig: "Graph.spectralGap (G : Graph n) : ℝ := ‖G.normalizedWalkCLM - G.degreeMeanCLM‖",
+      desc: "Spectral gap of a general graph: operator norm of normalized walk minus mean projection." },
+    { id: "Graph.normalizedWalkCLM_isSelfAdjoint", file: "AKS/Graph/Walk.lean", line: 115, status: "sorry", kind: "theorem",
+      sig: "Graph.normalizedWalkCLM_isSelfAdjoint : IsSelfAdjoint G.normalizedWalkCLM",
+      desc: "Self-adjointness of normalized walk operator via the rotation bijection." },
+    { id: "Graph.degreeMeanCLM_isSelfAdjoint", file: "AKS/Graph/Walk.lean", line: 126, status: "proved", kind: "theorem",
+      sig: "Graph.degreeMeanCLM_isSelfAdjoint : IsSelfAdjoint G.degreeMeanCLM",
+      desc: "Self-adjointness of degree-weighted mean projection (algebraic symmetry)." },
+    { id: "Graph.spectralGap_nonneg", file: "AKS/Graph/Walk.lean", line: 168, status: "proved", kind: "theorem",
+      sig: "Graph.spectralGap_nonneg : 0 ≤ G.spectralGap",
+      desc: "Spectral gap is nonneg (norm is nonneg)." },
+    { id: "Graph.spectralGap_contract", file: "AKS/Graph/Walk.lean", line: 181, status: "sorry", kind: "theorem",
+      sig: "Graph.spectralGap_contract : (G.contract s).spectralGap ≤ G.spectralGap",
+      desc: "Spectral gap can only decrease under vertex contraction." },
+    { id: "spectralGap_toGraph", file: "AKS/Graph/Walk.lean", line: 190, status: "sorry", kind: "theorem",
+      sig: "spectralGap_toGraph : G.toGraph.spectralGap = spectralGap G",
+      desc: "For regular graphs, Graph.spectralGap agrees with RegularGraph spectralGap." },
+
     // ── Mixing.lean ──
     { id: "indicatorVec", file: "AKS/Halver/Mixing.lean", line: 24, status: "definition", kind: "def",
       sig: "indicatorVec (S : Finset (Fin n)) : EuclideanSpace ℝ (Fin n)",
@@ -413,7 +450,7 @@ const PROOF_DATA = {
 
     // ── Cert/FastProof.lean ──
     { id: "checkCertificate_eq_slow", file: "AKS/Cert/FastProof.lean", line: 46, status: "proved", kind: "theorem",
-      sig: "checkCertificate_eq_slow :\n  @checkCertificate = @checkCertificateSlow",
+      sig: "checkCertificate_eq_slow :\n  checkCertificate = checkCertificateSlow",
       desc: "Bridge: parallel fused checker = sequential checker. Proof: Task elimination, fused→unfused PSD rewrite, Boolean case splits, prefix-sum loop = checkPerRow via fused_norm_lookup." },
 
     // ── Random/Random16.lean ──
@@ -599,13 +636,13 @@ const PROOF_DATA = {
     { id: "concreteSplit_hsend_right", file: "AKS/Bags/SplitCard.lean", line: 336, status: "proved", kind: "theorem",
       sig: "concreteSplit_hsend_right : SeifInvariant ... →\n  toRightChild.card ≤ bagCapacity / 2",
       desc: "PROVED. Right child send bounded by capacity/2. Via childSendSize_le_half and invariant capacity bound." },
-    { id: "concreteSplit_hkick_pair", file: "AKS/Bags/SplitCard.lean", line: 355, status: "sorry", kind: "theorem",
+    { id: "concreteSplit_hkick_pair", file: "AKS/Bags/SplitCard.lean", line: 389, status: "sorry", kind: "theorem",
       sig: "concreteSplit_hkick_pair : bagCapacity < A →\n  paired kick ≤ 4·lam·bagCapacity",
       desc: "Paired kick from both children has no +2 additive term when cap < A. Requires even bag sizes at child level." },
-    { id: "concreteSplit_hrebag_uniform", file: "AKS/Bags/SplitCard.lean", line: 462, status: "proved", kind: "theorem",
+    { id: "concreteSplit_hrebag_uniform", file: "AKS/Bags/SplitCard.lean", line: 533, status: "proved", kind: "theorem",
       sig: "concreteSplit_hrebag_uniform :\n  (rebag ... level i₁).card = (rebag ... level i₂).card",
       desc: "All bags at a given level have equal size after rebagging. Proved via deterministic component sizes (rankInBag bijection) + invariant uniform_size." },
-    { id: "concreteSplit_hrebag_disjoint", file: "AKS/Bags/SplitCard.lean", line: 512, status: "proved", kind: "theorem",
+    { id: "concreteSplit_hrebag_disjoint", file: "AKS/Bags/SplitCard.lean", line: 583, status: "proved", kind: "theorem",
       sig: "concreteSplit_hrebag_disjoint : (l₁,i₁) ≠ (l₂,i₂) →\n  Disjoint (rebag ...) (rebag ...)",
       desc: "Bags at distinct positions are disjoint after rebagging. Proved via 9-case analysis using bags_disjoint + rank-range component disjointness." },
 
@@ -688,6 +725,24 @@ const PROOF_DATA = {
     ["RegularGraph", "completeGraph"],
     ["spectralGap", "spectralGap_complete"],
     ["completeGraph", "spectralGap_complete"],
+
+    // Graph/Graph.lean
+    ["RegularGraph", "Graph"],
+    ["RegularGraph", "RegularGraph.toGraph"],
+    ["Graph", "Graph.contract"],
+    ["Graph", "RegularGraph.toGraph"],
+
+    // Graph/Walk.lean (general graph spectral gap)
+    ["Graph", "Graph.normalizedWalkCLM"],
+    ["Graph", "Graph.degreeMeanCLM"],
+    ["Graph.normalizedWalkCLM", "Graph.spectralGap"],
+    ["Graph.degreeMeanCLM", "Graph.spectralGap"],
+    ["Graph.normalizedWalkCLM", "Graph.normalizedWalkCLM_isSelfAdjoint"],
+    ["Graph.degreeMeanCLM", "Graph.degreeMeanCLM_isSelfAdjoint"],
+    ["Graph.spectralGap", "Graph.spectralGap_nonneg"],
+    ["Graph.spectralGap", "Graph.spectralGap_contract"],
+    ["Graph.spectralGap", "spectralGap_toGraph"],
+    ["spectralGap", "spectralGap_toGraph"],
 
     // Mixing lemma
     ["spectralGap", "expander_mixing_lemma"],

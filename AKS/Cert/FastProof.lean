@@ -43,9 +43,11 @@ set_option maxHeartbeats 6400000 in
     `merged.first`). All but one case are trivially `false = false`. The
     non-trivial case reduces to `prefixSumLoop = checkPerRow` via
     `prefixSumLoop_eq_checkPerRow` with norms from `fused_norm_lookup`. -/
-theorem checkCertificate_eq_slow :
-    @checkCertificate = @checkCertificateSlow := by
-  funext rotStr certStr n d c₁ c₂ c₃
+theorem checkCertificate_eq_slow (tasks : Nat := 64) (ht : 0 < tasks := by omega) :
+    ∀ rotStr certStr n d c₁ c₂ c₃,
+    checkCertificate rotStr certStr n d c₁ c₂ c₃ (tasks := tasks) =
+    checkCertificateSlow rotStr certStr n d c₁ c₂ c₃ (tasks := tasks) := by
+  intro rotStr certStr n d c₁ c₂ c₃
   simp only [checkCertificate, checkCertificateSlow,
     map_task_spawn_get,
     checkPSDCertificate, checkColumnNormBound, checkPSDThreshold,
@@ -56,7 +58,7 @@ theorem checkCertificate_eq_slow :
   · -- checkInvolution = true → derive NeighborSymm for scatter = gather bridge
     have hsym := checkInvolution_implies_neighborSymm rotStr.toByteArray n d hinv
     simp only [Bool.true_and,
-      fused_map_fst_eq _ _ _ _ _ _ _ hsym]
+      fused_map_fst_eq _ _ _ _ _ _ _ tasks ht hsym]
     -- Case split on size check
     cases (certStr.toByteArray.size != n * (n + 1) / 2 * 5 : Bool)
     · -- Size OK: if (false = true) → else branch
@@ -70,7 +72,7 @@ theorem checkCertificate_eq_slow :
             (fun cols =>
               checkPSDColumns (decodeNeighbors rotStr.toByteArray n d)
                 certStr.toByteArray n d c₁ c₂ c₃ cols)
-            (buildColumnLists n 64))
+            (buildColumnLists n tasks))
         cases merged.first
         · -- merged.first = false: non-trivial case
           simp only [Bool.false_eq_true, ite_false]
@@ -82,9 +84,9 @@ theorem checkCertificate_eq_slow :
             (fun i => (Array.map
               (checkPSDColumnsFull (decodeNeighbors rotStr.toByteArray n d)
                 certStr.toByteArray n d c₁ c₂ c₃)
-              (buildColumnLists n 64))[i % 64]!.snd[i / 64]!)
+              (buildColumnLists n tasks))[i % tasks]!.snd[i / tasks]!)
             (fun i hi => fused_norm_lookup (decodeNeighbors rotStr.toByteArray n d)
-              certStr.toByteArray n d c₁ c₂ c₃ i hi hsym)
+              certStr.toByteArray n d c₁ c₂ c₃ tasks ht i hi hsym)
         · -- merged.first = true: both sides false
           simp
     · -- Size bad: both sides false
