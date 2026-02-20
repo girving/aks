@@ -450,6 +450,18 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Region-based `dite` definitions: extract val-level lemmas per region.** For definitions with multiple `if/dite` branches (e.g., `padFun` with 4 regions), write separate `*_val_rt`, `*_val_pt`, etc. lemmas with explicit negation hypotheses. Proofs then use `have h := lemma_val_region ... (show ¬... by omega) ...; rw [h]; <close>`, avoiding fragile `split_ifs` where branch counts can vary.
 
+**Ghost state elimination for imperative buffer reuse.** When imperative code reuses buffers across loop iterations (e.g., `checkPSDColumnsFull` with `bz`/`zCol`): (1) define a "big state" including all mutable vars (visible + ghost), (2) show the ghost state is fully reset/overwritten at the start of each iteration, (3) prove `project(bigStep ghost_any) = smallStep(project input)` — ghost doesn't affect output, (4) by induction on the list, `project(foldl bigStep) = foldl smallStep (project init)`. Key helpers: `foldl_simulation` (generic projection through foldl), `foldl_mprod_to_prod` (MProd↔Prod swap).
+
+**MProd ordering is reversed.** Lean desugars `let mut a; let mut b; let mut c` into `MProd c (MProd b a)` — reversed from declaration order. The final `return (a, b)` becomes `match ⟨c, b, a⟩ with | ⟨c, b, a⟩ => (a, b)`. Always use `trace_state` after `unfold` to check the actual MProd layout before writing proofs about desugared do-blocks.
+
+**`Array.set!` doesn't parse outside do-blocks.** `.set! v 0` is parsed as `(.set) (! v) 0`, causing `SDiff Bool` errors. Use `.setIfInBounds v 0` instead. Similarly, the size preservation lemma is `Array.size_setIfInBounds` (not `Array.size_set!`).
+
+**Involution-based symmetry for counting folds.** To prove `f(v,w) = f(w,v)` for graph-based counting: (1) flatten nested counting fold to flat fold over `{0,...,N-1}`, (2) apply `fold_sum_invol` (involution preserves counting folds, proved by strong induction + `fold_sum_replace`), (3) transform predicates using round-trip properties of the involution, close with `and_comm`. See `portCount_symm` in `ScatterBridge.lean`.
+
+**Converting imperative loops to foldl.** Chain: `Array.forIn_toList` (array→list forIn) → `list_forIn_yield_foldl` (forIn with yield→foldl) → `forIn_range_eq_fold` / `forIn_range'_eq_fold` (range-based for→`Nat.fold`). For nested mutable state, use `foldl_mprod_to_prod` to swap MProd to Prod after conversion.
+
+**Scatter = gather under `NeighborSymm`.** Scatter-based accumulation (loop over sources k, distribute `z[k]` to `bz[neighbors[k*d+p]]`) equals gather-based (`mulAdjPre`: loop over targets i, collect from `neighbors[i*d+p]`) when adjacency is symmetric. The bridge goes through `portCount_symm` (port counts are symmetric under rotation involution). See `scatterMulAdj_eq_mulAdjPre` in `ScatterBridge.lean`.
+
 ## Mathlib API Reference
 
 ### Spectral Theorem
