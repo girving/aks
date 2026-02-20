@@ -1,0 +1,196 @@
+/-
+  # Stranger Bounds for the Split
+
+  Proves the stranger-count hypotheses of `invariant_maintained` for any
+  split where `toParent ⊆ bags` (Seiferas 2009, Section 5).
+
+  Key results:
+  - `jStrangerCount_level_shift`: j-strangers at (l-1, i/2) = (j+1)-strangers at (l, i)
+  - `kick_stranger_bound`: fringe items have ≤ λε^j·cap strangers at parent level
+  - `parent_stranger_bound`: items from parent have ≤ λε^(j-1)·cap strangers (sorry)
+  - `parent_1stranger_from_inv`: 1-strangers from parent ≤ parentStrangerCoeff·cap (sorry)
+-/
+
+import AKS.Bags.Invariant
+import AKS.Separator.Defs
+
+open Finset
+
+/-! **Level-Shift Identity**
+
+Being j-strange at (l-1, i/2) is the same as being (j+1)-strange at (l, i).
+This is the key identity connecting parent-level and child-level stranger counts.
+Proof: both reduce to `nativeBagIdx n (l-j) r ≠ i / 2^j` after Nat arithmetic. -/
+
+/-- `i / 2 / 2^(j-1) = i / 2^j` for `j ≥ 1`. -/
+private theorem div2_div_pow_eq {i j : ℕ} (hj : 1 ≤ j) :
+    i / 2 / 2 ^ (j - 1) = i / 2 ^ j := by
+  rw [Nat.div_div_eq_div_mul]
+  congr 1
+  calc 2 * 2 ^ (j - 1) = 2 ^ 1 * 2 ^ (j - 1) := by norm_num
+    _ = 2 ^ (1 + (j - 1)) := (pow_add 2 1 (j - 1)).symm
+    _ = 2 ^ j := by congr 1; omega
+
+/-- Level-shift for stranger counts: j-strangers at parent (l-1, i/2)
+    equal (j+1)-strangers at child (l, i). Both reduce to
+    `nativeBagIdx n (l-j) r ≠ i / 2^j`. -/
+theorem jStrangerCount_level_shift {n : ℕ} (perm : Fin n → Fin n)
+    (S : Finset (Fin n)) {l i j : ℕ} (hj : 1 ≤ j) (hl : 1 ≤ l) :
+    jStrangerCount n perm S (l - 1) (i / 2) j = jStrangerCount n perm S l i (j + 1) := by
+  simp only [jStrangerCount]
+  congr 1; ext x; simp only [mem_filter, isJStranger]
+  -- After unfolding, both sides have the form:
+  --   x ∈ S ∧ (bound₁ ∧ bound₂ ∧ nativeBagIdx n (l-j) r ≠ i / 2^j)
+  -- Rewrite Nat expressions to canonical form
+  have hlj : l - 1 - (j - 1) = l - j := by omega
+  have hjl : j + 1 - 1 = j := by omega
+  have hdiv : i / 2 / 2 ^ (j - 1) = i / 2 ^ j := div2_div_pow_eq hj
+  rw [hlj, hjl, hdiv]
+  -- Now both sides differ only in numeric bounds, which are equivalent
+  constructor
+  · rintro ⟨hm, -, h2, hne⟩; exact ⟨hm, by omega, by omega, hne⟩
+  · rintro ⟨hm, -, h2, hne⟩; exact ⟨hm, hj, by omega, hne⟩
+
+/-! **Kick Stranger Bound**
+
+Fringe items kicked from child (l, i) to parent (l-1, i/2) have few
+strangers at the parent level. The bound follows from:
+1. `toParent ⊆ bags l i` (structural)
+2. Level shift: j-strangers at parent = (j+1)-strangers at child
+3. Subset monotonicity
+4. Invariant's stranger bound at j+1 -/
+
+/-- Stranger count of kicked items at the parent level is bounded by the
+    invariant's stranger bound at the child level with shifted index.
+    This is the `hkick_stranger` hypothesis of `invariant_maintained`. -/
+theorem kick_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hlam : 0 ≤ lam) (hε : 0 ≤ ε) (hν : 0 ≤ ν)
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    (l i j : ℕ) (hj : 1 ≤ j) :
+    (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) j : ℝ) ≤
+    lam * ε ^ j * bagCapacity n A ν t l := by
+  by_cases hl : l = 0
+  · -- Level 0: (l-1) = 0, j ≥ 1 > 0 = level, so no j-strangers
+    subst hl
+    rw [jStrangerCount_zero_gt_level perm _ (by omega : 0 < j)]
+    simp only [Nat.cast_zero]
+    apply mul_nonneg (mul_nonneg hlam (pow_nonneg hε _))
+    unfold bagCapacity; positivity
+  · -- Level ≥ 1: use level shift + subset monotonicity + invariant
+    have hl1 : 1 ≤ l := by omega
+    calc (jStrangerCount n perm (split l i).toParent (l - 1) (i / 2) j : ℝ)
+        ≤ (jStrangerCount n perm (bags l i) (l - 1) (i / 2) j : ℝ) := by
+          exact_mod_cast jStrangerCount_mono (hsplit_sub l i).1 _ _ _
+      _ = (jStrangerCount n perm (bags l i) l i (j + 1) : ℝ) := by
+          rw [jStrangerCount_level_shift perm _ hj hl1]
+      _ ≤ lam * ε ^ j * bagCapacity n A ν t l :=
+          inv.stranger_bound l i (j + 1) (by omega)
+
+/-! **Parent Stranger Bound (j ≥ 2)**
+
+Items received from parent have few j-strangers (j ≥ 2) at the child level.
+The bound requires the separator's filtering property: the fringe captures
+most strangers from the parent bag, and only an ε fraction leak through
+to the children.
+
+Seiferas (2009, Section 5): "at most fraction ε of the few smallest (or
+largest) are permuted far out of place." This gives the ε filtering factor
+beyond what subset monotonicity alone provides. -/
+
+/-- Parent stranger bound for j ≥ 2: the `hparent_stranger` hypothesis
+    of `invariant_maintained`.
+
+    **Proof sketch** (Seiferas Section 5):
+    Items in `fromParent` are ⊆ parent bag. Being j-strange at (level, idx)
+    = (j-1)-strange at parent. The invariant bounds (j-1)-strangers in parent
+    by `lam * ε^(j-2) * cap(parent)`. The separator's fringe captures most of
+    these strangers (they have extreme ranks), and only ε fraction leak to
+    children, giving `lam * ε^(j-1) * cap(parent)`.
+
+    The formal proof requires a separator filtering lemma connecting
+    `SepInitial`/`SepFinal` to the fringe's stranger-absorption property.
+    This is sorry'd pending that infrastructure. -/
+theorem parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    (level idx j : ℕ) (hj : 2 ≤ j) :
+    (jStrangerCount n perm (fromParent split level idx) level idx j : ℝ) ≤
+    lam * ε ^ (j - 1) * bagCapacity n A ν t (level - 1) := by
+  sorry
+
+/-! **Parent 1-Stranger Bound**
+
+The hardest case: bounding 1-strangers among items from parent.
+Decomposes via `parent_1stranger_bound` (proved in `Invariant.lean`) into:
+- 2-strangers among fromParent (from `parent_stranger_bound` at j=2)
+- Sibling-native items among fromParent (three-source decomposition) -/
+
+/-- Sibling-native bound among items from parent: the `hcnative_bound`
+    hypothesis of `parent_1stranger_bound`.
+
+    The three sub-sources (Seiferas Section 5):
+    (b) Halving errors: C-native items placed on wrong side by separator
+    (c) Subtree stranger accumulation: geometric series in ε
+    (d) C-native items arriving from above parent
+
+    Sorry'd: requires separator filtering + invariant decomposition. -/
+theorem cnative_from_parent_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    (level idx : ℕ) :
+    (siblingNativeCount n perm (fromParent split level idx) level idx : ℝ) ≤
+    cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
+  sorry
+
+/-- Parent 1-stranger bound: the `hparent_1stranger` hypothesis of
+    `invariant_maintained`. Assembles via `parent_1stranger_bound`
+    from the 2-stranger bound and sibling-native bound. -/
+theorem parent_1stranger_from_inv {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (split : ℕ → ℕ → SplitResult n)
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hparams : SatisfiesConstraints A ν lam ε)
+    (hsplit_sub : ∀ l i,
+      (split l i).toParent ⊆ bags l i ∧
+      (split l i).toLeftChild ⊆ bags l i ∧
+      (split l i).toRightChild ⊆ bags l i)
+    (level idx : ℕ) :
+    (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
+    parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by
+  obtain ⟨hA, hν, hν1, hlam, _, hε, _, hC4, _⟩ := hparams
+  -- Derive (2εA)² < 1 from C4_gt1 + ν < 1
+  have h2εA : (2 * ε * A) ^ 2 < 1 := by
+    have hA_pos : (0 : ℝ) < A := by linarith
+    have hεA : 2 * ε * A < 1 := by
+      have := hC4; unfold SatisfiesC4_gt1 at this
+      have : 1 / A > 0 := div_pos one_pos hA_pos
+      linarith
+    have hεA0 : 0 ≤ 2 * ε * A := by positivity
+    calc (2 * ε * A) ^ 2 = (2 * ε * A) * (2 * ε * A) := sq (2 * ε * A)
+      _ < 1 * 1 := mul_lt_mul hεA (le_of_lt hεA) (by positivity) (by linarith)
+      _ = 1 := one_mul 1
+  have hj2 : ∀ l i,
+      (jStrangerCount n perm (fromParent split l i) l i 2 : ℝ) ≤
+      lam * ε * bagCapacity n A ν t (l - 1) := by
+    intro l i
+    have h := parent_stranger_bound split inv hsplit_sub l i 2 (by omega)
+    simpa using h
+  exact parent_1stranger_bound split hA hν hlam.le hε.le h2εA hj2
+    (fun l i ↦ cnative_from_parent_bound split inv hsplit_sub l i)
+    level idx

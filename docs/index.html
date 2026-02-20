@@ -690,6 +690,23 @@ const PROOF_DATA = {
       sig: "separatorSortingNetwork_depth_bound :\n  depth ≤ C * d_sep * Nat.log 2 n",
       desc: "PROVED. O(log n) depth bound. Direct from depth_le + numStages = C·log₂(n)." },
 
+    // Split stranger bounds (Instance 2 of Part B)
+    { id: "jStrangerCount_level_shift", file: "AKS/Bags/SplitStranger.lean", line: 37, status: "proved", kind: "theorem",
+      sig: "jStrangerCount_level_shift :\n  jStrangerCount perm S (l-1) (i/2) j = jStrangerCount perm S l i (j+1)",
+      desc: "PROVED. Level-shift identity: j-strangers at parent (l-1,i/2) = (j+1)-strangers at child (l,i). Pure Nat arithmetic." },
+    { id: "kick_stranger_bound", file: "AKS/Bags/SplitStranger.lean", line: 66, status: "proved", kind: "theorem",
+      sig: "kick_stranger_bound :\n  jStrangerCount (split l i).toParent (l-1) (i/2) j ≤ lam·ε^j·cap(l)",
+      desc: "PROVED. hkick_stranger hypothesis: fringe items have few strangers at parent level. Via level shift + subset mono + invariant." },
+    { id: "parent_stranger_bound", file: "AKS/Bags/SplitStranger.lean", line: 119, status: "sorry", kind: "theorem",
+      sig: "parent_stranger_bound :\n  jStrangerCount (fromParent split l i) l i j ≤ lam·ε^(j-1)·cap(l-1)",
+      desc: "hparent_stranger hypothesis (j≥2). Needs separator fringe filtering: ε fraction of strangers leak past fringe to children." },
+    { id: "cnative_from_parent_bound", file: "AKS/Bags/SplitStranger.lean", line: 148, status: "sorry", kind: "theorem",
+      sig: "cnative_from_parent_bound :\n  siblingNativeCount (fromParent split l i) l i ≤ cnativeCoeff·cap(l-1)",
+      desc: "Sibling-native bound among items from parent. Three sub-sources: halving errors + geometric series + above-parent items." },
+    { id: "parent_1stranger_from_inv", file: "AKS/Bags/SplitStranger.lean", line: 164, status: "sorry", kind: "theorem",
+      sig: "parent_1stranger_from_inv :\n  jStrangerCount (fromParent split l i) l i 1 ≤ parentStrangerCoeff·cap(l)",
+      desc: "hparent_1stranger hypothesis. Assembles via parent_1stranger_bound from 2-stranger + sibling-native bounds. Assembly proved; sorry from sub-lemmas." },
+
     // V2 tree-distance-based definitions (Phase 1 of targeted hybrid)
     { id: "sectionIndex", file: "AKS/Tree/Sorting.lean", line: 840, status: "definition", kind: "def",
       sig: "sectionIndex (n t i : ℕ) : ℕ",
