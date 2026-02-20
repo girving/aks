@@ -378,20 +378,17 @@ helpers go in `Split.lean` (avoid conflicts in `SplitStranger.lean`).
 
 ## Other Sorries (Outside Bags Subsystem)
 
-For completeness, the full project has ~29 sorries. The Bags subsystem
-accounts for 4. The remainder:
+The full project has 14 sorries total. The Bags subsystem accounts for 4
+(S1-S4 above). The remainder:
 
 | Area | Count | Key theorems |
 |------|-------|-------------|
-| Tree/Sorting.lean | 6 | Bool<->perm bridges, `cherry_wrongness_after_nearsort_v2` |
-| Tree/*.lean | 3 | `parity_nearsort_has_bounded_tree_damage`, `..._improved_bound`, `aks_tree_sorting` |
-| Nearsort/Correctness.lean | 2 | `error_set_bound`, `error_set_bound_dual` |
-| ZigZag/Expanders.lean | 1 | `explicit_expanders_exist_zigzag` (assembly) |
-| Seiferas.lean | 1 | `seiferas_sorting_networks_exist` (depends on S4) |
+| `Graph/Quotient.lean` | 1 | `spectralGap_quotient` (Cauchy interlacing) |
+| `ZigZag/Expanders.lean` | 1 | `explicit_expanders_exist_zigzag` (needs quotient graphs) |
+| `Seiferas.lean` | 1 | `seiferas_sorting_networks_exist` (depends on S4) |
 
-The Tree path sorries (9 total) are on the **alternative** AKS tree-distance
-wrongness path and are independent of the Seiferas path. Both paths share
-the expander infrastructure but diverge at the halver->sorting step.
+The Tree path (AKSNetwork, DamageStability, DamageImprovement, Sorting,
+Nearsort) has been deleted. Only the Seiferas path remains.
 
 ## Key Seiferas Paper References
 
