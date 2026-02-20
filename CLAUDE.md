@@ -125,6 +125,9 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 
 **Entry point:** `AKS.lean` — imports all modules and states the top-level theorem `zigzag_implies_aks_network` connecting expander existence to sorting networks.
 
+**Detailed subsystem docs** — per-section files with architecture, conventions, and proof tactics:
+- [`docs/certificate-bridge.md`](docs/certificate-bridge.md) — Certificate bridge (`CertCheck`, `AKS/Cert/`, `AKS/Random/`, `Bench/`)
+
 **Modules with bottom-up dependency:**
 
 ### `AKS/Misc/Fin.lean` — `Fin` Arithmetic Helpers
@@ -194,9 +197,7 @@ The complete graph as a concrete example:
 Fully proved expander mixing lemma via indicator vectors + Cauchy-Schwarz + operator norm.
 
 ### `AKS/Random/` — Base Expander for Zig-Zag Construction
-Concrete base expander certified via davidad's triangular-inverse method:
-1. **`Random20736.graph`** — concrete `RegularGraph 20736 12`, rotation map verified by `native_decide`
-2. **`Random20736.gap`** — spectral gap ≤ 10/12 via `certificate_bridge` (fully proved, 821 MB PSD certificate verified by `native_decide`)
+Concrete base expander certified via davidad's triangular-inverse method. See [`docs/certificate-bridge.md`](docs/certificate-bridge.md).
 
 ### `AKS/ZigZag/Operators.lean` — Zig-Zag Product and Walk Operators (~230 lines)
 Defines the zig-zag product and the three CLM operators for its spectral analysis:
@@ -226,26 +227,14 @@ Operator theory importing `RVWInequality.lean`:
 2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
 3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
 
-### `AKS/Cert/WalkBound.lean` — Walk Bound → Spectral Gap (~89 lines)
-Abstract operator theory connecting walk bounds to spectral gap bounds. Imports only `Graph/Regular.lean`:
-1. **`spectralGap_le_of_walk_bound`** — quadratic walk bound on mean-zero vectors → `spectralGap G ≤ √(c₁/(c₂·d²))`
-2. **`sqrt_coeff_le_frac`** — coefficient arithmetic: `c₁·βd² ≤ c₂·βn²` → `√(c₁/(c₂·d²)) ≤ βn/(βd·d)`
-
 ### `AKS/Cert/` — Certificate Bridge Infrastructure
-Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
-- **`Defs.lean`** — proof-only pure recursive definitions (`adjMulPure`, `pEntryPure`, `kEntryPure`, etc.) (~100 lines)
-- **`Bridge.lean`** — main bridge theorem chaining all layers (~870 lines)
-- **`FastProof.lean`** — proves `checkCertificateFast = checkCertificateSlow` (~55 lines)
-- **`SpectralMatrix.lean`** — Layer 1: spectral matrix M PSD → walk bound (~186 lines)
-- **`DiagDominant.lean`** — Layer 2: Hermitian + strictly diag-dominant → PSD (~123 lines)
-- **`ColumnNormBridge.lean`** — imperative column norm checker = pure recursive version (~1538 lines)
-- **`Read.lean`** — `bin_base85%` elaborator (reads `.b85` text files), `loadBase85` (runtime), `ensureCertificateData` (~55 lines)
+Walk bound theory, bridge proofs, and imperative checker equivalences. See [`docs/certificate-bridge.md`](docs/certificate-bridge.md).
 
 ### `AKS/Misc/ForLoop.lean` — For-Loop Characterization (~105 lines)
 Proves `for k in [:n] do` in `Id` monad equals `Nat.fold` + partition-fold lemmas.
 
 ### `Bench/` — Benchmarks, Tests, and Profiles
-Not part of the proof. Contains optimization variants (`CertFast`, `CertV2`, `CertV7`, `CertParallel`) and profiling tools. Run via `scripts/bench` or `lake exe cert-{bench,test,profile}`.
+Not part of the proof. See [`docs/certificate-bridge.md`](docs/certificate-bridge.md).
 
 ### `AKS/ZigZag/Expanders.lean` — Expander Families (~115 lines)
 Assembles the spectral bound and builds the iterated construction:
@@ -321,7 +310,6 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 - Lean toolchain: **v4.27.0** (pinned in `lean-toolchain`)
 - **Avoid `native_decide`** — sidesteps the kernel's trust boundary. Prefer `decide +kernel` when `decide` is too slow. Only use `native_decide` as a last resort.
 - **NEVER use `@[implemented_by]`, `@[extern]`, or `unsafePerformIO`** — these can make the kernel and native evaluator disagree, allowing proofs of `False`. If the kernel sees `def x := #[]` but `@[implemented_by]` provides real data, `native_decide` can prove things the kernel can't verify, creating a soundness hole. There is no safe use of `@[implemented_by]` in a proof-carrying codebase. If you need large data, encode it as a compact literal (e.g., `String` or `Nat`) that the kernel can see.
-- **Do not use `@[csimp]` in `CertCheck.lean`** — `CertCheck` is a separate precompiled library (`precompileModules := true`) that contains only definitions, no proofs. `@[csimp]` requires a proof that the replacement equals the original, which would force proofs into the precompiled module and break modularity. Instead, prove the bridge theorem (`checkCertificateFast_eq_slow`) in a separate file (`AKS/Cert/FastProof.lean`) that imports both `CertCheck` and Mathlib.
 
 ## Proof Workflow
 
@@ -336,8 +324,6 @@ Before attempting a `sorry`, estimate the probability of proving it directly (e.
 **Recognize thrashing and ask the user.** After 3+ failed approaches to the same goal, stop and ask for guidance. Signs: repeated restructuring, oscillating between approaches, growing helper count without progress. A 2-minute conversation is cheaper than 30 minutes of failed builds.
 
 **Never silently abandon an agreed plan.** If a plan was approved and a step turns out harder than expected, do NOT silently switch to a shortcut (e.g., replacing a proof with `native_decide` or `sorry`). Always confirm radical plan changes with the user first — explain what's hard, what the alternatives are, and let them decide. A 2-minute conversation about changing course is far cheaper than discovering the change broke assumptions downstream.
-
-**Never change fast code to make proofs easier.** `CertCheck.lean` contains optimized imperative code (`checkCertificateFast`, `checkColumnNormBound`, `mulAdjWith`, etc.) that must stay exactly as-is. The job is to PROVE the existing fast code correct via bridge theorems, not to modify it. When a proof about imperative code is hard, discuss the difficulty with the user — don't silently switch to "make the code easier to prove about" by adding `native_decide` calls, slowing down the fast path, or replacing imperative code with pure equivalents. The `native_decide` in `Random*.lean` should only be on `checkCertificateFast`; everything else must be derived via structural proofs.
 
 **Assess proof risk before significant work.** Break non-trivial theorems into phases with risk levels: LOW (definition, direct proof), MEDIUM (standard argument, uncertain details), HIGH (novel connection, unclear if approach works). Identify the highest-risk phase, document fallback plans (axiomatize, defer, reformulate), and validate the critical bottleneck lemma before building dependencies. Escalate to user after 2-3 failed attempts on a MEDIUM+ phase.
 
@@ -451,17 +437,11 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Region-based `dite` definitions: extract val-level lemmas per region.** For definitions with multiple `if/dite` branches (e.g., `padFun` with 4 regions), write separate `*_val_rt`, `*_val_pt`, etc. lemmas with explicit negation hypotheses. Proofs then use `have h := lemma_val_region ... (show ¬... by omega) ...; rw [h]; <close>`, avoiding fragile `split_ifs` where branch counts can vary.
 
-**Ghost state elimination for imperative buffer reuse.** When imperative code reuses buffers across loop iterations (e.g., `checkPSDColumnsFull` with `bz`/`zCol`): (1) define a "big state" including all mutable vars (visible + ghost), (2) show the ghost state is fully reset/overwritten at the start of each iteration, (3) prove `project(bigStep ghost_any) = smallStep(project input)` — ghost doesn't affect output, (4) by induction on the list, `project(foldl bigStep) = foldl smallStep (project init)`. Key helpers: `foldl_simulation` (generic projection through foldl), `foldl_mprod_to_prod` (MProd↔Prod swap).
-
 **MProd ordering is reversed.** Lean desugars `let mut a; let mut b; let mut c` into `MProd c (MProd b a)` — reversed from declaration order. The final `return (a, b)` becomes `match ⟨c, b, a⟩ with | ⟨c, b, a⟩ => (a, b)`. Always use `trace_state` after `unfold` to check the actual MProd layout before writing proofs about desugared do-blocks.
 
 **`Array.set!` doesn't parse outside do-blocks.** `.set! v 0` is parsed as `(.set) (! v) 0`, causing `SDiff Bool` errors. Use `.setIfInBounds v 0` instead. Similarly, the size preservation lemma is `Array.size_setIfInBounds` (not `Array.size_set!`).
 
-**Involution-based symmetry for counting folds.** To prove `f(v,w) = f(w,v)` for graph-based counting: (1) flatten nested counting fold to flat fold over `{0,...,N-1}`, (2) apply `fold_sum_invol` (involution preserves counting folds, proved by strong induction + `fold_sum_replace`), (3) transform predicates using round-trip properties of the involution, close with `and_comm`. See `portCount_symm` in `ScatterBridge.lean`.
-
 **Converting imperative loops to foldl.** Chain: `Array.forIn_toList` (array→list forIn) → `list_forIn_yield_foldl` (forIn with yield→foldl) → `forIn_range_eq_fold` / `forIn_range'_eq_fold` (range-based for→`Nat.fold`). For nested mutable state, use `foldl_mprod_to_prod` to swap MProd to Prod after conversion.
-
-**Scatter = gather under `NeighborSymm`.** Scatter-based accumulation (loop over sources k, distribute `z[k]` to `bz[neighbors[k*d+p]]`) equals gather-based (`mulAdjPre`: loop over targets i, collect from `neighbors[i*d+p]`) when adjacency is symmetric. The bridge goes through `portCount_symm` (port counts are symmetric under rotation involution). See `scatterMulAdj_eq_mulAdjPre` in `ScatterBridge.lean`.
 
 ## Mathlib API Reference
 
@@ -496,7 +476,7 @@ After completing each proof, reflect on what worked and what didn't. If there's 
 
 **Goal:** define graph operators natively as CLMs on `EuclideanSpace`, not as matrices. `walkCLM`/`meanCLM` use three-layer pattern. `spectralGap` = `‖walkCLM - meanCLM‖`.
 
-No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZag/Spectral sublemmas through `rvw_operator_norm_bound`. ZigZag/Operators.lean: 0 sorry. ZigZag/Spectral.lean: 0 sorry. ZigZag/RVWBound.lean: 0 sorry (scalar inequality proved in `ZigZag/RVWInequality.lean`). Base expander: `Random20736.graph` is a concrete `RegularGraph 20736 12` (D=12, verified by `native_decide`); gap fully proved (821 MB PSD certificate verified by `native_decide`). The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
+No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AKS Section 3): for every permutation input, segment-wise bounds on displaced elements via `rank`. `expander_gives_halver` is fully proved (in `Halver/ExpanderToHalver.lean`) via Tanner's vertex expansion bound (`Halver/Tanner.lean`) + edge monotonicity + permutation counting. `expander_mixing_lemma` is fully proved. `zigzag_spectral_bound` is proved (assembly): chains all ZigZag/Spectral sublemmas through `rvw_operator_norm_bound`. ZigZag/Operators.lean: 0 sorry. ZigZag/Spectral.lean: 0 sorry. ZigZag/RVWBound.lean: 0 sorry (scalar inequality proved in `ZigZag/RVWInequality.lean`). Base expander: fully proved, see [`docs/certificate-bridge.md`](docs/certificate-bridge.md). The old single-halver composition approach (`halver_composition`, `halver_convergence`, `wrongness`) has been deleted — the correct AKS proof uses the tree-based approach in `TreeSorting.lean`.
 
 ## Proof Status by Difficulty
 
@@ -513,11 +493,9 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 **Engineering (weeks, fiddly):** reformulating `explicit_expanders_exist_zigzag` (current statement claims d-regular graph at every size, which is wrong)
 
-### Base expander certificate pipeline (implemented)
+### Base expander certificate pipeline (fully proved)
 
-Base expander graphs are certified via davidad's triangular-inverse method + `native_decide`. Data is base-85 encoded as `String` literals (compact `Expr` nodes visible to kernel). Pipeline: `CertCheck.lean` (checker) → `Cert/WalkBound.lean` (abstract theory) → `Cert/Bridge.lean` (bridge) → `Random/{16,1728,20736}.lean` (per-size graphs). Data files in `data/{n}/` (`.b85` base-85 text, `.gitignore`d) — Rust writes base85 directly so Lean just reads the text as-is. See `docs/bridge-proof-plan.md` for background.
-
-**Bridge decomposition (implemented):** Three lemmas: (1) `certificate_implies_walk_bound`: certificate → walk bound on mean-zero vectors [sorry'd, needs Gershgorin formalization], (2) `spectralGap_le_of_walk_bound` (in `Cert/WalkBound.lean`): walk bound → `spectralGap` bound [proved], (3) `sqrt_coeff_le_frac` (in `Cert/WalkBound.lean`): coefficient arithmetic [proved]. `certificate_bridge` chains all three and is fully proved — the only remaining sorry is `certificate_implies_walk_bound`.
+See [`docs/certificate-bridge.md`](docs/certificate-bridge.md) for architecture and bridge decomposition.
 
 ## RVW Quadratic Inequality (proved)
 
