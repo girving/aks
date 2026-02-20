@@ -30,16 +30,22 @@ def separatorSortingNetwork (n : ℕ) {gam eps : ℝ} {d_sep : ℕ}
     (separatorStage n sep t).comparators
 
 /-- Total depth is at most numStages times the separator depth.
-    Follows from `separatorStage_depth_le` applied to each stage. -/
+    Each stage has depth ≤ `d_sep` (by `separatorStage_depth_le`), and
+    stages are concatenated sequentially (`depth_append`). -/
 theorem separatorSortingNetwork_depth_le (n : ℕ) {gam eps : ℝ} {d_sep : ℕ}
     (sep : SeparatorFamily gam eps d_sep) (numStages : ℕ) :
     (separatorSortingNetwork n sep numStages).depth ≤ numStages * d_sep := by
-  -- Each stage currently has comparators := [], so the flatMap gives []
   show (⟨(List.range numStages).flatMap fun t ↦
     (separatorStage n sep t).comparators⟩ : ComparatorNetwork n).depth ≤ numStages * d_sep
-  simp only [separatorStage]
-  rw [show (List.range numStages).flatMap (fun _ ↦ ([] : List _)) = [] from by simp]
-  exact Nat.zero_le _
+  induction numStages with
+  | zero => simp [List.range_zero, depth_nil]
+  | succ k ih =>
+    simp only [List.range_succ, List.flatMap_append, List.flatMap_singleton]
+    have h_app := depth_append
+      (⟨(List.range k).flatMap fun t ↦ (separatorStage n sep t).comparators⟩)
+      (separatorStage n sep k)
+    have h_stage := separatorStage_depth_le n sep k
+    linarith
 
 /-! **Convergence and Correctness** -/
 
@@ -78,7 +84,11 @@ theorem separatorSortingNetwork_converges {n : ℕ} {A nu lam eps : ℝ}
     2. Initial invariant holds at t=0
     3. Each stage maintains the invariant
     4. After O(log n) stages, all bags have ≤ 1 item
-    5. Zero strangers at convergence → items are sorted -/
+    5. Zero strangers at convergence → items are sorted
+
+    Note: the eventual proof will use `sep.isSep` at each bag size,
+    which requires `sep.valid (bagSize n level)`. For halver-based
+    separators, this holds when `n` is a power of 2. -/
 theorem separatorSortingNetwork_sorts {n : ℕ} {gam eps : ℝ} {d_sep : ℕ}
     (sep : SeparatorFamily gam eps d_sep) (numStages : ℕ)
     (hstages : True)  -- placeholder for numStages ≥ O(log n)

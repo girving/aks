@@ -20,13 +20,20 @@ open Finset BigOperators
 /-- A family of (γ, ε)-separator networks, one per input size,
     with depth bounded by `d`. Analogous to `HalverFamily`.
 
+    The `valid` predicate specifies which input sizes have the separator
+    property. For halver-based separators, `valid n ↔ 2^t ∣ n`
+    (divisibility by the recursion depth). The sorting network only uses
+    the separator at valid sizes (bag sizes are powers of 2).
+
     The depth bound is fundamental: `2 * size ≤ n * d` follows from
     `size_le_half_n_mul_depth`. -/
 structure SeparatorFamily (γ ε : ℝ) (d : ℕ) where
   /-- The separator network for each input size `n`. -/
   net : (n : ℕ) → ComparatorNetwork n
-  /-- Each network is a (γ, ε)-separator. -/
-  isSep : ∀ n, IsSeparator (net n) γ ε
+  /-- Which input sizes satisfy the separator property. -/
+  valid : ℕ → Prop
+  /-- Each network at a valid size is a (γ, ε)-separator. -/
+  isSep : ∀ n, valid n → IsSeparator (net n) γ ε
   /-- Each network has depth at most `d`. -/
   depth_le : ∀ n, (net n).depth ≤ d
 
