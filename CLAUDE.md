@@ -127,6 +127,7 @@ Interactive dependency graph served via GitHub Pages from `docs/`. To refresh: u
 
 **Detailed subsystem docs** — per-section files with architecture, conventions, and proof tactics:
 - [`docs/certificate-bridge.md`](docs/certificate-bridge.md) — Certificate bridge (`CertCheck`, `AKS/Cert/`, `AKS/Random/`, `Bench/`)
+- [`docs/rvw-inequality.md`](docs/rvw-inequality.md) — RVW scalar inequality and operator bound (`AKS/ZigZag/RVWInequality.lean`, `RVWBound.lean`)
 
 **Modules with bottom-up dependency:**
 
@@ -215,17 +216,8 @@ Algebraic identities and spectral bounds for the zig-zag operators:
 3. **Hat block norm** — `‖QΣQ - P‖ ≤ spectralGap G₁`
 4. **Global mean decomposition** — `P·Q = Q·P = P`
 
-### `AKS/ZigZag/RVWInequality.lean` — Core RVW Scalar Inequality (~400 lines)
-Pure polynomial inequality, no operator imports. Fully proved (0 sorry):
-1. **`rvw_reduced_ineq`** — V1' inequality via a-quadratic case analysis
-2. **`rvw_cleared_ineq`** — cleared form via concavity + boundary reparameterization
-3. **`rvw_quadratic_ineq`** — division form via `p·X ≤ |p|·|X|`
-
-### `AKS/ZigZag/RVWBound.lean` — Abstract RVW Operator Bound
-Operator theory importing `RVWInequality.lean`:
-1. **`rvwBound`** — the precise RVW bound function
-2. **Monotonicity** — `rvwBound_mono_left`, `rvwBound_mono_right`
-3. **Abstract bound** — `rvw_operator_norm_bound`: `‖W - P‖ ≤ rvwBound(λ₁, λ₂)` from operator axioms
+### `AKS/ZigZag/RVWInequality.lean`, `RVWBound.lean` — RVW Inequality and Operator Bound
+Fully proved. See [`docs/rvw-inequality.md`](docs/rvw-inequality.md).
 
 ### `AKS/Cert/` — Certificate Bridge Infrastructure
 Walk bound theory, bridge proofs, and imperative checker equivalences. See [`docs/certificate-bridge.md`](docs/certificate-bridge.md).
@@ -497,13 +489,6 @@ No files have `#exit`. `IsEpsilonHalver` uses a permutation-based definition (AK
 
 See [`docs/certificate-bridge.md`](docs/certificate-bridge.md) for architecture and bridge decomposition.
 
-## RVW Quadratic Inequality (proved)
+## RVW Quadratic Inequality (fully proved)
 
-`rvw_quadratic_ineq` is fully proved in `AKS/ZigZag/RVWInequality.lean`. The proof chain:
-1. **`rvw_reduced_ineq`** — core V1' inequality in 4 variables (α, wh, zh, a). Proved by treating as a quadratic in `a` and case-splitting: disc ≤ 0 (no real roots), vertex ≥ 1 (f(1) ≥ 0 suffices), or vertex ≤ 0 (f(0) ≥ 0 suffices).
-2. **`rvw_cleared_ineq`** — cleared polynomial form, via concavity reduction + boundary reparameterization.
-3. **`rvw_quadratic_ineq`** — original form with spectral gap parameters, via `p·X ≤ |p|·|X|`.
-
-### Lesson: when `nlinarith` is structurally infeasible, try algebraic case analysis
-
-Direct `nlinarith` (diagonal Positivstellensatz) was proven infeasible for this inequality. SOS certificates exist but couldn't be extracted at sufficient precision. The successful approach was mathematical: reparameterize to expose a quadratic in one variable, then case-split on discriminant sign and vertex location. Each case reduces to elementary `nlinarith` with explicit ring identity hints.
+See [`docs/rvw-inequality.md`](docs/rvw-inequality.md) for proof chain and lessons.
