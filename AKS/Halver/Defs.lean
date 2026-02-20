@@ -11,7 +11,6 @@
   • `IsEpsilonSorted`, `Monotone.bool_pattern`: sortedness infrastructure
 
   The proof that expanders yield ε-halvers is in `ExpanderToHalver.lean`.
-  The tree-based AKS correctness proof is in `TreeSorting.lean`.
 -/
 
 import AKS.Sort.Defs
@@ -33,6 +32,79 @@ lemma countOnes_le {n : ℕ} (v : Fin n → Bool) : countOnes v ≤ n := by
   trans (Finset.univ : Finset (Fin n)).card
   · exact Finset.card_filter_le _ _
   · exact le_of_eq (Finset.card_fin n)
+
+/-- Comparator doesn't affect positions other than `c.i` and `c.j`. -/
+lemma comparator_affects_only_compared {n : ℕ} (c : Comparator n) (v : Fin n → Bool) (k : Fin n) :
+    k ≠ c.i ∧ k ≠ c.j → c.apply v k = v k := by
+  intro ⟨hki, hkj⟩
+  unfold Comparator.apply
+  split_ifs <;> first | rfl | contradiction
+
+/-- Comparators preserve the count of ones (and zeros). -/
+lemma comparator_preserves_countOnes {n : ℕ} (c : Comparator n) (v : Fin n → Bool) :
+    countOnes (c.apply v) = countOnes v := by
+  unfold countOnes
+  set S := ({c.i, c.j} : Finset (Fin n))
+  set T := Finset.univ \ S
+  have hST : Disjoint S T := Finset.disjoint_sdiff
+  have hUnion : S ∪ T = Finset.univ := by simp [S, T, Finset.union_sdiff_of_subset (Finset.subset_univ _)]
+  have split_new : (Finset.univ.filter (fun i => c.apply v i = true)).card =
+      (S.filter (fun i => c.apply v i = true)).card +
+      (T.filter (fun i => c.apply v i = true)).card := by
+    rw [← Finset.card_union_of_disjoint (Finset.disjoint_filter_filter hST)]
+    congr 1
+    rw [← Finset.filter_union, hUnion]
+  have split_old : (Finset.univ.filter (fun i => v i = true)).card =
+      (S.filter (fun i => v i = true)).card +
+      (T.filter (fun i => v i = true)).card := by
+    rw [← Finset.card_union_of_disjoint (Finset.disjoint_filter_filter hST)]
+    congr 1
+    rw [← Finset.filter_union, hUnion]
+  rw [split_new, split_old]
+  have hT_eq : (T.filter (fun i => c.apply v i = true)).card =
+               (T.filter (fun i => v i = true)).card := by
+    congr 1; ext k; simp only [Finset.mem_filter, T, Finset.mem_sdiff, Finset.mem_univ,
+      true_and, S, Finset.mem_insert, Finset.mem_singleton]
+    constructor
+    · intro ⟨hk, hval⟩
+      have hk' : k ≠ c.i ∧ k ≠ c.j := by push_neg at hk; exact hk
+      rw [comparator_affects_only_compared c v k hk'] at hval
+      exact ⟨by push_neg; exact hk', hval⟩
+    · intro ⟨hk, hval⟩
+      have hk' : k ≠ c.i ∧ k ≠ c.j := by push_neg at hk; exact hk
+      rw [comparator_affects_only_compared c v k hk']
+      exact ⟨by push_neg; exact hk', hval⟩
+  rw [hT_eq]
+  suffices h : (S.filter (fun i => c.apply v i = true)).card =
+               (S.filter (fun i => v i = true)).card by omega
+  have hne : c.i ≠ c.j := ne_of_lt c.h
+  have filter_pair (p : Fin n → Bool) :
+      (S.filter (fun i => p i = true)).card =
+      (if p c.i = true then 1 else 0) + (if p c.j = true then 1 else 0) := by
+    simp only [S, Finset.filter_insert, Finset.filter_singleton]
+    split_ifs with h1 h2
+    · simp [Finset.card_pair hne]
+    · simp
+    · simp
+    · simp
+  rw [filter_pair, filter_pair]
+  cases hvi : v c.i <;> cases hvj : v c.j <;>
+    simp (config := { decide := true }) [Comparator.apply, hne.symm, hvi, hvj]
+
+/-- Networks preserve the count of ones by preserving it at each step. -/
+lemma network_preserves_countOnes {n : ℕ} (net : ComparatorNetwork n) (v : Fin n → Bool) :
+    countOnes (net.exec v) = countOnes v := by
+  unfold ComparatorNetwork.exec
+  have h_fold : ∀ (cs : List (Comparator n)) (w : Fin n → Bool),
+      countOnes (List.foldl (fun acc c => c.apply acc) w cs) = countOnes w := by
+    intro cs
+    induction cs with
+    | nil => intro w; rfl
+    | cons c cs' ih =>
+      intro w
+      simp only [List.foldl_cons]
+      rw [ih (c.apply w), comparator_preserves_countOnes]
+  exact h_fold net.comparators v
 
 /-- The globally sorted version of a Boolean sequence: all 0s then all 1s.
     The threshold is `n - countOnes v`, so positions `[0, threshold)` are false

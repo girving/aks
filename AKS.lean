@@ -2,8 +2,7 @@
   # AKS Sorting Network — Root Module
 
   Imports all modules. For the main results, see:
-  • `AKS/AKSNetwork.lean` — parameterized construction and `zigzag_implies_aks_network`
-  • `AKS/Main.lean` — concrete instantiation with zig-zag expander family
+  • `AKS/Seiferas.lean` — Seiferas (2009) separator-based O(n log n) sorting networks
 -/
 
 import AKS.Sort.Defs
@@ -11,17 +10,12 @@ import AKS.Sort.Monotone
 import AKS.Sort.ZeroOne
 import AKS.Sort.Depth
 import AKS.Misc.Fin
-import AKS.Tree.AKSNetwork
-import AKS.Nearsort.Defs
 import AKS.Halver.Defs
 import AKS.Halver.Tanner
 import AKS.Halver.ExpanderToHalver
 import AKS.Konig.Defs
 import AKS.Konig.Hall
 import AKS.Konig.Coloring
-import AKS.Nearsort.Construction
-import AKS.Nearsort.Correctness
-import AKS.Nearsort.HalverToNearsort
 import AKS.Separator.Defs
 import AKS.Separator.Family
 import AKS.Separator.FromHalver
@@ -33,12 +27,10 @@ import AKS.Bags.Split
 import AKS.Bags.SplitCard
 import AKS.Bags.SplitStranger
 import AKS.Bags.SplitProof
-import AKS.Tree.Sorting
-import AKS.Tree.DamageStability
-import AKS.Tree.DamageImprovement
 import AKS.Graph.Regular
 import AKS.Graph.Square
 import AKS.Graph.Complete
+import AKS.Graph.Quotient
 import AKS.Halver.Mixing
 import AKS.ZigZag.Operators
 import AKS.ZigZag.Spectral
@@ -56,5 +48,4 @@ import AKS.Misc.ForLoop
 import AKS.Random.Random16
 import AKS.Random.Random1728
 import AKS.Random.Random20736
-import AKS.Main
 import AKS.Seiferas
