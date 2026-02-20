@@ -31,6 +31,7 @@ import AKS.Graph.Regular
 import AKS.Graph.Square
 import AKS.Graph.Complete
 import AKS.Graph.Quotient
+import AKS.Graph.Graph
 import AKS.Halver.Mixing
 import AKS.ZigZag.Operators
 import AKS.ZigZag.Spectral
