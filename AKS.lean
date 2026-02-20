@@ -29,7 +29,10 @@ import AKS.Bags.Defs
 import AKS.Bags.Invariant
 import AKS.Bags.Stage
 import AKS.Bags.TreeSort
+import AKS.Bags.Split
+import AKS.Bags.SplitCard
 import AKS.Bags.SplitStranger
+import AKS.Bags.SplitProof
 import AKS.Tree.Sorting
 import AKS.Tree.DamageStability
 import AKS.Tree.DamageImprovement

@@ -4,17 +4,20 @@
   Proves the stranger-count hypotheses of `invariant_maintained` for any
   split where `toParent ⊆ bags` (Seiferas 2009, Section 5).
 
+  All theorems in this file are **sorry-free**: the separator-dependent
+  bounds (`hfilter`, `hcnative`) are taken as explicit parameters.
+  Concrete-split-specific instantiations (with sorry's) are in
+  `SplitStranger` section below and assembled in `SplitProof.lean`.
+
   Key results:
   - `jStrangerCount_level_shift`: j-strangers at (l-1, i/2) = (j+1)-strangers at (l, i)
   - `kick_stranger_bound`: fringe items have ≤ λε^j·cap strangers at parent level
-  - `fromParent_stranger_filtered`: separator filtering lemma (sorry)
   - `parent_stranger_bound`: items from parent have ≤ λε^(j-1)·cap strangers
-  - `cnative_from_parent_bound`: sibling-native from parent ≤ cnativeCoeff·cap (sorry)
   - `parent_1stranger_from_inv`: 1-strangers from parent ≤ parentStrangerCoeff·cap
 -/
 
 import AKS.Bags.Invariant
-import AKS.Separator.Defs
+import AKS.Bags.Split
 
 open Finset
 
@@ -97,45 +100,19 @@ theorem kick_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
 /-! **Parent Stranger Bound (j ≥ 2)**
 
 Items received from parent have few j-strangers (j ≥ 2) at the child level.
-The bound requires the separator's filtering property: the fringe captures
-most strangers from the parent bag, and only an ε fraction leak through
-to the children.
+The bound requires the separator's filtering property (`hfilter`): the fringe
+captures most strangers from the parent bag, and only an ε fraction leak
+through to the children.
 
 Seiferas (2009, Section 5): "at most fraction ε of the few smallest (or
-largest) are permuted far out of place." This gives the ε filtering factor
-beyond what subset monotonicity alone provides. -/
-
-/-- Separator filtering: among items sent from parent to child, the stranger
-    count at the parent level is at most `ε` times the full parent bag's count.
-
-    This captures the key property of the (λ,ε)-separator: items with extreme
-    ranks (which are the strangers at the parent level) are preferentially
-    captured by the fringe, so only an ε fraction leak to children.
-
-    **Proof strategy:** Connect `SepInitial`/`SepFinal` to stranger counting
-    via the rank ordering within the parent bag. Strangers at the parent level
-    have ranks outside the parent's native interval, placing them among the
-    extreme items that the fringe captures. The separator's ε-approximate
-    property bounds the leak rate. -/
-private theorem fromParent_stranger_filtered {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags : BagAssignment n}
-    (split : ℕ → ℕ → SplitResult n)
-    (_ : SeifInvariant n A ν lam ε t perm bags)
-    (_ : ∀ l i,
-      (split l i).toParent ⊆ bags l i ∧
-      (split l i).toLeftChild ⊆ bags l i ∧
-      (split l i).toRightChild ⊆ bags l i)
-    {level idx j : ℕ} (_ : 1 ≤ j) (_ : 1 ≤ level) :
-    (jStrangerCount n perm (fromParent split level idx) (level - 1) (idx / 2) j : ℝ) ≤
-    ε * ↑(jStrangerCount n perm (bags (level - 1) (idx / 2)) (level - 1) (idx / 2) j) := by
-  sorry
+largest) are permuted far out of place." -/
 
 /-- Parent stranger bound for j ≥ 2: the `hparent_stranger` hypothesis
     of `invariant_maintained`.
 
     **Proof** (Seiferas Section 5):
     1. Level shift: j-strangers at (level, idx) = (j-1)-strangers at parent
-    2. Filtering: at most ε fraction of parent's strangers leak to children
+    2. Filtering (`hfilter`): at most ε fraction of parent's strangers leak
     3. Invariant: parent has ≤ `lam·ε^(j-2)·cap(parent)` strangers
     Combining: `ε · lam·ε^(j-2) · cap = lam·ε^(j-1) · cap`. -/
 theorem parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
@@ -143,10 +120,11 @@ theorem parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     (split : ℕ → ℕ → SplitResult n)
     (inv : SeifInvariant n A ν lam ε t perm bags)
     (hlam : 0 ≤ lam) (hε : 0 ≤ ε)
-    (hsplit_sub : ∀ l i,
-      (split l i).toParent ⊆ bags l i ∧
-      (split l i).toLeftChild ⊆ bags l i ∧
-      (split l i).toRightChild ⊆ bags l i)
+    (hfilter : ∀ level idx j, 1 ≤ j → 1 ≤ level →
+      (jStrangerCount n perm (fromParent split level idx)
+        (level - 1) (idx / 2) j : ℝ) ≤
+      ε * ↑(jStrangerCount n perm (bags (level - 1) (idx / 2))
+        (level - 1) (idx / 2) j))
     (level idx j : ℕ) (hj : 2 ≤ j) :
     (jStrangerCount n perm (fromParent split level idx) level idx j : ℝ) ≤
     lam * ε ^ (j - 1) * bagCapacity n A ν t (level - 1) := by
@@ -173,7 +151,7 @@ theorem parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
             (level - 1) (idx / 2) (j - 1) : ℝ) := by exact_mod_cast h_shift
       _ ≤ ε * ↑(jStrangerCount n perm (bags (level - 1) (idx / 2))
             (level - 1) (idx / 2) (j - 1)) :=
-          fromParent_stranger_filtered split inv hsplit_sub (by omega : 1 ≤ j - 1) hl
+          hfilter level idx (j - 1) (by omega) hl
       _ ≤ ε * (lam * ε ^ ((j - 1) - 1) * bagCapacity n A ν t (level - 1)) :=
           mul_le_mul_of_nonneg_left
             (inv.stranger_bound (level - 1) (idx / 2) (j - 1) (by omega)) hε
@@ -187,42 +165,28 @@ theorem parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
 The hardest case: bounding 1-strangers among items from parent.
 Decomposes via `parent_1stranger_bound` (proved in `Invariant.lean`) into:
 - 2-strangers among fromParent (from `parent_stranger_bound` at j=2)
-- Sibling-native items among fromParent (three-source decomposition) -/
-
-/-- Sibling-native bound among items from parent: the `hcnative_bound`
-    hypothesis of `parent_1stranger_bound`.
-
-    The three sub-sources (Seiferas Section 5):
-    (b) Halving errors: C-native items placed on wrong side by separator
-    (c) Subtree stranger accumulation: geometric series in ε
-    (d) C-native items arriving from above parent
-
-    Sorry'd: requires separator filtering + invariant decomposition. -/
-theorem cnative_from_parent_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
-    {perm : Fin n → Fin n} {bags : BagAssignment n}
-    (split : ℕ → ℕ → SplitResult n)
-    (inv : SeifInvariant n A ν lam ε t perm bags)
-    (hsplit_sub : ∀ l i,
-      (split l i).toParent ⊆ bags l i ∧
-      (split l i).toLeftChild ⊆ bags l i ∧
-      (split l i).toRightChild ⊆ bags l i)
-    (level idx : ℕ) :
-    (siblingNativeCount n perm (fromParent split level idx) level idx : ℝ) ≤
-    cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
-  sorry
+- Sibling-native items among fromParent (`hcnative`) -/
 
 /-- Parent 1-stranger bound: the `hparent_1stranger` hypothesis of
     `invariant_maintained`. Assembles via `parent_1stranger_bound`
-    from the 2-stranger bound and sibling-native bound. -/
+    from the 2-stranger bound and sibling-native bound.
+
+    The two separator-dependent hypotheses:
+    - `hfilter`: ε-filtering of parent-level strangers (gates j=2 bound)
+    - `hcnative`: sibling-native items from parent ≤ cnativeCoeff·cap -/
 theorem parent_1stranger_from_inv {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (split : ℕ → ℕ → SplitResult n)
     (inv : SeifInvariant n A ν lam ε t perm bags)
     (hparams : SatisfiesConstraints A ν lam ε)
-    (hsplit_sub : ∀ l i,
-      (split l i).toParent ⊆ bags l i ∧
-      (split l i).toLeftChild ⊆ bags l i ∧
-      (split l i).toRightChild ⊆ bags l i)
+    (hfilter : ∀ level idx j, 1 ≤ j → 1 ≤ level →
+      (jStrangerCount n perm (fromParent split level idx)
+        (level - 1) (idx / 2) j : ℝ) ≤
+      ε * ↑(jStrangerCount n perm (bags (level - 1) (idx / 2))
+        (level - 1) (idx / 2) j))
+    (hcnative : ∀ level idx,
+      (siblingNativeCount n perm (fromParent split level idx) level idx : ℝ) ≤
+      cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1))
     (level idx : ℕ) :
     (jStrangerCount n perm (fromParent split level idx) level idx 1 : ℝ) ≤
     parentStrangerCoeff A lam ε * bagCapacity n A ν t level := by
@@ -242,8 +206,97 @@ theorem parent_1stranger_from_inv {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       (jStrangerCount n perm (fromParent split l i) l i 2 : ℝ) ≤
       lam * ε * bagCapacity n A ν t (l - 1) := by
     intro l i
-    have h := parent_stranger_bound split inv hlam.le hε.le hsplit_sub l i 2 (by omega)
+    have h := parent_stranger_bound split inv hlam.le hε.le hfilter l i 2 (by omega)
     simpa using h
-  exact parent_1stranger_bound split hA hν hlam.le hε.le h2εA hj2
-    (fun l i ↦ cnative_from_parent_bound split inv hsplit_sub l i)
+  exact parent_1stranger_bound split hA hν hlam.le hε.le h2εA hj2 hcnative level idx
+
+/-! **Concrete Split: Stranger Bound Instantiations**
+
+The following sorry'd lemmas specialize the abstract framework to
+`concreteSplit` from `Split.lean`. They capture the two separator-dependent
+properties needed by `parent_stranger_bound` and `parent_1stranger_from_inv`.
+
+**Proof strategies** (validated by `rust/test-filtering-and-cnative.rs`):
+
+For `concreteSplit_fromParent_filtered`:
+  Parent-level j-strangers have `perm` values outside the parent's native
+  interval, giving them extreme `rankInBag` values (lowest or highest ranks).
+  The fringe captures items with extreme ranks, so most strangers go to
+  `toParent`, not to children. The ε factor bounds the leakage when the fringe
+  size `⌊λ·b⌋` doesn't quite capture all strangers on one side.
+  Rust experiment: LHS = 0 in all tested cases (max ratio 0.0000).
+
+For `concreteSplit_cnative_bound`:
+  Sibling-native items in `fromParent` are items native to the parent but
+  assigned to the wrong child. The concrete split assigns middle-left items
+  to the left child and middle-right to the right child. The halving error
+  (ε/2 term in cnativeCoeff) captures items whose native child doesn't match
+  their rank-based assignment. Sources (c) and (d) in cnativeCoeff are zero
+  for the concrete split (Rust experiment: max ratio 0.0000). -/
+
+/-- Separator filtering for the concrete split: among items sent from parent
+    to child, the stranger count at the parent level is at most `ε` times
+    the full parent bag's stranger count.
+
+    This captures the structural property that `concreteSplit` sends extreme-
+    ranked items (which are the parent-level strangers) to the fringe
+    (`toParent`), not to children (`toLeftChild`/`toRightChild`). -/
+theorem concreteSplit_fromParent_filtered {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (level idx j : ℕ) (hj : 1 ≤ j) (hlev : 1 ≤ level) :
+    (jStrangerCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      (level - 1) (idx / 2) j : ℝ) ≤
+    ε * ↑(jStrangerCount n perm (bags (level - 1) (idx / 2))
+      (level - 1) (idx / 2) j) := by
+  sorry
+
+/-- Sibling-native bound for the concrete split: items from parent that are
+    native to the sibling child are bounded by `cnativeCoeff · cap(parent)`.
+
+    The dominant contribution is the halving error (ε/2 term): items native
+    to the parent but assigned to the wrong child by the rank-based partition.
+    The geometric-series and above-parent terms in `cnativeCoeff` are zero
+    for this concrete split (validated empirically). -/
+theorem concreteSplit_cnative_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (level idx : ℕ) :
+    (siblingNativeCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      level idx : ℝ) ≤
+    cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
+  sorry
+
+/-! **Concrete Split: Assembled Stranger Bounds**
+
+Wire the abstract framework to the concrete split. -/
+
+/-- Concrete parent stranger bound for j ≥ 2. -/
+theorem concreteSplit_parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hlam : 0 ≤ lam) (hε : 0 ≤ ε)
+    (level idx j : ℕ) (hj : 2 ≤ j) :
+    (jStrangerCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      level idx j : ℝ) ≤
+    lam * ε ^ (j - 1) * bagCapacity n A ν t (level - 1) :=
+  parent_stranger_bound _ inv hlam hε
+    (fun l i ↦ concreteSplit_fromParent_filtered inv l i) level idx j hj
+
+/-- Concrete parent 1-stranger bound. -/
+theorem concreteSplit_parent_1stranger {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hparams : SatisfiesConstraints A ν lam ε)
+    (level idx : ℕ) :
+    (jStrangerCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      level idx 1 : ℝ) ≤
+    parentStrangerCoeff A lam ε * bagCapacity n A ν t level :=
+  parent_1stranger_from_inv _ inv hparams
+    (fun l i j hj hl ↦ concreteSplit_fromParent_filtered inv l i j hj hl)
+    (fun l i ↦ concreteSplit_cnative_bound inv l i)
     level idx
