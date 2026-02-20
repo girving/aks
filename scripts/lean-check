@@ -24,7 +24,7 @@ import sys
 import time
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DAEMON_SCRIPT = os.path.join(PROJECT_ROOT, "scripts", "lean-daemon.py")
+DAEMON_SCRIPT = os.path.join(PROJECT_ROOT, "rust", "lean-daemon.rs")
 # Derive unique paths from project root so multiple daemons can coexist
 import hashlib
 _project_hash = hashlib.md5(PROJECT_ROOT.encode()).hexdigest()[:8]
@@ -89,7 +89,7 @@ def kill_stale_lean_processes():
     consuming GBs of RAM each. Kill them before starting a new daemon."""
     import signal
 
-    # Kill any existing lean-daemon.py processes for this project
+    # Kill any existing lean-daemon processes for this project
     if os.path.exists(PID_FILE):
         try:
             with open(PID_FILE) as f:
@@ -125,9 +125,9 @@ def start_daemon():
     # Ensure Mathlib cache is downloaded before starting daemon
     ensure_mathlib_cache()
 
-    print("Starting lean-daemon...")
+    print("Starting lean-daemon (Rust)...")
     proc = subprocess.Popen(
-        [sys.executable, DAEMON_SCRIPT],
+        ["cargo", "+nightly", "-Zscript", DAEMON_SCRIPT],
         stdout=open(f"/tmp/lean-daemon-{_project_hash}.log", "w"),
         stderr=subprocess.STDOUT,
         cwd=PROJECT_ROOT,
