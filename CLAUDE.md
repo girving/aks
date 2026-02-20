@@ -299,6 +299,7 @@ Misc/Fin.lean → Graph/Regular.lean → Graph/Square.lean ─────→ Zi
 
 ## Style
 
+- **Remove unused hypotheses from proved theorems.** Don't prefix with `_` — delete the argument entirely and update all callers. Unused arguments are dead weight that obscures what a theorem actually needs.
 - Use `↦` (not `=>`) for lambda arrows: `fun x ↦ ...`
 - In markdown/comments, backtick-quote Lean identifiers and filenames: `` `Fin` ``, not `Fin`; `` `ZigZag.lean` ``, not `ZigZag.lean`
 - Use `/-! **Title** -/` for section headers, not numbered `§N.` or decorative `-- ═══` lines

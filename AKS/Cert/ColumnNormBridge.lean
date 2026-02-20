@@ -214,7 +214,7 @@ theorem decodeNeighbors_getD (rotBytes : ByteArray) (n d k : Nat) (hk : k < n * 
     `neighbors = decodeNeighbors rotBytes n d`. -/
 theorem mulAdjPre_getD_eq_adjMulPure
     (rotBytes : ByteArray) (z : Array Int) (n d v : Nat)
-    (hv : v < n) (hz : z.size = n) (hd : 0 < d)
+    (hv : v < n) (hz : z.size = n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) :
     (mulAdjPre (decodeNeighbors rotBytes n d) z n d).getD v 0 =
     adjMulPure rotBytes (fun i ↦ z.getD i 0) n d v := by
@@ -267,7 +267,7 @@ theorem mulAdjPre_size (neighbors : Array Nat) (z : Array Int) (n d : Nat) :
     `pEntryPure rotBytes certBytes n d c₁ c₂ c₃ i j` (under involution). -/
 private theorem psdColumnStep_pij_eq
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (j i : Nat) (hj : j < n) (hi : i < n) (hd : 0 < d)
+    (j i : Nat) (hj : j < n) (hi : i < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) :
     let neighbors := decodeNeighbors rotBytes n d
     let zCol := Nat.fold (j + 1) (fun k _ arr =>
@@ -294,14 +294,14 @@ private theorem psdColumnStep_pij_eq
       adjMulPure rotBytes (fun k ↦ certEntryInt certBytes k j) n d v := by
     intro v hv
     rw [mulAdjPre_getD_eq_adjMulPure rotBytes zCol n d v hv
-      (by rw [fold_set_size]; omega) hd hinv]
+      (by rw [fold_set_size]; omega) hinv]
     exact adjMulPure_congr rotBytes _ _ n d v (by omega)
       (fun k hk ↦ zCol_getD certBytes n j k hj hk)
   -- Step 4: (mulAdjPre neighbors bz n d).getD i 0 = adjMulPure rotBytes (...) n d i
   have hb2z_i : (mulAdjPre neighbors bz n d).getD i 0 = adjMulPure rotBytes
       (fun v ↦ adjMulPure rotBytes (fun k ↦ certEntryInt certBytes k j) n d v) n d i := by
     rw [mulAdjPre_getD_eq_adjMulPure rotBytes bz n d i hi
-      (mulAdjPre_size _ _ _ _) hd hinv]
+      (mulAdjPre_size _ _ _ _) hinv]
     exact adjMulPure_congr rotBytes _ _ n d i (by omega) hbz
   -- Assemble
   unfold pEntryPure
@@ -333,13 +333,13 @@ private def psdG (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : 
 /-- `psdG` equals `pEntryPure` under involution hypothesis. -/
 private theorem psdG_eq_pEntryPure
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (j i : Nat) (hj : j < n) (hi : i < n) (hd : 0 < d)
+    (j i : Nat) (hj : j < n) (hi : i < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) :
     psdG rotBytes certBytes n d c₁ c₂ c₃ j i =
     pEntryPure rotBytes certBytes n d c₁ c₂ c₃ i j := by
   simp only [psdG, Id.run, bind, pure, Std.Range.forIn_eq_forIn_range', Std.Range.size,
     Nat.div_one, Nat.sub_zero, Nat.add_sub_cancel, forIn_range'_eq_fold, Nat.zero_add]
-  exact psdColumnStep_pij_eq rotBytes certBytes n d c₁ c₂ c₃ j i hj hi hd hinv
+  exact psdColumnStep_pij_eq rotBytes certBytes n d c₁ c₂ c₃ j i hj hi hinv
 
 
 /-! **Tracker step functions** -/
@@ -615,7 +615,7 @@ private theorem psdColumnStepProd_eq_fold
     - `first` becomes `false` -/
 private theorem psdColumnStep_result
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) (hj : j < n) (hd : 0 < d)
+    (state : PSDChunkResult) (j : Nat) (hj : j < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (he : 0 ≤ state.epsMax) :
     (psdColumnStep (decodeNeighbors rotBytes n d) d
@@ -643,10 +643,10 @@ private theorem psdColumnStep_result
   · -- epsMax: foldMax (psdG ...) j = epsMaxCol ... j
     rw [heps]; congr 1
     rw [foldMax_congr _ (fun i => pEntryPure rotBytes certBytes n d c₁ c₂ c₃ i j) j
-      (fun i hi => psdG_eq_pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j i hj (by omega) hd hinv)]
+      (fun i hi => psdG_eq_pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j i hj (by omega) hinv)]
     exact foldMax_eq_epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j j
   · -- minDiag: psdG j j = pEntryPure j j
-    rw [hmin, psdG_eq_pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j hj hj hd hinv]
+    rw [hmin, psdG_eq_pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j hj hj hinv]
 
 /-! **Sequential fold produces `epsMaxVal`/`minDiagVal`** -/
 
@@ -672,7 +672,6 @@ private theorem minDiagVal_succ (rotBytes certBytes : ByteArray) (n d : Nat)
     initial empty state) produces `epsMaxVal m` and `minDiagVal m`. -/
 private theorem seqFold_eq_pure
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (hd : 0 < d) (hn : 0 < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) (m : Nat)
     (hm : m ≤ n) :
     let step := psdColumnStep (decodeNeighbors rotBytes n d) d
@@ -702,7 +701,7 @@ private theorem seqFold_eq_pure
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
     -- Apply psdColumnStep_result
     have he : 0 ≤ prev.epsMax := ih_eps ▸ epsMaxVal_nonneg rotBytes certBytes n d c₁ c₂ c₃ k
-    have hpsd := psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ prev k hkn hd hinv he
+    have hpsd := psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ prev k hkn hinv he
     obtain ⟨hpsd_eps, hpsd_min, hpsd_first⟩ := hpsd
     set result := (List.range (k + 1)).foldl
       (psdColumnStep (decodeNeighbors rotBytes n d) d
@@ -817,7 +816,7 @@ private abbrev stepFn (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c�
 
 /-- `psdColumnStep_result` restated with `stepFn` in the conclusion for `rw` matching. -/
 private theorem stepFn_result (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) (hj : j < n) (hd : 0 < d)
+    (state : PSDChunkResult) (j : Nat) (hj : j < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (he : 0 ≤ state.epsMax) :
     (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax = max state.epsMax
@@ -826,11 +825,11 @@ private theorem stepFn_result (rotBytes certBytes : ByteArray) (n d : Nat) (c₁
       (if state.first then pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j
        else min state.minDiag (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j)) ∧
     (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).first = false :=
-  psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hd hinv he
+  psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hinv he
 
 /-- epsMax monotonicity: `foldl step` only increases epsMax. -/
 private theorem foldl_step_epsMax_mono
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n) (he : 0 ≤ state.epsMax) :
     state.epsMax ≤ (L.foldl (stepFn rotBytes certBytes n d c₁ c₂ c₃) state).epsMax := by
@@ -839,7 +838,7 @@ private theorem foldl_step_epsMax_mono
   | cons j rest ih =>
     simp only [List.foldl]
     have hj := hL j (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     calc state.epsMax
@@ -849,7 +848,7 @@ private theorem foldl_step_epsMax_mono
 
 /-- minDiag monotonicity: once `first = false`, `foldl step` only decreases minDiag. -/
 private theorem foldl_step_minDiag_mono
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n)
     (he : 0 ≤ state.epsMax) (hf : state.first = false) :
@@ -859,7 +858,7 @@ private theorem foldl_step_minDiag_mono
   | cons j rest ih =>
     simp only [List.foldl]
     have hj := hL j (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     have hf' : (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).first = false := hpsd.2.2
@@ -870,7 +869,7 @@ private theorem foldl_step_minDiag_mono
 
 /-- epsMax upper bound: fold over valid columns ≤ epsMaxVal n. -/
 private theorem foldl_step_epsMax_le
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n)
     (he : 0 ≤ state.epsMax) (hle : state.epsMax ≤ epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n) :
@@ -881,7 +880,7 @@ private theorem foldl_step_epsMax_le
   | cons j rest ih =>
     simp only [List.foldl]
     have hj := hL j (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     have hle' : (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax ≤
@@ -891,7 +890,7 @@ private theorem foldl_step_epsMax_le
 
 /-- epsMax lower bound: for `j ∈ L`, fold result ≥ `epsMaxCol j`. -/
 private theorem foldl_step_epsMax_ge
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n) (he : 0 ≤ state.epsMax)
     {j : Nat} (hj : j ∈ L) :
@@ -902,7 +901,7 @@ private theorem foldl_step_epsMax_ge
   | cons x rest ih =>
     simp only [List.foldl]
     have hx := hL x (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state x).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     cases List.mem_cons.mp hj with
@@ -911,13 +910,13 @@ private theorem foldl_step_epsMax_ge
       calc epsMaxCol _ _ _ _ _ _ _ j (colSumZ _ _ j) j
           ≤ max state.epsMax _ := Int.le_max_right _ _
         _ = (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax := hpsd.1.symm
-        _ ≤ _ := foldl_step_epsMax_mono _ _ _ _ _ _ _ hd hinv rest _
+        _ ≤ _ := foldl_step_epsMax_mono _ _ _ _ _ _ _ hinv rest _
             (fun j hj => hL j (List.mem_cons_of_mem _ hj)) he'
     | inr hjr => exact ih _ (fun j hj => hL j (List.mem_cons_of_mem _ hj)) he' hjr
 
 /-- After nonempty fold, `first = false`. -/
 private theorem foldl_step_not_first
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n) (he : 0 ≤ state.epsMax)
     (hne : L ≠ []) :
@@ -927,22 +926,22 @@ private theorem foldl_step_not_first
   | cons x rest =>
     simp only [List.foldl]
     have hx := hL x (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state x).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     cases rest with
     | nil => simp [List.foldl]; exact hpsd.2.2
     | cons y ys =>
-      exact foldl_step_not_first _ _ _ _ _ _ _ hd hinv (y :: ys) _
+      exact foldl_step_not_first _ _ _ _ _ _ _ hinv (y :: ys) _
         (fun j hj => hL j (List.mem_cons_of_mem x hj))
         he' (List.cons_ne_nil _ _)
 
 /-- minDiag lower bound: fold over valid columns ≥ minDiagVal n (for nonempty L). -/
 private theorem foldl_step_minDiag_ge
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n) (he : 0 ≤ state.epsMax)
-    (hn : 0 < n) (hne : L ≠ [])
+    (hne : L ≠ [])
     (hge : state.first = true ∨ minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n ≤ state.minDiag) :
     minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n ≤
     (L.foldl (stepFn rotBytes certBytes n d c₁ c₂ c₃) state).minDiag := by
@@ -951,7 +950,7 @@ private theorem foldl_step_minDiag_ge
   | cons x rest ih =>
     simp only [List.foldl]
     have hx := hL x (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state x).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     have hmin_ge : minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n ≤
@@ -975,7 +974,7 @@ private theorem foldl_step_minDiag_ge
 
 /-- minDiag upper bound: for `j ∈ L`, fold result ≤ `pEntryPure j j` (nonempty L). -/
 private theorem foldl_step_minDiag_le
-    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (hd : 0 < d)
+    (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (L : List Nat) (state : PSDChunkResult) (hL : ∀ j ∈ L, j < n) (he : 0 ≤ state.epsMax)
     {j : Nat} (hj : j ∈ L) :
@@ -986,7 +985,7 @@ private theorem foldl_step_minDiag_le
   | cons x rest ih =>
     simp only [List.foldl]
     have hx := hL x (.head rest)
-    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hd hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ state x hx hinv he
     have he' : 0 ≤ (stepFn rotBytes certBytes n d c₁ c₂ c₃ state x).epsMax := by
       rw [hpsd.1]; exact Int.le_trans he (Int.le_max_left _ _)
     cases List.mem_cons.mp hj with
@@ -999,7 +998,7 @@ private theorem foldl_step_minDiag_le
       cases rest with
       | nil => simpa [List.foldl]
       | cons y ys =>
-        exact Int.le_trans (foldl_step_minDiag_mono _ _ _ _ _ _ _ hd hinv _ _
+        exact Int.le_trans (foldl_step_minDiag_mono _ _ _ _ _ _ _ hinv _ _
           (fun j hj => hL j (List.mem_cons_of_mem _ hj)) he' hpsd.2.2) hstep_le
     | inr hjr => exact ih _ (fun j hj => hL j (List.mem_cons_of_mem _ hj)) he' hjr
 
@@ -1605,10 +1604,9 @@ private theorem le_minDiagVal_of_bounds (rotBytes certBytes : ByteArray) (n d : 
     independently then merging equals sequential processing. -/
 private theorem merged_eq_sequential
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (hd : 0 < d) (hn : 0 < n)
+    (hn : 0 < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) :
     let neighbors := decodeNeighbors rotBytes n d
-    let step := psdColumnStep neighbors d certBytes n c₁ c₂ c₃
     let init : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
     let columnLists := buildColumnLists n 64
     let results := columnLists.map fun cols =>
@@ -1618,7 +1616,7 @@ private theorem merged_eq_sequential
     merged.minDiag = minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n ∧
     merged.first = false := by
   -- Introduce let bindings
-  intro neighbors _ init columnLists results merged
+  intro neighbors init columnLists results merged
   -- Bridge merged (Array.foldl) to List.foldl form
   have hmerged_eq : merged = results.toList.foldl PSDChunkResult.merge init :=
     (Array.foldl_toList _ (xs := results)).symm
@@ -1662,12 +1660,12 @@ private theorem merged_eq_sequential
   have hchunk_eps_le : ∀ i (hi : i < results.size),
       results[i].epsMax ≤ epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ n := by
     intro i hi; rw [hresult_eq i hi]
-    exact foldl_step_epsMax_le rotBytes certBytes n d c₁ c₂ c₃ hd hinv _ _
+    exact foldl_step_epsMax_le rotBytes certBytes n d c₁ c₂ c₃ hinv _ _
       (hcol_bound i (by omega)) hinit_eps (epsMaxVal_nonneg _ _ _ _ _ _ _ _)
   -- Chunk 0 has first = false
   have hchunk0_first : results[0].first = false := by
     rw [hresult_eq 0 (by omega)]
-    exact foldl_step_not_first rotBytes certBytes n d c₁ c₂ c₃ hd hinv _ _
+    exact foldl_step_not_first rotBytes certBytes n d c₁ c₂ c₃ hinv _ _
       (hcol_bound 0 (by omega)) hinit_eps hchunk0_ne
   -- merged.first = false
   have hmerged_first : (results.toList.foldl PSDChunkResult.merge init).first = false :=
@@ -1683,7 +1681,7 @@ private theorem merged_eq_sequential
     · -- 0 ≤ merged.epsMax: chunk 0 epsMax ≥ 0 and merged ≥ chunk 0
       exact Int.le_trans (by
         rw [hresult_eq 0 (by omega)]
-        exact foldl_step_epsMax_mono _ _ _ _ _ _ _ hd hinv _ _
+        exact foldl_step_epsMax_mono _ _ _ _ _ _ _ hinv _ _
           (hcol_bound 0 (by omega)) hinit_eps)
         (mergeFoldl_epsMax_ge results 0 (by omega) hchunk0_first)
     · intro j hj
@@ -1691,12 +1689,12 @@ private theorem merged_eq_sequential
       have hj_in := hcoverage j hj
       have hchunk_nf : results[j % 64].first = false := by
         rw [hresult_eq (j % 64) hmod]
-        exact foldl_step_not_first _ _ _ _ _ _ _ hd hinv _ _
+        exact foldl_step_not_first _ _ _ _ _ _ _ hinv _ _
           (hcol_bound (j % 64) (by omega)) hinit_eps
           (by intro h; rw [h] at hj_in; exact absurd hj_in (List.not_mem_nil))
       exact Int.le_trans (by
         rw [hresult_eq (j % 64) hmod]
-        exact foldl_step_epsMax_ge _ _ _ _ _ _ _ hd hinv _ _
+        exact foldl_step_epsMax_ge _ _ _ _ _ _ _ hinv _ _
           (hcol_bound (j % 64) (by omega)) hinit_eps hj_in)
         (mergeFoldl_epsMax_ge results (j % 64) hmod hchunk_nf)
   -- merged.minDiag ≥ minDiagVal n
@@ -1706,8 +1704,8 @@ private theorem merged_eq_sequential
     rw [hresult_eq i hi] at hif ⊢
     have hne : (columnLists[i]'(by rw [hcl_size]; omega)).toList ≠ [] := by
       intro h; rw [h] at hif; simp [List.foldl] at hif
-    exact foldl_step_minDiag_ge _ _ _ _ _ _ _ hd hinv _ _
-      (hcol_bound i (by omega)) hinit_eps hn hne (Or.inl rfl)
+    exact foldl_step_minDiag_ge _ _ _ _ _ _ _ hinv _ _
+      (hcol_bound i (by omega)) hinit_eps hne (Or.inl rfl)
   -- merged.minDiag ≤ minDiagVal n (sandwich)
   have hmin_le : (results.toList.foldl PSDChunkResult.merge init).minDiag ≤
       minDiagVal rotBytes certBytes n d c₁ c₂ c₃ n := by
@@ -1718,14 +1716,14 @@ private theorem merged_eq_sequential
       have hj_in := hcoverage j hj
       have hchunk_nf : results[j % 64].first = false := by
         rw [hresult_eq (j % 64) hmod]
-        exact foldl_step_not_first _ _ _ _ _ _ _ hd hinv _ _
+        exact foldl_step_not_first _ _ _ _ _ _ _ hinv _ _
           (hcol_bound (j % 64) (by omega)) hinit_eps
           (by intro h; rw [h] at hj_in; exact absurd hj_in (List.not_mem_nil))
       calc (results.toList.foldl PSDChunkResult.merge init).minDiag
         ≤ results[j % 64].minDiag := mergeFoldl_minDiag_le results (j % 64) hmod hchunk_nf
         _ ≤ pEntryPure _ _ _ _ _ _ _ j j := by
               rw [hresult_eq (j % 64) hmod]
-              exact foldl_step_minDiag_le _ _ _ _ _ _ _ hd hinv _ _
+              exact foldl_step_minDiag_le _ _ _ _ _ _ _ hinv _ _
                 (hcol_bound (j % 64) (by omega)) hinit_eps hj_in
   rw [hmerged_eq]
   exact ⟨Int.le_antisymm heps_le heps_ge, Int.le_antisymm hmin_le hmin_ge, hmerged_first⟩
@@ -1740,10 +1738,10 @@ theorem checkColumnNormBound_implies_pure
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (h : checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ = true)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
-    (hn : 0 < n) (hd : 0 < d) :
+    (hn : 0 < n) :
     checkColumnNormBoundPure rotBytes certBytes n d c₁ c₂ c₃ = true := by
   -- Get the merged values equality (heps/hmin/hfirst are in Array.foldl form)
-  have hseq := merged_eq_sequential rotBytes certBytes n d c₁ c₂ c₃ hd hn hinv
+  have hseq := merged_eq_sequential rotBytes certBytes n d c₁ c₂ c₃ hn hinv
   obtain ⟨heps, hmin, hfirst⟩ := hseq
   -- Unfold checkColumnNormBound at h to extract checkPerRow
   unfold checkColumnNormBound at h

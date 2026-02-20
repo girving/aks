@@ -325,9 +325,7 @@ private theorem scatterGetD_getD (neighbors : Array Nat) (zCol : Array Int)
 /-- `scatterMulAdj = scatterGetD` when the neighbor array and zCol have sufficient size.
     This bridges `getElem!` (panicking) with `getD` (defaulting to 0). -/
 private theorem scatterMulAdj_eq_scatterGetD (neighbors : Array Nat) (zCol : Array Int)
-    (n d nz : Nat) (hnz : nz ≤ n) (hsz : zCol.size = n)
-    (hnsz : neighbors.size = n * d)
-    (htarget : ∀ k, k < nz → ∀ p, p < d → neighbors.getD (k * d + p) 0 < n) :
+    (n d nz : Nat) :
     scatterMulAdj neighbors zCol n d nz = scatterGetD neighbors zCol n d nz := by
   simp [scatterMulAdj, Id.run]
   show (List.foldl
@@ -345,21 +343,18 @@ private theorem scatterMulAdj_eq_scatterGetD (neighbors : Array Nat) (zCol : Arr
 /-- Scatter outer loop: after processing all sources `k < nz`,
     `scatter[w] = ∑_{k<nz} portCount(k,w) * z[k]`. -/
 private theorem scatter_outer_getD (neighbors : Array Nat) (zCol : Array Int)
-    (n d nz : Nat) (w : Nat) (hw : w < n) (hnz : nz ≤ n)
-    (hsz : zCol.size = n) (hnsz : neighbors.size = n * d)
+    (n d nz : Nat) (w : Nat) (hw : w < n)
     (htarget : ∀ k, k < nz → ∀ p, p < d → neighbors.getD (k * d + p) 0 < n) :
     (scatterMulAdj neighbors zCol n d nz).getD w 0 =
     Nat.fold nz (fun k _ acc => acc + (portCount neighbors d k w : Int) * zCol.getD k 0) 0 := by
-  rw [scatterMulAdj_eq_scatterGetD neighbors zCol n d nz hnz hsz hnsz htarget]
+  rw [scatterMulAdj_eq_scatterGetD neighbors zCol n d nz]
   exact scatterGetD_getD neighbors zCol n d nz w hw htarget
 
 /-! **Gather characterization via portCount** -/
 
 /-- The gather sum `∑_{p<d} z[N[w*d+p]]` using getD. -/
 private theorem gather_getD_eq_port_sum (neighbors : Array Nat) (z : Array Int)
-    (n d w : Nat) (hw : w < n) (hz : z.size = n)
-    (hnsz : neighbors.size = n * d)
-    (hbnd : ∀ k, k < n * d → neighbors.getD k 0 < n) :
+    (n d w : Nat) (hw : w < n) :
     (mulAdjPre neighbors z n d).getD w 0 =
     Nat.fold d (fun p _ acc => acc + z.getD (neighbors.getD (w * d + p) 0) 0) 0 := by
   show (mulAdjWith _ z n d).getD w 0 = _
@@ -471,12 +466,11 @@ private theorem mul_add_lt_mul {w n p d : Nat} (hw : w < n) (hp : p < d) : w * d
 
 /-- `mulAdjPre[w]` rewritten as portCount sum. -/
 private theorem gather_getD_eq_portCount_sum (neighbors : Array Nat) (z : Array Int)
-    (n d w : Nat) (hw : w < n) (hz : z.size = n)
-    (hnsz : neighbors.size = n * d)
+    (n d w : Nat) (hw : w < n)
     (hbnd : ∀ k, k < n * d → neighbors.getD k 0 < n) :
     (mulAdjPre neighbors z n d).getD w 0 =
     Nat.fold n (fun v _ acc => acc + (portCount neighbors d w v : Int) * z.getD v 0) 0 := by
-  rw [gather_getD_eq_port_sum neighbors z n d w hw hz hnsz hbnd]
+  rw [gather_getD_eq_port_sum neighbors z n d w hw]
   rw [fold_regroup_by_target neighbors (fun v => z.getD v 0) d (w * d) n
     (fun p hp => hbnd (w * d + p) (mul_add_lt_mul hw hp))]
   exact fold_congr_acc n
@@ -751,8 +745,8 @@ theorem checkInvolution_implies_neighborSymm (rotBytes : ByteArray) (n d : Nat)
     intro k hk p hp; exact hbnd (k * d + p) (mul_add_lt_mul (Nat.lt_of_lt_of_le hk hnz) hp)
   have hnsz : (decodeNeighbors rotBytes n d).size = n * d := by
     unfold decodeNeighbors; exact Array.size_ofFn
-  rw [scatter_outer_getD _ _ n d nz w hw hnz hz hnsz htarget]
-  rw [gather_getD_eq_portCount_sum _ z n d w hw hz hnsz hbnd]
+  rw [scatter_outer_getD _ _ n d nz w hw htarget]
+  rw [gather_getD_eq_portCount_sum _ z n d w hw hbnd]
   -- scatter[w] = ∑_{k<nz} portCount(k,w) * z.getD k 0
   -- gather[w] = ∑_{v<n} portCount(w,v) * z.getD v 0
   set N := decodeNeighbors rotBytes n d

@@ -861,7 +861,7 @@ theorem certificate_bridge (n d : ℕ) (hn : 0 < n) (hd : 0 < d)
     simp only [checkCertificateSlow, Bool.and_eq_true] at hcert; exact hcert.2
   have hcnbp : checkColumnNormBoundPure rotStr.toUTF8 certStr.toUTF8 n d c₁ c₂ c₃ = true :=
     checkColumnNormBound_implies_pure _ _ n d c₁ c₂ c₃ hcnb
-      (checkInvolutionSpec_neighbor_lt rotStr n d hinvSpec) hn hd
+      (checkInvolutionSpec_neighbor_lt rotStr n d hinvSpec) hn
   exact (spectralGap_le_of_walk_bound hd G (by exact_mod_cast hc₁) (by exact_mod_cast hc₂)
       (fun f hf ↦ certificate_implies_walk_bound n d hn hd G
         rotStr certStr c₁ c₂ c₃ hcert hcnbp hmatch f hf)).trans
