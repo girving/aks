@@ -12,7 +12,7 @@
   Sorry status (3 remaining):
   - `concreteSplit_fromParent_filtered` (SplitStranger.lean) — ε-filtering (sorry)
   - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound (sorry)
-  - `concreteSplit_hkick_pair` (SplitCard.lean) — paired kick without +2 (sorry)
+  - `bags_even_at_small_cap` (SplitCard.lean) — even bag sizes when cap < A (sorry)
 -/
 
 import AKS.Bags.SplitCard
@@ -52,8 +52,8 @@ theorem concreteSplit_maintains_invariant {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
     (concreteSplit_hsend_left inv hperm)
     -- hsend_right: right child ≤ cap/2
     (concreteSplit_hsend_right inv hperm)
-    -- hkick_pair: paired kick when cap < A (sorry)
-    (concreteSplit_hkick_pair inv hlam hperm)
+    -- hkick_pair: paired kick when cap < A
+    (concreteSplit_hkick_pair inv hparams.1 hlam (le_of_lt hparams.2.2.2.2.1) hperm)
     -- hkick_stranger: stranger count in kicked items
     (fun l i j hj ↦ kick_stranger_bound _ inv hlam hε hν
       (concreteSplit_hsplit_sub lam perm bags) l i j hj)

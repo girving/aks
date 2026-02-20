@@ -8,7 +8,7 @@
   - `concreteSplit_hkick`: parent kick ≤ 2λ·cap + 1
   - `concreteSplit_hsend_left`: left child ≤ cap/2
   - `concreteSplit_hsend_right`: right child ≤ cap/2
-  - `concreteSplit_hkick_pair`: paired kick when cap < A (sorry)
+  - `concreteSplit_hkick_pair`: paired kick when cap < A (proved, modulo `bags_even_at_small_cap`)
   - `concreteSplit_hrebag_uniform`: uniform sizes after rebag (proved)
   - `concreteSplit_hrebag_disjoint`: disjoint bags after rebag (proved)
 -/
@@ -348,19 +348,90 @@ theorem concreteSplit_hsend_right {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     _ ≤ ↑(bags l i).card / 2 := hh
     _ ≤ bagCapacity n A ν t l / 2 := by linarith
 
-/-! **Harder Properties (Sorry)** -/
+/-! **Harder Properties** -/
+
+/-- When `bagCapacity n A ν t l < A`, bags at level `l+1` have even size.
+    (Seiferas Section 5: subtree counting argument — all ancestor bags empty,
+    items equally distributed among subtrees, symmetric left/right.)
+    The argument: `cap(l) < A` means `cap(0) = n·ν^t < A^(l+1)`, so bags at
+    levels `0..l` hold fewer than 1 item and are empty. The total items in
+    each subtree rooted at level `l+1` is `n / 2^(l+1)`, which equals a power
+    of 2 (since `n` is a power of 2). By `uniform_size`, left and right
+    sub-subtrees have equal size, making each bag's size even. -/
+private theorem bags_even_at_small_cap {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hA : 1 < A) {l : ℕ}
+    (hcap : bagCapacity n A ν t l < A) :
+    ∀ idx, Even (bags (l + 1) idx).card := by
+  sorry
+
+/-- When `b` is even and `lam ≤ 1/2`: `b - 2 * childSendSize lam b = 2 * fringeSize lam b`.
+    The rounding error in `b / 2` vanishes because `b` is even. -/
+private theorem toParent_card_even {lam : ℝ} {b : ℕ}
+    (heven : Even b) (hlam_half : lam ≤ 1/2) (_ : 0 ≤ lam) :
+    b - 2 * childSendSize lam b = 2 * fringeSize lam b := by
+  obtain ⟨m, rfl⟩ := heven
+  simp only [childSendSize, fringeSize]
+  have h1 : (m + m) / 2 = m := by omega
+  have h2 : ⌊lam * ↑(m + m)⌋₊ ≤ m := by
+    have : lam * (↑(m + m) : ℝ) ≤ ↑m := by
+      have hmm : (↑(m + m) : ℝ) = ↑m + ↑m := by push_cast; ring
+      have hm : (0 : ℝ) ≤ ↑m := Nat.cast_nonneg m
+      nlinarith
+    calc ⌊lam * ↑(m + m)⌋₊ ≤ ⌊(↑m : ℝ)⌋₊ := Nat.floor_mono this
+      _ = m := Nat.floor_natCast m
+  rw [h1]; omega
 
 /-- `hkick_pair`: when `cap < A`, the paired kick from both children
-    has no `+2` additive term. Requires even bag sizes at the child level. -/
+    has no `+2` additive term. Requires even bag sizes at the child level
+    (from `bags_even_at_small_cap`). -/
 theorem concreteSplit_hkick_pair {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
-    (hlam : 0 ≤ lam) (hperm : Function.Injective perm) :
+    (hA : 1 < A) (hlam : 0 ≤ lam) (hlam_half : lam ≤ 1/2)
+    (hperm : Function.Injective perm) :
     ∀ l i, bagCapacity n A ν t l < A →
       ((concreteSplit lam perm bags (l + 1) (2 * i)).toParent.card +
        (concreteSplit lam perm bags (l + 1) (2 * i + 1)).toParent.card : ℝ) ≤
       4 * lam * bagCapacity n A ν t (l + 1) := by
-  sorry
+  intro l i hcap
+  -- Get even-size from sorry'd lemma
+  have heven_left := bags_even_at_small_cap inv hA hcap (2 * i)
+  have heven_right := bags_even_at_small_cap inv hA hcap (2 * i + 1)
+  -- Exact toParent cards: card = b - 2 * childSendSize
+  have hlam1 : lam ≤ 1 := by linarith
+  have htp_l : (concreteSplit lam perm bags (l + 1) (2 * i)).toParent.card =
+      (bags (l + 1) (2 * i)).card - 2 * childSendSize lam (bags (l + 1) (2 * i)).card := by
+    show (bags (l + 1) (2 * i) |>.filter _).card = _
+    exact concreteSplit_toParent_card_eq hperm hlam1
+  have htp_r : (concreteSplit lam perm bags (l + 1) (2 * i + 1)).toParent.card =
+      (bags (l + 1) (2 * i + 1)).card - 2 * childSendSize lam (bags (l + 1) (2 * i + 1)).card := by
+    show (bags (l + 1) (2 * i + 1) |>.filter _).card = _
+    exact concreteSplit_toParent_card_eq hperm hlam1
+  -- Rewrite using even-size to eliminate rounding
+  have hev_l := toParent_card_even heven_left hlam_half hlam
+  have hev_r := toParent_card_even heven_right hlam_half hlam
+  rw [htp_l, hev_l, htp_r, hev_r]
+  -- Now goal: (2 * fringeSize_l + 2 * fringeSize_r : ℝ) ≤ 4 * lam * cap(l+1)
+  -- Both bags at level l+1 have uniform size
+  set b_l := (bags (l + 1) (2 * i)).card
+  set b_r := (bags (l + 1) (2 * i + 1)).card
+  have hf_l := fringeSize_le_mul hlam (b := b_l)
+  have hf_r := fringeSize_le_mul hlam (b := b_r)
+  have hcap_l := inv.capacity_bound (l + 1) (2 * i)
+  have hcap_r := inv.capacity_bound (l + 1) (2 * i + 1)
+  push_cast
+  calc (2 * (fringeSize lam b_l : ℝ) + 2 * (fringeSize lam b_r : ℝ))
+      ≤ 2 * (lam * ↑b_l) + 2 * (lam * ↑b_r) := by linarith
+    _ ≤ 2 * (lam * bagCapacity n A ν t (l + 1)) +
+        2 * (lam * bagCapacity n A ν t (l + 1)) := by
+        have : lam * ↑b_l ≤ lam * bagCapacity n A ν t (l + 1) :=
+          mul_le_mul_of_nonneg_left hcap_l hlam
+        have : lam * ↑b_r ≤ lam * bagCapacity n A ν t (l + 1) :=
+          mul_le_mul_of_nonneg_left hcap_r hlam
+        linarith
+    _ = 4 * lam * bagCapacity n A ν t (l + 1) := by ring
 
 /-- Three sources of `rebag` are pairwise disjoint: kicked items from left child,
     kicked items from right child, and items from parent all come from different bags. -/

@@ -19,7 +19,7 @@ Abstract operator theory connecting walk bounds to spectral gap bounds. Imports 
 Connects the decidable `checkCertificateSlow` predicate to spectral gap bounds:
 - **`Defs.lean`** — proof-only pure recursive definitions (`adjMulPure`, `pEntryPure`, `kEntryPure`, etc.) (~100 lines)
 - **`Bridge.lean`** — main bridge theorem chaining all layers (~870 lines)
-- **`FastProof.lean`** — proves `checkCertificateFast = checkCertificateSlow` (~55 lines)
+- **`FastProof.lean`** — proves `checkCertificate = checkCertificateSlow` (~55 lines)
 - **`SpectralMatrix.lean`** — Layer 1: spectral matrix M PSD → walk bound (~186 lines)
 - **`DiagDominant.lean`** — Layer 2: Hermitian + strictly diag-dominant → PSD (~123 lines)
 - **`ColumnNormBridge.lean`** — imperative column norm checker = pure recursive version (~1538 lines)
@@ -44,9 +44,9 @@ Three lemmas (all proved, 0 sorry):
 
 ## Conventions
 
-**Do not use `@[csimp]` in `CertCheck.lean`.** `CertCheck` is a separate precompiled library (`precompileModules := true`) that contains only definitions, no proofs. `@[csimp]` requires a proof that the replacement equals the original, which would force proofs into the precompiled module and break modularity. Instead, prove the bridge theorem (`checkCertificateFast_eq_slow`) in a separate file (`AKS/Cert/FastProof.lean`) that imports both `CertCheck` and Mathlib.
+**Do not use `@[csimp]` in `CertCheck.lean`.** `CertCheck` is a separate precompiled library (`precompileModules := true`) that contains only definitions, no proofs. `@[csimp]` requires a proof that the replacement equals the original, which would force proofs into the precompiled module and break modularity. Instead, prove the bridge theorem (`checkCertificate_eq_slow`) in a separate file (`AKS/Cert/FastProof.lean`) that imports both `CertCheck` and Mathlib.
 
-**Never change fast code to make proofs easier.** `CertCheck.lean` contains optimized imperative code (`checkCertificateFast`, `checkColumnNormBound`, `mulAdjWith`, etc.) that must stay exactly as-is. The job is to PROVE the existing fast code correct via bridge theorems, not to modify it. When a proof about imperative code is hard, discuss the difficulty with the user — don't silently switch to "make the code easier to prove about" by adding `native_decide` calls, slowing down the fast path, or replacing imperative code with pure equivalents. The `native_decide` in `Random*.lean` should only be on `checkCertificateFast`; everything else must be derived via structural proofs.
+**Never change fast code to make proofs easier.** `CertCheck.lean` contains optimized imperative code (`checkCertificate`, `checkColumnNormBound`, `mulAdjWith`, etc.) that must stay exactly as-is. The job is to PROVE the existing fast code correct via bridge theorems, not to modify it. When a proof about imperative code is hard, discuss the difficulty with the user — don't silently switch to "make the code easier to prove about" by adding `native_decide` calls, slowing down the fast path, or replacing imperative code with pure equivalents. The `native_decide` in `Random*.lean` should only be on `checkCertificate`; everything else must be derived via structural proofs.
 
 ## Proof Tactics
 

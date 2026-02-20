@@ -4,7 +4,7 @@
   Proves that the fused PSD + column-norm computation in `checkPSDColumnsFull`
   produces the same PSD state as the unfused `checkPSDColumns`, and that the
   norm outputs match `zColNormPure`. Used by `FastProof.lean` to close
-  `checkCertificateFast_eq_slow`.
+  `checkCertificate_eq_slow`.
 
   The new `checkPSDColumnsFull` uses scatter-based adjacency multiplication
   and buffer reuse. Under `NeighborSymm` (derived from `checkInvolution`),
@@ -1198,35 +1198,35 @@ private theorem getElem!_eq_getElem' {α : Type} [Inhabited α] (a : Array α) (
 
 /-- Norm lookup from fused results: `results[i%64]!.2[i/64]! = zColNormPure certBytes n i`. -/
 theorem fused_norm_lookup (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (i : Nat) (hi : i < n)
+    (n d : Nat) (c₁ c₂ c₃ : Int) (nc : Nat) (hnc : 0 < nc) (i : Nat) (hi : i < n)
     (hsym : NeighborSymm neighbors n d) :
-    let columnLists := buildColumnLists n 64
+    let columnLists := buildColumnLists n nc
     let results := columnLists.map fun cols =>
       checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols
-    results[i % 64]!.2[i / 64]! = zColNormPure certBytes n i := by
+    results[i % nc]!.2[i / nc]! = zColNormPure certBytes n i := by
   intro columnLists results
-  have hcl_size : columnLists.size = 64 := buildColumnLists_size n 64 (by omega)
-  have hmod : i % 64 < 64 := Nat.mod_lt i (by omega)
-  -- Column bounds for chunk i%64
-  have hcols_bound : ∀ j ∈ (columnLists[i % 64]!).toList, j < n := by
-    intro j hj; exact buildColumnLists_bound n 64 (i % 64) (by omega) j hj hmod
-  -- Inner bound: i/64 < chunk size
-  have hinner : i / 64 < (buildColumnLists n 64)[i % 64]!.size :=
-    buildColumnLists_inner_bound n 64 i hi (by omega)
+  have hcl_size : columnLists.size = nc := buildColumnLists_size n nc hnc
+  have hmod : i % nc < nc := Nat.mod_lt i hnc
+  -- Column bounds for chunk i%nc
+  have hcols_bound : ∀ j ∈ (columnLists[i % nc]!).toList, j < n := by
+    intro j hj; exact buildColumnLists_bound n nc (i % nc) (by omega) j hj hmod
+  -- Inner bound: i/nc < chunk size
+  have hinner : i / nc < (buildColumnLists n nc)[i % nc]!.size :=
+    buildColumnLists_inner_bound n nc i hi hnc
   -- Column entry
-  have hentry : (buildColumnLists n 64)[i % 64]![i / 64]! = i :=
-    buildColumnLists_entry n 64 i hi (by omega)
+  have hentry : (buildColumnLists n nc)[i % nc]![i / nc]! = i :=
+    buildColumnLists_entry n nc i hi hnc
   -- Norm array from checkPSDColumnsFull
-  set cols := columnLists[i % 64]! with hcols_def
+  set cols := columnLists[i % nc]! with hcols_def
   have hsnd := checkPSDColumnsFull_snd_toList neighbors certBytes n d c₁ c₂ c₃ cols hsym hcols_bound
-  -- results.size = 64
-  have hres_size : results.size = 64 := by
-    show (columnLists.map _).size = 64; rw [Array.size_map, hcl_size]
-  -- results[i%64]! = checkPSDColumnsFull ... cols
-  have hres_get : results[i % 64]! =
+  -- results.size = nc
+  have hres_size : results.size = nc := by
+    show (columnLists.map _).size = nc; rw [Array.size_map, hcl_size]
+  -- results[i%nc]! = checkPSDColumnsFull ... cols
+  have hres_get : results[i % nc]! =
       checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols := by
     rw [getElem!_eq_getElem' _ _ (by rw [hres_size]; exact hmod)]
-    show (columnLists.map _)[i % 64] = _
+    show (columnLists.map _)[i % nc] = _
     simp only [Array.getElem_map]
     congr 1; exact (getElem!_eq_getElem' columnLists _ (by rw [hcl_size]; exact hmod)).symm
   rw [hres_get]
@@ -1235,20 +1235,20 @@ theorem fused_norm_lookup (neighbors : Array Nat) (certBytes : ByteArray)
       cols.size := by
     have := congrArg List.length hsnd
     rw [Array.length_toList, List.length_map, Array.length_toList] at this; exact this
-  -- (checkPSDColumnsFull ... cols).2[i/64]! = zColNormPure certBytes n i
+  -- (checkPSDColumnsFull ... cols).2[i/nc]! = zColNormPure certBytes n i
   rw [getElem!_eq_getElem' _ _ (by rw [hnorms_size]; exact hinner)]
   -- Bridge through toList
-  have hinner_list : i / 64 < (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.toList.length := by
+  have hinner_list : i / nc < (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.toList.length := by
     rw [Array.length_toList, hnorms_size]; exact hinner
-  rw [show (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2[i / 64] =
-    (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.toList[i / 64] from
+  rw [show (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2[i / nc] =
+    (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.toList[i / nc] from
     (Array.getElem_toList hinner_list).symm]
   simp only [hsnd, List.getElem_map]
-  -- Goal: zColNormPure certBytes n (cols.toList[i/64]) = zColNormPure certBytes n i
+  -- Goal: zColNormPure certBytes n (cols.toList[i/nc]) = zColNormPure certBytes n i
   congr 1
-  -- cols.toList[i/64] = i
+  -- cols.toList[i/nc] = i
   rw [Array.getElem_toList hinner]
-  rw [show (cols[i / 64]'hinner : Nat) = cols[i / 64]! from
+  rw [show (cols[i / nc]'hinner : Nat) = cols[i / nc]! from
     (getElem!_eq_getElem' cols _ hinner).symm]
   exact hentry
 
@@ -1331,30 +1331,30 @@ theorem prefixSumLoop_eq_checkPerRow
 
 /-! **Fused map projection** -/
 
-/-- All entries in any chunk of `buildColumnLists n 64` are `< n`. -/
-private theorem buildColumnLists_mem_bound (n : Nat) (cols : Array Nat)
-    (hmem : cols ∈ (buildColumnLists n 64).toList) :
+/-- All entries in any chunk of `buildColumnLists n nc` are `< n`. -/
+private theorem buildColumnLists_mem_bound (n nc : Nat) (hnc : 0 < nc) (cols : Array Nat)
+    (hmem : cols ∈ (buildColumnLists n nc).toList) :
     ∀ j ∈ cols.toList, j < n := by
   obtain ⟨i, hi, heq⟩ := List.mem_iff_getElem.mp hmem
-  rw [Array.length_toList, buildColumnLists_size n 64 (by omega)] at hi
+  rw [Array.length_toList, buildColumnLists_size n nc hnc] at hi
   intro j hj
   rw [← heq, Array.getElem_toList] at hj
-  exact buildColumnLists_bound n 64 i (by omega) j
-    (by rwa [getElem!_eq_getElem' _ _ (by rw [buildColumnLists_size n 64 (by omega)]; exact hi)])
+  exact buildColumnLists_bound n nc i (by omega) j
+    (by rwa [getElem!_eq_getElem' _ _ (by rw [buildColumnLists_size n nc hnc]; exact hi)])
     hi
 
 /-- Mapping `.1` over fused results = mapping unfused `checkPSDColumns`.
     Requires `NeighborSymm` because scatter-based fused code = gather-based
     unfused code only under adjacency symmetry. -/
 theorem fused_map_fst_eq (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int)
+    (n d : Nat) (c₁ c₂ c₃ : Int) (nc : Nat) (hnc : 0 < nc)
     (hsym : NeighborSymm neighbors n d) :
-    ((buildColumnLists n 64).map fun cols =>
+    ((buildColumnLists n nc).map fun cols =>
       checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).map (·.1) =
-    (buildColumnLists n 64).map fun cols =>
+    (buildColumnLists n nc).map fun cols =>
       checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols := by
   rw [Array.map_map]
   apply Array.map_congr_left
   intro cols hmem
   exact checkPSDColumnsFull_fst neighbors certBytes n d c₁ c₂ c₃ cols hsym
-    (buildColumnLists_mem_bound n cols hmem.val)
+    (buildColumnLists_mem_bound n nc hnc cols hmem.val)

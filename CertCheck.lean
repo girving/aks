@@ -222,13 +222,13 @@ def buildColumnLists (n numChunks : Nat) : Array (Array Nat) :=
     AND all diagonal entries `Z[j,j] > 0`.
 
     Uses partition + merge structure (matching `checkPSDCertificatePar`) so the
-    bridge `checkCertificateFast = checkCertificateSlow` is structurally trivial. -/
+    bridge `checkCertificate = checkCertificateSlow` is structurally trivial. -/
 def checkPSDCertificate (rotBytes certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) (tasks : Nat := 64) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
   else allDiagPositive certBytes n &&
     let neighbors := decodeNeighbors rotBytes n d
-    let columnLists := buildColumnLists n 64
+    let columnLists := buildColumnLists n tasks
     let results := columnLists.map fun cols =>
       checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
     checkPSDThreshold results n
@@ -300,11 +300,11 @@ def checkPerRow (certBytes : ByteArray) (n : Nat) (ε mdpe : Int)
 /-- Check column-norm bound: computes `epsMax`/`minDiag` via `checkPSDColumns`,
     then checks `Z[i,i]·(minDiag + epsMax) > epsMax·T_i` for each row. -/
 def checkColumnNormBound (rotBytes certBytes : ByteArray) (n d : Nat)
-    (c₁ c₂ c₃ : Int) : Bool :=
+    (c₁ c₂ c₃ : Int) (tasks : Nat := 64) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
   else
     let neighbors := decodeNeighbors rotBytes n d
-    let columnLists := buildColumnLists n 64
+    let columnLists := buildColumnLists n tasks
     let results := columnLists.map fun cols =>
       checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols
     let merged := results.foldl PSDChunkResult.merge
@@ -319,12 +319,12 @@ def checkColumnNormBound (rotBytes certBytes : ByteArray) (n d : Nat)
     Both rotation map and certificate are base-85 encoded `String`s.
     All sub-checks are O(n²·d), making `native_decide` feasible for n ≤ ~10000. -/
 def checkCertificateSlow (rotStr certStr : String)
-    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) (tasks : Nat := 64) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   checkInvolution rotBytes n d &&
-  checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ &&
-  checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃
+  checkPSDCertificate rotBytes certBytes n d c₁ c₂ c₃ tasks &&
+  checkColumnNormBound rotBytes certBytes n d c₁ c₂ c₃ tasks
 
 
 /-! **Parallel certificate checking** -/
@@ -339,11 +339,11 @@ def checkCertificateSlow (rotStr certStr : String)
     the bridge `checkPSDCertificatePar = checkPSDCertificate` follows from
     `Array.map_map` + definitional unfolding. -/
 def checkPSDCertificatePar (rotBytes certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) (tasks : Nat := 64) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
   else allDiagPositive certBytes n &&
     let neighbors := decodeNeighbors rotBytes n d
-    let columnLists := buildColumnLists n 64
+    let columnLists := buildColumnLists n tasks
     -- Spawn all tasks (all start running concurrently)
     let tasks := columnLists.map fun cols =>
       Task.spawn (prio := .dedicated) fun () =>
@@ -413,21 +413,20 @@ def checkPSDColumnsFull (neighbors : Array Nat) (certBytes : ByteArray)
     Same result as `checkCertificateSlow` (proved in `AKS/Cert/FastProof.lean`).
     Each parallel task computes both PSD state and column ℓ₁-norms via fused cert
     decode. The sequential prefix-sum check uses precomputed norms directly from
-    chunk results: column `j`'s norm is `results[j % 64].2[j / 64]`. -/
-def checkCertificateFast (rotStr certStr : String)
-    (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
+    chunk results: column `j`'s norm is `results[j % tasks].2[j / tasks]`. -/
+def checkCertificate (rotStr certStr : String)
+    (n d : Nat) (c₁ c₂ c₃ : Int) (tasks : Nat := 64) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8
   checkInvolution rotBytes n d &&
   if certBytes.size != n * (n + 1) / 2 * 5 then false
   else allDiagPositive certBytes n &&
     let neighbors := decodeNeighbors rotBytes n d
-    let nc := 64
-    let columnLists := buildColumnLists n nc
-    let tasks := columnLists.map fun cols =>
+    let columnLists := buildColumnLists n tasks
+    let spawned := columnLists.map fun cols =>
       Task.spawn (prio := .dedicated) fun () =>
         checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols
-    let results := tasks.map Task.get
+    let results := spawned.map Task.get
     let merged := (results.map (·.1)).foldl PSDChunkResult.merge
       { epsMax := 0, minDiag := 0, first := true }
     if merged.first then false
@@ -438,7 +437,7 @@ def checkCertificateFast (rotStr certStr : String)
         let mdpe := merged.minDiag + ε
         let mut prefSum : Int := 0
         for i in [:n] do
-          let si := results[i % nc]!.2[i / nc]!
+          let si := results[i % tasks]!.2[i / tasks]!
           let ti := prefSum + (↑(n - i) : Int) * si
           if !(certEntryInt certBytes i i * mdpe > ε * ti) then
             return false

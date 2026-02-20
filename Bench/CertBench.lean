@@ -8,7 +8,6 @@
 -/
 
 import CertCheck
-import Bench.CertParallel
 import AKS.Cert.Read
 
 #eval ensureCertificateData 16 4
@@ -39,14 +38,6 @@ def timed (name : String) (f : Unit → String) : IO Unit := do
   let t1 ← IO.monoNanosNow
   IO.println s!" [{fmtNs (t1 - t0)}]"
 
-/-- Time an IO computation, print result + elapsed. -/
-def timedIO (name : String) (f : IO String) : IO Unit := do
-  let t0 ← IO.monoNanosNow
-  let result ← f
-  IO.print s!"  {name}: {result}"
-  let t1 ← IO.monoNanosNow
-  IO.println s!" [{fmtNs (t1 - t0)}]"
-
 /-- Benchmark suite for one graph size. -/
 def benchSuite (label : String) (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : IO Unit := do
@@ -55,21 +46,11 @@ def benchSuite (label : String) (rotStr certStr : String)
   timed "baseline full    " fun () =>
     s!"ok={checkCertificateSlow rotStr certStr n d c₁ c₂ c₃}"
 
-  timed "prod fast        " fun () =>
-    s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
-
-  -- Parallel PSD-only (no column-norm check)
-  for numChunks in [4, 64] do
-    let label := s!"par PSD ({numChunks} chunks)"
+  for numTasks in [1, 4, 16, 64] do
+    let label := s!"tasks={numTasks}"
     let padded := label ++ String.ofList (List.replicate (17 - label.length) ' ')
-    timedIO padded do
-      let ok ← checkCertificateParallel rotStr certStr n d c₁ c₂ c₃ numChunks
-      return s!"ok={ok}"
-
-  -- Parallel full: PSD + column-norm fused
-  timedIO "par full (64)    " do
-    let ok ← checkCertificateParallelFull rotStr certStr n d c₁ c₂ c₃ 64
-    return s!"ok={ok}"
+    timed padded fun () =>
+      s!"ok={checkCertificate rotStr certStr n d c₁ c₂ c₃ numTasks}"
 
   IO.println ""
 
@@ -79,7 +60,7 @@ def benchFastOnly (label : String) (rotStr certStr : String)
   IO.println s!"--- {label} (n={n}, d={d}) ---"
 
   timed "prod fast        " fun () =>
-    s!"ok={checkCertificateFast rotStr certStr n d c₁ c₂ c₃}"
+    s!"ok={checkCertificate rotStr certStr n d c₁ c₂ c₃}"
 
   IO.println ""
 
@@ -105,7 +86,7 @@ def main : IO UInt32 := do
   IO.println s!" [{fmtNs (t1 - t0)}]"
 
   timed "prod fast        " fun () =>
-    s!"ok={checkCertificateFast rotStr certStr 20736 12 792 9 2}"
+    s!"ok={checkCertificate rotStr certStr 20736 12 792 9 2}"
 
   IO.println ""
   IO.println "Done."

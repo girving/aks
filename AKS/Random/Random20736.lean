@@ -31,12 +31,12 @@ def graph : RegularGraph 20736 12 where
 
 set_option maxHeartbeats 0 in
 theorem certificate_passes :
-    checkCertificateFast rotData certData 20736 12 792 9 2 = true := by
+    checkCertificate rotData certData 20736 12 792 9 2 = true := by
   native_decide
 
 theorem gap : spectralGap graph ≤ 10 / (1 * 12) := by
   have h : checkCertificateSlow rotData certData 20736 12 792 9 2 = true := by
-    rw [← checkCertificateFast_eq_slow]; exact certificate_passes
+    rw [← checkCertificate_eq_slow]; exact certificate_passes
   exact_mod_cast certificate_bridge 20736 12 (by decide) (by decide) graph
     rotData certData 792 9 2 h involution_check
     10 1 (by decide) (by decide) (by decide) (by decide) (fun _ => rfl)

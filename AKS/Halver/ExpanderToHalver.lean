@@ -15,7 +15,7 @@ import AKS.Halver.Defs
 import AKS.Halver.Tanner
 import AKS.Konig.Coloring
 import AKS.Sort.Depth
-import AKS.Tree.Sorting
+import AKS.Sort.Monotone
 
 open Finset BigOperators
 
