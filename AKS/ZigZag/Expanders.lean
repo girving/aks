@@ -75,7 +75,7 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
       _ ≤ lam₂ * ‖x‖ := mul_le_mul_of_nonneg_right hG₂ (norm_nonneg x)
   -- Apply the abstract RVW operator norm bound
   show ‖(G₁.zigzag G₂).walkCLM - meanCLM (n₁ * d₁)‖ ≤ rvwBound lam₁ lam₂
-  exact rvw_operator_norm_bound hpos
+  exact rvw_operator_norm_bound
     ((G₁.zigzag G₂).walkCLM) B Sig Q P
     (zigzag_walkCLM_eq G₁ G₂ hd₁ hd₂)
     (clusterMeanCLM_idempotent hd₁)
@@ -83,7 +83,6 @@ theorem zigzag_spectral_bound {n₁ d₁ d₂ : ℕ}
     (withinCluster_comp_clusterMean G₂ hd₁ hd₂)
     (clusterMean_comp_withinCluster G₂ hd₁ hd₂)
     (withinClusterCLM_isSelfAdjoint G₂ hd₁)
-    (withinClusterCLM_norm_le_one G₂ hd₁)
     (stepPermCLM_sq_eq_one G₁ hd₁)
     (stepPermCLM_isSelfAdjoint G₁ hd₁)
     (stepPermCLM_comp_meanCLM G₁ hd₁)

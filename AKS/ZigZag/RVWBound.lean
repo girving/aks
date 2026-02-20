@@ -45,7 +45,7 @@ noncomputable def rvwBound (lam₁ lam₂ : ℝ) : ℝ :=
 /-- The core inequality: when a ≤ 1, this term is nonnegative.
     This is the final reduction after polynomial expansion. -/
 private lemma rvwBound_core_ineq {a b₁ b₂ : ℝ}
-    (ha_pos : 0 < a) (ha1 : a ≤ 1) (hb₁ : 0 ≤ b₁) (hb₂ : b₂ ≤ 1) (hbb : b₁ < b₂) :
+    (ha_pos : 0 < a) (ha1 : a ≤ 1) :
     let c₁ := 1 - b₁ ^ 2
     let c₂ := 1 - b₂ ^ 2
     let Δ := b₂ ^ 2 - b₁ ^ 2
@@ -111,7 +111,7 @@ private lemma rvwBound_core_ineq {a b₁ b₂ : ℝ}
 /-- The key polynomial identity after expanding the squared inequality.
     This is the core algebraic fact: when a ≤ 1, the polynomial inequality holds. -/
 private lemma rvwBound_poly_ineq {a b₁ b₂ : ℝ}
-    (ha_pos : 0 < a) (ha1 : a ≤ 1) (hb₁ : 0 ≤ b₁) (hb₂ : b₂ ≤ 1) (hbb : b₁ < b₂) :
+    (ha_pos : 0 < a) (ha1 : a ≤ 1) (hb₁ : 0 ≤ b₁) (hbb : b₁ < b₂) :
     let c₁ := 1 - b₁ ^ 2
     let c₂ := 1 - b₂ ^ 2
     let Δ := b₂ ^ 2 - b₁ ^ 2
@@ -145,7 +145,7 @@ private lemma rvwBound_poly_ineq {a b₁ b₂ : ℝ}
     _ = Δ * (1 - (c₂ + c₁) * a ^ 2 / 4 - a * Real.sqrt (c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2) - Δ * a ^ 2 / 4) := by ring
     _ ≥ 0 := by
         have hΔ_pos : 0 < Δ := by nlinarith [sq_nonneg b₁, sq_nonneg b₂]
-        have h_bracket := rvwBound_core_ineq ha_pos ha1 hb₁ hb₂ hbb
+        have h_bracket := rvwBound_core_ineq (b₁ := b₁) (b₂ := b₂) ha_pos ha1
         nlinarith [hΔ_pos, h_bracket]
 
 /-- Core polynomial inequality for RVW bound monotonicity.
@@ -183,7 +183,7 @@ private lemma rvwBound_sqrt_ineq {a b₁ b₂ : ℝ}
   calc S₂ ^ 2
       = c₂ ^ 2 * a ^ 2 / 4 + b₂ ^ 2 := by rw [Real.sq_sqrt hS₂_sq_arg]
     _ ≥ c₁ ^ 2 * a ^ 2 / 4 + b₁ ^ 2 + Δ * a * S₁ + Δ ^ 2 * a ^ 2 / 4 :=
-        rvwBound_poly_ineq ha_pos ha1 hb₁ hb₂ hbb
+        rvwBound_poly_ineq ha_pos ha1 hb₁ hbb
     _ = S₁ ^ 2 + Δ * a * S₁ + Δ ^ 2 * a ^ 2 / 4 := by
         rw [Real.sq_sqrt hS₁_sq_arg]
     _ = (S₁ + Δ * a / 2) ^ 2 := by ring
@@ -272,9 +272,7 @@ private lemma hat_tilde_norm_sq {n : ℕ} (Q : EuclideanSpace ℝ (Fin n) →L[�
 private lemma rvw_inner_product_expansion {n : ℕ}
     (W B Sig Q : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
     (hfact : W = B * Sig * B)
-    (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q)
-    (hBQ : B * Q = Q) (hQB : Q * B = Q)
-    (hB_sa : IsSelfAdjoint B) (hSig_sa : IsSelfAdjoint Sig)
+    (hB_sa : IsSelfAdjoint B)
     (x : EuclideanSpace ℝ (Fin n)) :
     @inner ℝ _ _ (W x) x =
       @inner ℝ _ _ (Sig (B (Q x))) (B (Q x)) +
@@ -343,7 +341,7 @@ private def rvw_matrix (lam₁ lam₂ : ℝ) : Matrix (Fin 2) (Fin 2) ℝ :=
 
     This can be proved by computing the characteristic polynomial,
     using the quadratic formula, and simplifying. -/
-private lemma rvw_matrix_eigenvalue (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂) :
+private lemma rvw_matrix_eigenvalue (_lam₁ _lam₂ : ℝ) :
     True := by
   -- Placeholder: proving the connection between the 2×2 matrix eigenvalue and rvwBound
   -- requires matrix eigenvalue theory from Mathlib
@@ -647,7 +645,7 @@ private lemma reflection_cs_minus {n : ℕ}
     `x² = (1 - λ₂²) · λ₁ · x + λ₂²`.
     This characterizes it as the positive root of `t² - ct - d² = 0`
     where `c = (1-λ₂²)λ₁` and `d = λ₂`. -/
-lemma rvwBound_quadratic_eq (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 0 ≤ lam₂) :
+lemma rvwBound_quadratic_eq (lam₁ lam₂ : ℝ) :
     (rvwBound lam₁ lam₂) ^ 2 = (1 - lam₂ ^ 2) * lam₁ * rvwBound lam₁ lam₂ + lam₂ ^ 2 := by
   unfold rvwBound
   set S := Real.sqrt ((1 - lam₂ ^ 2) ^ 2 * lam₁ ^ 2 / 4 + lam₂ ^ 2)
@@ -674,7 +672,7 @@ lemma rvwBound_nonneg (lam₁ lam₂ : ℝ) (hlam₁ : 0 ≤ lam₁) (hlam₂ : 
     This is because `(c + √(c²+4d²))/2` is the positive root of `t² - ct - d² = 0`,
     and the polynomial is ≤ 0 on `[0, positive root]`. -/
 lemma quadratic_root_upper_bound {x c d : ℝ}
-    (hx : 0 ≤ x) (hd : 0 ≤ d)
+    (hx : 0 ≤ x)
     (h : x ^ 2 ≤ c * x + d ^ 2) :
     x ≤ (c + Real.sqrt (c ^ 2 + 4 * d ^ 2)) / 2 := by
   set S := Real.sqrt (c ^ 2 + 4 * d ^ 2)
@@ -732,7 +730,7 @@ private lemma rvw_exact_bound
   set C := (1 - μ₂ ^ 2) * μ₁
   have h_quad' : |p + 2 * q + r| ^ 2 ≤ C * |p + 2 * q + r| + μ₂ ^ 2 := by
     rwa [sq_abs]
-  have h_bound := quadratic_root_upper_bound (abs_nonneg (p + 2 * q + r)) hμ₂ h_quad'
+  have h_bound := quadratic_root_upper_bound (abs_nonneg (p + 2 * q + r)) h_quad'
   -- Show rvwBound μ₁ μ₂ = (C + √(C² + 4·μ₂²))/2
   suffices h_eq : rvwBound μ₁ μ₂ = (C + Real.sqrt (C ^ 2 + 4 * μ₂ ^ 2)) / 2 by
     rw [h_eq]; exact h_bound
@@ -1099,12 +1097,12 @@ private lemma sig_inner_perp_bound {n : ℕ}
 
     Then `‖W - P‖ ≤ rvwBound(λ₁, λ₂)`. -/
 theorem rvw_operator_norm_bound
-    {n : ℕ} (hn : 0 < n)
+    {n : ℕ}
     (W B Sig Q P : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n))
     (hfact : W = B * Sig * B)
     (hQ_proj : Q * Q = Q) (hQ_sa : IsSelfAdjoint Q)
     (hBQ : B * Q = Q) (hQB : Q * B = Q)
-    (hB_sa : IsSelfAdjoint B) (hB_contr : ‖B‖ ≤ 1)
+    (hB_sa : IsSelfAdjoint B)
     (hSig_inv : Sig * Sig = 1) (hSig_sa : IsSelfAdjoint Sig)
     (hSigP : Sig * P = P)
     (hP_proj : P * P = P) (hP_sa : IsSelfAdjoint P)

@@ -203,3 +203,31 @@ theorem jStrangerCount_zero_gt_level {n : ℕ} (perm : Fin n → Fin n)
     jStrangerCount n perm regs level idx j = 0 := by
   simp only [jStrangerCount, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
   exact fun _ _ ↦ not_isJStranger_gt_level h
+
+/-! **Stranger → Perm Value Bounds**
+
+j-strangers have perm values outside their ancestor's native interval.
+This is the structural basis for showing that strangers get extreme ranks
+in the bag, and thus are captured by the fringe in the concrete split. -/
+
+/-- j-strangers have perm values outside their ancestor's native interval.
+    If `isJStranger n rank level idx j`, then `rank` falls outside the interval
+    `[lo * bs, (lo + 1) * bs)` where `lo = idx / 2^(j-1)` is the ancestor
+    index and `bs = bagSize n (level - (j-1))` is the ancestor bag size. -/
+theorem isJStranger_perm_bound {n rank level idx j : ℕ}
+    (hs : isJStranger n rank level idx j)
+    (hbs : 0 < bagSize n (level - (j - 1))) :
+    rank < (idx / 2 ^ (j - 1)) * bagSize n (level - (j - 1)) ∨
+    ((idx / 2 ^ (j - 1)) + 1) * bagSize n (level - (j - 1)) ≤ rank := by
+  obtain ⟨_, _, hne⟩ := hs
+  simp only [nativeBagIdx] at hne
+  rcases Nat.lt_or_gt_of_ne hne with hlt | hgt
+  · left; exact (Nat.div_lt_iff_lt_mul hbs).mp hlt
+  · right; exact (Nat.le_div_iff_mul_le hbs).mp hgt
+
+/-- 1-strangers have perm values outside their bag's native interval. -/
+theorem isJStranger_one_perm_bound {n rank level idx : ℕ}
+    (hs : isJStranger n rank level idx 1) (hbs : 0 < bagSize n level) :
+    rank < idx * bagSize n level ∨ (idx + 1) * bagSize n level ≤ rank := by
+  have h := isJStranger_perm_bound hs (by simpa using hbs)
+  simpa using h
