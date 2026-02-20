@@ -222,7 +222,7 @@ def buildColumnLists (n numChunks : Nat) : Array (Array Nat) :=
     AND all diagonal entries `Z[j,j] > 0`.
 
     Uses partition + merge structure (matching `checkPSDCertificatePar`) so the
-    bridge `checkCertificateFast = checkCertificateSlow` is structurally trivial. -/
+    bridge `checkCertificate = checkCertificateSlow` is structurally trivial. -/
 def checkPSDCertificate (rotBytes certBytes : ByteArray)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   if certBytes.size != n * (n + 1) / 2 * 5 then false
@@ -414,7 +414,7 @@ def checkPSDColumnsFull (neighbors : Array Nat) (certBytes : ByteArray)
     Each parallel task computes both PSD state and column ℓ₁-norms via fused cert
     decode. The sequential prefix-sum check uses precomputed norms directly from
     chunk results: column `j`'s norm is `results[j % 64].2[j / 64]`. -/
-def checkCertificateFast (rotStr certStr : String)
+def checkCertificate (rotStr certStr : String)
     (n d : Nat) (c₁ c₂ c₃ : Int) : Bool :=
   let rotBytes := rotStr.toUTF8
   let certBytes := certStr.toUTF8

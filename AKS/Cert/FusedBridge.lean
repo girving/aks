@@ -4,7 +4,7 @@
   Proves that the fused PSD + column-norm computation in `checkPSDColumnsFull`
   produces the same PSD state as the unfused `checkPSDColumns`, and that the
   norm outputs match `zColNormPure`. Used by `FastProof.lean` to close
-  `checkCertificateFast_eq_slow`.
+  `checkCertificate_eq_slow`.
 
   The new `checkPSDColumnsFull` uses scatter-based adjacency multiplication
   and buffer reuse. Under `NeighborSymm` (derived from `checkInvolution`),
