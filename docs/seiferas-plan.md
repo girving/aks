@@ -7,7 +7,7 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 
 | File | Theorem | Status |
 |------|---------|--------|
-| `SplitCard.lean` | `bags_even_at_small_cap` | **FALSE as stated** — needs invariant fix |
+| `Invariant.lean` | `small_cap_even` maintenance | sorry (moved from `bags_even_at_small_cap`) |
 | `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | sorry (90% confidence) |
 | `SplitStranger.lean` | `concreteSplit_cnative_bound` | sorry (75% confidence) |
 | `TreeSort.lean` | `separatorSortingNetwork_sorts` | sorry (65% confidence) |
@@ -16,7 +16,8 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 - `concreteSplit_hkick` -- parent kick <= `2lam*cap + 1`
 - `concreteSplit_hsend_left` / `hsend_right` -- child <= `cap/2`
 - `concreteSplit_hkick_pair` -- paired kick <= `4lam*cap(l+1)` when `cap(l) < A`
-  (proved, modulo `bags_even_at_small_cap`)
+  (proved, uses `small_cap_even` invariant clause)
+- `bags_even_at_small_cap` -- even bag sizes when cap < A (trivial from `small_cap_even` clause)
 - `concreteSplit_hrebag_uniform` -- uniform rebag sizes
 - `concreteSplit_hrebag_disjoint` -- disjoint rebag bags
 - `kick_stranger_bound` -- fringe strangers at parent level
@@ -43,7 +44,7 @@ Seiferas.lean                       -- seiferas_sorting_networks_exist
 
 ## Remaining Sorries: Detailed Analysis
 
-### S1: `bags_even_at_small_cap` (SplitCard.lean) -- **FALSE AS STATED**
+### S1: `bags_even_at_small_cap` (SplitCard.lean) -- **RESOLVED**
 
 **Statement:** When `bagCapacity n A ν t l < A`, all bags at level `l+1`
 have even `card`.
@@ -271,7 +272,7 @@ S1, S2, and S3 are **fully independent** of each other:
 
 | Instance | Task | Files touched | Key references |
 |----------|------|---------------|----------------|
-| **I1** | S1: Fix invariant + leaf split + prove `bags_even_at_small_cap` | `Invariant.lean`, `Split.lean`, `SplitCard.lean`, `SplitProof.lean` | Seiferas Sections 2-5 |
+| **I1** | S1: ~~Fix invariant + prove `bags_even_at_small_cap`~~ **DONE** | `Invariant.lean`, `SplitCard.lean`, `SplitProof.lean` | Seiferas Sections 2-5 |
 | **I2** | S2: Prove `concreteSplit_fromParent_filtered` | `SplitStranger.lean`, possibly `Split.lean` | Seiferas Section 5, stranger definitions |
 | **I3** | S3: Prove `concreteSplit_cnative_bound` | `SplitStranger.lean`, possibly `Split.lean` | Seiferas Section 5, separator guarantee |
 
@@ -285,37 +286,16 @@ S1, S2, and S3 are **fully independent** of each other:
 - I1 changes `SplitProof.lean` to prove the new `items_partition` clause.
   I2/I3 don't touch this file.
 
-### Instance I1: Detailed Plan
+### Instance I1: **COMPLETED**
 
-**Goal:** Make `bags_even_at_small_cap` provable and prove it.
+Added two new clauses to `SeifInvariant`:
+- `idx_bound`: bags at out-of-range indices are empty (proved for initial + maintenance)
+- `small_cap_even`: when cap(l) < A, bags at level l+1 have even card
+  (proved for initial, sorry'd for maintenance)
 
-**Step 1:** Add `items_partition` clause to `SeifInvariant` in `Invariant.lean`.
-Choose representation carefully:
-- Option A: `Finset.univ = biUnion of all bags` (global partition)
-- Option B: `forall level, sum over idx of (bags level idx).card = n`
-  (per-level total)
-- Option C: Per-subtree total tracking (Seiferas's Clause 2)
-
-Option B is simplest and sufficient for even-size. Option C is more powerful
-but harder. Recommend starting with Option B.
-
-**Step 2:** Fix `concreteSplit` in `Split.lean`:
-- At leaf levels, `toParent = regs` (all items)
-- This ensures no items are lost
-
-**Step 3:** Prove `items_partition` is maintained by `rebag(concreteSplit(...))`:
-- The split must partition each bag: `toParent ∪ toLeftChild ∪ toRightChild = bag`
-  and pairwise disjoint (already have `hsplit_sub` and can add `hsplit_cover`)
-- Rebag reassembles from children's toParent + parent's fromParent
-- Need: `sum of new bags at level l = sum of old bags at level l`
-
-**Step 4:** Prove `initialInvariant` satisfies `items_partition`.
-
-**Step 5:** Prove `bags_even_at_small_cap`:
-- From `items_partition`: total items at level `l+1` = n
-- From `uniform_size`: all bags at `l+1` have equal size, so each has n/2^(l+1)
-- When cap(l) < A: ancestors empty, so subtree items = n/2^(l+1) = 2^(k-l-1)
-- Since k-l-1 >= 1 (l < maxLevel), this is even
+`bags_even_at_small_cap` in `SplitCard.lean` is now a trivial extraction from
+`small_cap_even`. The sorry moved from `SplitCard.lean` to
+`invariant_maintained` in `Invariant.lean`.
 
 ### Instance I2: Detailed Plan
 

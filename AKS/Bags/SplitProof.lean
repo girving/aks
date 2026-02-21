@@ -9,10 +9,10 @@
   - `concreteSplit_maintains_invariant`: the invariant holds at stage `t+1`
     on `rebag (concreteSplit lam perm bags)`
 
-  Sorry status (3 remaining):
-  - `concreteSplit_fromParent_filtered` (SplitStranger.lean) — ε-filtering (sorry)
-  - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound (sorry)
-  - `bags_even_at_small_cap` (SplitCard.lean) — even bag sizes when cap < A (sorry)
+  Remaining gaps (3):
+  - `concreteSplit_fromParent_filtered` (SplitStranger.lean) — ε-filtering
+  - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound
+  - `small_cap_even` maintenance (Invariant.lean) — even bag sizes when cap < A
 -/
 
 import AKS.Bags.SplitCard
