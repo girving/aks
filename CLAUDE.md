@@ -33,7 +33,7 @@ scripts/lean-check --stop                   # Stop daemon (when done)
 scripts/sorries                             # Audit sorry, #exit, native_decide, axiom across codebase
 ```
 
-**Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates from the change point forward. Most checks are sub-second. Daemon auto-starts on first use (~5s). **Do not manually restart the daemon when files are added, moved, or deleted** — the daemon detects file layout changes and automatically restarts `lake serve` on the next check.
+**Always use `lean-check` for verifying changes.** It keeps Mathlib imports in memory and re-elaborates from the change point forward. Most checks are sub-second. Daemon auto-starts on first use (~5s). **Do not manually restart the daemon when files are added, moved, or deleted** — the daemon detects file layout changes and automatically restarts `lake serve` on the next check. It also shuts down automatically when `rust/lean-daemon.rs` is modified (e.g. after `git pull`), so the next check uses the updated daemon.
 
 **Before committing, run `scripts/lean-check --all`** to catch cross-file breakage.
 

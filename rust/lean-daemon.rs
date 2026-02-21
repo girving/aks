@@ -12,8 +12,8 @@ opt-level = 2
 
 //! Persistent Lean language server daemon for fast incremental checking.
 //!
-//! Rust port of scripts/lean-daemon.py with inotify-based file watching
-//! (via the `notify` crate) instead of mtime polling.
+//! Uses inotify-based file watching (via the `notify` crate) to detect
+//! dependency changes and trigger re-checking.
 //!
 //! Architecture:
 //!   A single coordinator thread owns all mutable state — no locks anywhere.
@@ -34,11 +34,11 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
-use std::os::unix::process::CommandExt;
-use std::process::{ChildStdin, ChildStdout, Command, Stdio};
 use std::os::unix::io::AsRawFd;
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
+use std::process::{ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::time::{Duration, Instant};
@@ -148,8 +148,8 @@ struct Coordinator {
     _watcher: Option<RecommendedWatcher>,
     next_lsp_id: u64,
     diagnostics: HashMap<String, Vec<Value>>,
-    progress_done: HashMap<String, bool>,
-    diagnostics_received: HashMap<String, bool>,
+    progress_done: HashSet<String>,
+    diagnostics_received: HashSet<String>,
     /// URI -> pending checks waiting for completion
     pending_checks: HashMap<String, Vec<PendingCheck>>,
     opened_files: HashMap<String, u64>,
@@ -198,8 +198,8 @@ impl Coordinator {
             _watcher: None,
             next_lsp_id: 1,
             diagnostics: HashMap::new(),
-            progress_done: HashMap::new(),
-            diagnostics_received: HashMap::new(),
+            progress_done: HashSet::new(),
+            diagnostics_received: HashSet::new(),
             pending_checks: HashMap::new(),
             opened_files: HashMap::new(),
             changed_files: HashSet::new(),
@@ -250,11 +250,8 @@ impl Coordinator {
             }
             Cmd::Shutdown { respond } => {
                 let _ = respond.send(());
-                self.shutdown();
-                let _ = fs::remove_file(&self.sock_path);
-                let _ = fs::remove_file(&self.pid_path);
                 eprintln!("[lean-daemon] Clean shutdown complete");
-                process::exit(0);
+                self.clean_exit();
             }
             Cmd::LspMessage(msg) => {
                 self.handle_lsp_message(msg);
@@ -270,12 +267,30 @@ impl Coordinator {
             }
             Cmd::DaemonSourceChanged => {
                 eprintln!("[lean-daemon] Daemon source changed, shutting down (will restart on next check)...");
-                self.shutdown();
-                let _ = fs::remove_file(&self.sock_path);
-                let _ = fs::remove_file(&self.pid_path);
-                process::exit(0);
+                self.clean_exit();
             }
         }
+    }
+
+    /// Fail all pending and queued checks (used before restart/crash recovery).
+    fn fail_all_checks(&mut self) {
+        for (_, checks) in self.pending_checks.drain() {
+            for check in checks {
+                let _ = check.respond.send(Err(DaemonError::ServerRestarted));
+            }
+        }
+        for queued in self.check_queue.drain(..) {
+            let _ = queued.respond.send(Err(DaemonError::ServerRestarted));
+        }
+        self.active_count = 0;
+    }
+
+    /// Shut down lake serve, clean up files, and exit.
+    fn clean_exit(&mut self) -> ! {
+        self.shutdown();
+        let _ = fs::remove_file(&self.sock_path);
+        let _ = fs::remove_file(&self.pid_path);
+        process::exit(0);
     }
 
     // -- Lake serve lifecycle -----------------------------------------------
@@ -311,16 +326,7 @@ impl Coordinator {
         self.diagnostics.clear();
         self.progress_done.clear();
         self.diagnostics_received.clear();
-        // Error out any pending/queued checks from before restart
-        for (_, checks) in self.pending_checks.drain() {
-            for check in checks {
-                let _ = check.respond.send(Err(DaemonError::ServerRestarted));
-            }
-        }
-        for queued in self.check_queue.drain(..) {
-            let _ = queued.respond.send(Err(DaemonError::ServerRestarted));
-        }
-        self.active_count = 0;
+        self.fail_all_checks();
         self.opened_files.clear();
         self.layout_changed = false;
 
@@ -383,12 +389,12 @@ impl Coordinator {
                 }
                 Ok(Cmd::LspCrashed) => {} // Stale from old reader after restart, ignore
                 Ok(Cmd::DaemonSourceChanged) => {
-                    self.handle_cmd(Cmd::DaemonSourceChanged); // exits process
+                    eprintln!("[lean-daemon] Daemon source changed, shutting down...");
+                    self.clean_exit();
                 }
                 Ok(Cmd::Shutdown { respond }) => {
                     let _ = respond.send(());
-                    self.shutdown();
-                    process::exit(0);
+                    self.clean_exit();
                 }
                 Err(_) => return Err(DaemonError::Timeout { operation: "initialize", seconds: 60 }),
             }
@@ -449,15 +455,7 @@ impl Coordinator {
 
     fn handle_lsp_crash(&mut self) {
         eprintln!("[lean-daemon] lake serve crashed, failing in-flight checks and restarting...");
-        for (_, checks) in self.pending_checks.drain() {
-            for check in checks {
-                let _ = check.respond.send(Err(DaemonError::ServerRestarted));
-            }
-        }
-        for queued in self.check_queue.drain(..) {
-            let _ = queued.respond.send(Err(DaemonError::ServerRestarted));
-        }
-        self.active_count = 0;
+        self.fail_all_checks();
         self.shutdown();
         if let Err(e) = self.start_lake_serve() {
             eprintln!("[lean-daemon] Failed to restart after crash: {e}");
@@ -500,7 +498,7 @@ impl Coordinator {
                             .and_then(|v| v.as_array().cloned())
                             .unwrap_or_default();
                         self.diagnostics.insert(uri.clone(), diags);
-                        self.diagnostics_received.insert(uri.clone(), true);
+                        self.diagnostics_received.insert(uri.clone());
                         self.try_signal_completion(&uri);
                     }
                 }
@@ -519,7 +517,7 @@ impl Coordinator {
                             .unwrap_or(false);
                         if processing_empty {
                             let uri = uri.to_string();
-                            self.progress_done.insert(uri.clone(), true);
+                            self.progress_done.insert(uri.clone());
                             self.try_signal_completion(&uri);
                         }
                     }
@@ -530,9 +528,7 @@ impl Coordinator {
     }
 
     fn try_signal_completion(&mut self, uri: &str) {
-        if !self.progress_done.get(uri).copied().unwrap_or(false)
-            || !self.diagnostics_received.get(uri).copied().unwrap_or(false)
-        {
+        if !self.progress_done.contains(uri) || !self.diagnostics_received.contains(uri) {
             return;
         }
 
@@ -650,8 +646,8 @@ impl Coordinator {
         let t0 = Instant::now();
 
         // Reset completion tracking
-        self.progress_done.insert(uri.clone(), false);
-        self.diagnostics_received.insert(uri.clone(), false);
+        self.progress_done.remove(&uri);
+        self.diagnostics_received.remove(&uri);
         self.diagnostics.remove(&uri);
 
         // Send didOpen or didChange
