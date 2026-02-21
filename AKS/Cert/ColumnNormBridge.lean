@@ -121,9 +121,13 @@ theorem mulAdjWith_eq_fold (f : Nat → Nat) (z : Array Int) (n d : Nat) :
     mulAdjWith f z n d = Nat.fold n (fun v _ arr =>
       arr.set! v (Nat.fold d (fun p _ acc => acc + z[f (v * d + p)]!) 0))
       (Array.replicate n (0 : Int)) := by
-  unfold mulAdjWith
-  simp only [Id.run, bind, pure, Std.Range.forIn_eq_forIn_range', Std.Range.size, Nat.sub_zero,
-    Nat.add_sub_cancel, Nat.div_one, forIn_range'_eq_fold, Nat.zero_add]
+  apply Array.ext_getElem?
+  intro i
+  simp only [mulAdjWith, Array.getElem?_ofFn]
+  rw [fold_set_getElem? _ n n (Nat.le_refl n)]
+  split
+  · congr 1; exact forIn_range_eq_fold _ _ d
+  · rfl
 
 theorem mulAdjWith_size (f : Nat → Nat) (z : Array Int) (n d : Nat) :
     (mulAdjWith f z n d).size = n := by

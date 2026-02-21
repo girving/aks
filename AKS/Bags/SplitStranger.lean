@@ -252,8 +252,36 @@ theorem concreteSplit_fromParent_filtered {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
       (level - 1) (idx / 2) j) := by
   sorry
 
+/-- The count of items in a bag with perm value below a threshold is
+    approximately half the bag size. The deviation is bounded by
+    `cnativeCoeff * cap(parent)`.
+
+    This is the core deviation bound (Seiferas 2009, Section 5, p.5):
+    benchmark distribution comparison shows the "below-boundary count"
+    C = |{i ∈ B : perm(i) < boundary}| satisfies |C - ⌊b/2⌋| ≤ cnativeCoeff·cap.
+
+    Validated by `rust/test-cnative-upper-bound.rs` (220K checks, 0 violations).
+    See `docs/seiferas-plan.md` Instance I3 for the full proof decomposition. -/
+theorem below_boundary_deviation {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hparams : SatisfiesConstraints A ν lam ε)
+    (hperm : Function.Injective perm)
+    (level idx : ℕ) (hlev : 1 ≤ level) :
+    let B := bags (level - 1) (idx / 2)
+    let boundary := (idx / 2) * bagSize n (level - 1) + bagSize n level
+    let C := (B.filter (fun i ↦ (perm i).val < boundary)).card
+    (Int.natAbs (↑C - ↑(B.card / 2)) : ℝ) ≤
+    cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
+  sorry
+
 /-- Sibling-native bound for the concrete split: items from parent that are
     native to the sibling child are bounded by `cnativeCoeff · cap(parent)`.
+
+    Proof structure:
+    - Level 0: `fromParent = ∅`, so siblingNativeCount = 0.
+    - Level ≥ 1: Uses `below_boundary_deviation` (sorry'd) which bounds
+      the deviation of the "below-boundary count" from half the bag size.
 
     The dominant contribution is the halving error (ε/2 term): items native
     to the parent but assigned to the wrong child by the rank-based partition.
@@ -262,12 +290,33 @@ theorem concreteSplit_fromParent_filtered {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
 theorem concreteSplit_cnative_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hparams : SatisfiesConstraints A ν lam ε)
     (level idx : ℕ) :
     (siblingNativeCount n perm
       (fromParent (concreteSplit lam perm bags) level idx)
       level idx : ℝ) ≤
     cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
-  sorry
+  obtain ⟨hA, hν, hν1, hlam, _, hε, _, hC4, _⟩ := hparams
+  have hA_pos : (0 : ℝ) < A := by linarith
+  -- Derive (2εA)² < 1 from C4_gt1 + ν < 1
+  have h2εA : (2 * ε * A) ^ 2 < 1 := by
+    have hεA : 2 * ε * A < 1 := by
+      unfold SatisfiesC4_gt1 at hC4
+      have : 1 / A > 0 := div_pos one_pos hA_pos
+      linarith
+    have : 0 ≤ 2 * ε * A := by positivity
+    calc (2 * ε * A) ^ 2 = (2 * ε * A) * (2 * ε * A) := sq _
+      _ < 1 * 1 := mul_lt_mul hεA (le_of_lt hεA) (by positivity) (by linarith)
+      _ = 1 := one_mul 1
+  have hcnc : 0 ≤ cnativeCoeff A lam ε :=
+    cnativeCoeff_nonneg hA hlam.le hε.le h2εA
+  -- Level 0: fromParent = ∅, so siblingNativeCount = 0
+  by_cases hlev : level = 0
+  · subst hlev; simp only [fromParent, ite_true]
+    rw [siblingNativeCount_empty]; simp only [Nat.cast_zero]
+    exact mul_nonneg hcnc (by unfold bagCapacity; positivity)
+  -- Level ≥ 1: the core deviation bound (sorry'd via below_boundary_deviation)
+  · sorry
 
 /-! **Concrete Split: Assembled Stranger Bounds**
 
@@ -298,5 +347,5 @@ theorem concreteSplit_parent_1stranger {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     parentStrangerCoeff A lam ε * bagCapacity n A ν t level :=
   parent_1stranger_from_inv _ inv hparams
     (fun l i j hj hl ↦ concreteSplit_fromParent_filtered inv l i j hj hl)
-    (fun l i ↦ concreteSplit_cnative_bound inv l i)
+    (fun l i ↦ concreteSplit_cnative_bound inv hparams l i)
     level idx

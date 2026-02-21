@@ -204,6 +204,18 @@ theorem jStrangerCount_zero_gt_level {n : ℕ} (perm : Fin n → Fin n)
   simp only [jStrangerCount, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
   exact fun _ _ ↦ not_isJStranger_gt_level h
 
+/-- No sibling-native items in an empty set. -/
+theorem siblingNativeCount_empty {n : ℕ} (perm : Fin n → Fin n) (level idx : ℕ) :
+    siblingNativeCount n perm ∅ level idx = 0 := by
+  simp [siblingNativeCount]
+
+/-- Sibling-native count is at most the set size. -/
+theorem siblingNativeCount_le_card {n : ℕ} (perm : Fin n → Fin n)
+    (regs : Finset (Fin n)) (level idx : ℕ) :
+    siblingNativeCount n perm regs level idx ≤ regs.card := by
+  simp only [siblingNativeCount]
+  exact Finset.card_filter_le _ _
+
 /-! **Stranger → Perm Value Bounds**
 
 j-strangers have perm values outside their ancestor's native interval.
