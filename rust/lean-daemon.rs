@@ -36,8 +36,10 @@ use std::fmt;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::os::unix::process::CommandExt;
+use std::process::{ChildStdin, ChildStdout, Command, Stdio};
+use std::os::unix::io::AsRawFd;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::time::{Duration, Instant};
 use std::{env, fs, process, thread};
@@ -111,6 +113,8 @@ enum Cmd {
     FileChanged(String),
     /// A .lean file was created or deleted — restart lake serve
     LayoutChanged,
+    /// LSP reader hit EOF — lake serve crashed
+    LspCrashed,
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +142,7 @@ struct Coordinator {
     cmd_tx: Sender<Cmd>,
     ready_tx: Option<SyncSender<()>>,
     lsp_stdin: Option<ChildStdin>,
-    lake_proc: Option<Child>,
+    lake_pid: Option<u32>,
     _watcher: Option<RecommendedWatcher>,
     next_lsp_id: u64,
     diagnostics: HashMap<String, Vec<Value>>,
@@ -155,6 +159,10 @@ struct Coordinator {
     active_count: usize,
     /// Checks waiting for a concurrency slot
     check_queue: VecDeque<QueuedCheck>,
+    /// Socket path for cleanup on shutdown
+    sock_path: String,
+    /// PID file path for cleanup on shutdown
+    pid_path: String,
 }
 
 impl Coordinator {
@@ -163,6 +171,8 @@ impl Coordinator {
         cmd_rx: Receiver<Cmd>,
         cmd_tx: Sender<Cmd>,
         ready_tx: SyncSender<()>,
+        sock_path: String,
+        pid_path: String,
     ) -> Self {
         let max_concurrent = env::var("LEAN_DAEMON_JOBS")
             .ok()
@@ -182,7 +192,7 @@ impl Coordinator {
             cmd_tx,
             ready_tx: Some(ready_tx),
             lsp_stdin: None,
-            lake_proc: None,
+            lake_pid: None,
             _watcher: None,
             next_lsp_id: 1,
             diagnostics: HashMap::new(),
@@ -195,6 +205,8 @@ impl Coordinator {
             max_concurrent,
             active_count: 0,
             check_queue: VecDeque::new(),
+            sock_path,
+            pid_path,
         }
     }
 
@@ -237,6 +249,9 @@ impl Coordinator {
             Cmd::Shutdown { respond } => {
                 let _ = respond.send(());
                 self.shutdown();
+                let _ = fs::remove_file(&self.sock_path);
+                let _ = fs::remove_file(&self.pid_path);
+                eprintln!("[lean-daemon] Clean shutdown complete");
                 process::exit(0);
             }
             Cmd::LspMessage(msg) => {
@@ -248,6 +263,9 @@ impl Coordinator {
             Cmd::LayoutChanged => {
                 // Clear snapshot so restart_if_stale detects the change
                 self.file_snapshot.clear();
+            }
+            Cmd::LspCrashed => {
+                self.handle_lsp_crash();
             }
         }
     }
@@ -273,11 +291,12 @@ impl Coordinator {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .current_dir(&self.project_root)
+            .process_group(0) // Own process group so shutdown kills lean workers too
             .spawn()?;
 
         self.lsp_stdin = proc.stdin.take();
         let stdout = proc.stdout.take().ok_or(DaemonError::Other("No stdout".into()))?;
-        self.lake_proc = Some(proc);
+        self.lake_pid = Some(proc.id());
 
         // Reset state
         self.next_lsp_id = 1;
@@ -302,6 +321,16 @@ impl Coordinator {
         thread::Builder::new()
             .name("lsp-reader".into())
             .spawn(move || lsp_reader_thread(tx, stdout))?;
+
+        // Monitor thread: detects lake serve death (even if lean --server
+        // keeps the pipe open, which prevents the reader from seeing EOF).
+        let tx = self.cmd_tx.clone();
+        thread::Builder::new()
+            .name("lake-monitor".into())
+            .spawn(move || {
+                let _ = proc.wait();
+                let _ = tx.send(Cmd::LspCrashed);
+            })?;
 
         // Send initialize request and wait for response
         let t0 = Instant::now();
@@ -344,6 +373,7 @@ impl Coordinator {
                 Ok(Cmd::Check { respond, .. }) => {
                     let _ = respond.send(Err(DaemonError::ServerInitializing));
                 }
+                Ok(Cmd::LspCrashed) => {} // Stale from old reader after restart, ignore
                 Ok(Cmd::Shutdown { respond }) => {
                     let _ = respond.send(());
                     self.shutdown();
@@ -384,9 +414,13 @@ impl Coordinator {
         let _ = self.lsp_notify("exit", serde_json::json!({}));
 
         self.lsp_stdin = None;
-        if let Some(mut proc) = self.lake_proc.take() {
-            let _ = proc.kill();
-            let _ = proc.wait();
+        if let Some(pid) = self.lake_pid.take() {
+            // Kill entire process group (lake serve + lean workers).
+            // lake serve is spawned with process_group(0) so its children
+            // (lean --server, lean --worker) share its pgid.
+            unsafe { libc::kill(-(pid as i32), libc::SIGKILL); }
+            // Monitor thread reaps the process via Child::wait()
+            thread::sleep(Duration::from_millis(100));
         }
         self._watcher = None;
     }
@@ -400,6 +434,23 @@ impl Coordinator {
         self.shutdown();
         if let Err(e) = self.start_lake_serve() {
             eprintln!("[lean-daemon] Failed to restart: {e}");
+        }
+    }
+
+    fn handle_lsp_crash(&mut self) {
+        eprintln!("[lean-daemon] lake serve crashed, failing in-flight checks and restarting...");
+        for (_, checks) in self.pending_checks.drain() {
+            for check in checks {
+                let _ = check.respond.send(Err(DaemonError::ServerRestarted));
+            }
+        }
+        for queued in self.check_queue.drain(..) {
+            let _ = queued.respond.send(Err(DaemonError::ServerRestarted));
+        }
+        self.active_count = 0;
+        self.shutdown();
+        if let Err(e) = self.start_lake_serve() {
+            eprintln!("[lean-daemon] Failed to restart after crash: {e}");
         }
     }
 
@@ -580,6 +631,8 @@ impl Coordinator {
             Ok(c) => c,
             Err(e) => {
                 let _ = respond.send(Err(DaemonError::Io(e)));
+                self.active_count = self.active_count.saturating_sub(1);
+                self.drain_queue();
                 return;
             }
         };
@@ -620,6 +673,8 @@ impl Coordinator {
 
         if let Err(e) = send_result {
             let _ = respond.send(Err(e));
+            self.active_count = self.active_count.saturating_sub(1);
+            self.drain_queue();
             return;
         }
 
@@ -691,7 +746,7 @@ fn lsp_reader_thread(cmd_tx: Sender<Cmd>, stdout: ChildStdout) {
                 }
             }
             None => {
-                eprintln!("[lean-daemon] LSP reader: EOF, exiting");
+                let _ = cmd_tx.send(Cmd::LspCrashed);
                 break;
             }
         }
@@ -757,6 +812,10 @@ fn project_hash(root: &Path) -> String {
 
 fn socket_path(hash: &str) -> String {
     format!("/tmp/lean-daemon-{}.sock", hash)
+}
+
+fn pid_path(hash: &str) -> String {
+    format!("/tmp/lean-daemon-{}.pid", hash)
 }
 
 fn snapshot_lean_files(root: &Path) -> HashSet<String> {
@@ -874,11 +933,14 @@ fn handle_client(cmd_tx: &Sender<Cmd>, mut stream: UnixStream) {
     let _ = stream.flush();
 }
 
-/// Global shutdown flag set by signal handlers.
-static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+/// Write end of self-pipe for signal notification.
+static SIGNAL_PIPE_WR: AtomicI32 = AtomicI32::new(-1);
 
 extern "C" fn signal_handler(_sig: libc::c_int) {
-    SHUTDOWN.store(true, Ordering::SeqCst);
+    let fd = SIGNAL_PIPE_WR.load(Ordering::SeqCst);
+    if fd >= 0 {
+        unsafe { libc::write(fd, b"x".as_ptr() as *const libc::c_void, 1); }
+    }
 }
 
 fn main() {
@@ -888,21 +950,37 @@ fn main() {
 
     let hash = project_hash(&project_root);
     let sock_path = socket_path(&hash);
+    let pid_file = pid_path(&hash);
     let _ = fs::remove_file(&sock_path);
 
-    // Install SIGTERM/SIGINT handler for clean shutdown.
-    // The handler sets SHUTDOWN; the accept loop checks it and tells
-    // the coordinator to shut down (kills lake serve, removes socket).
+    // Self-pipe for signal notification: signal handler writes a byte,
+    // poll() wakes up immediately. Zero latency, zero idle CPU.
+    let mut pipe_fds = [0i32; 2];
     unsafe {
-        libc::signal(libc::SIGTERM, signal_handler as libc::sighandler_t);
-        libc::signal(libc::SIGINT, signal_handler as libc::sighandler_t);
+        if libc::pipe(pipe_fds.as_mut_ptr()) != 0 {
+            eprintln!("[lean-daemon] Failed to create signal pipe");
+            process::exit(1);
+        }
+        // Non-blocking write end so signal handler never blocks
+        let flags = libc::fcntl(pipe_fds[1], libc::F_GETFL);
+        libc::fcntl(pipe_fds[1], libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+    let signal_read_fd = pipe_fds[0];
+    SIGNAL_PIPE_WR.store(pipe_fds[1], Ordering::SeqCst);
+
+    unsafe {
+        libc::signal(libc::SIGTERM, signal_handler as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGINT, signal_handler as *const () as libc::sighandler_t);
     }
 
     let (cmd_tx, cmd_rx) = mpsc::channel();
     let (ready_tx, ready_rx) = mpsc::sync_channel(1);
 
     // Spawn coordinator thread
-    let coord = Coordinator::new(project_root, cmd_rx, cmd_tx.clone(), ready_tx);
+    let coord = Coordinator::new(
+        project_root, cmd_rx, cmd_tx.clone(), ready_tx,
+        sock_path.clone(), pid_file.clone(),
+    );
     thread::Builder::new()
         .name("coordinator".into())
         .spawn(move || coord.run())
@@ -914,6 +992,9 @@ fn main() {
         process::exit(1);
     }
 
+    // Write our PID (overwrites lean-check's cargo PID with the actual daemon PID)
+    let _ = fs::write(&pid_file, process::id().to_string());
+
     // Bind socket
     let listener = match UnixListener::bind(&sock_path) {
         Ok(l) => l,
@@ -922,34 +1003,53 @@ fn main() {
             process::exit(1);
         }
     };
-    // Non-blocking so we can check the shutdown flag periodically
-    listener.set_nonblocking(true).ok();
     eprintln!("[lean-daemon] Listening on {sock_path}");
 
+    // poll() on listener + signal pipe: blocks until a connection or signal arrives
+    let listener_fd = listener.as_raw_fd();
+    let mut pollfds = [
+        libc::pollfd { fd: listener_fd, events: libc::POLLIN, revents: 0 },
+        libc::pollfd { fd: signal_read_fd, events: libc::POLLIN, revents: 0 },
+    ];
+
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        pollfds[0].revents = 0;
+        pollfds[1].revents = 0;
+        let ret = unsafe { libc::poll(pollfds.as_mut_ptr(), 2, -1) };
+        if ret < 0 {
+            let err = io::Error::last_os_error();
+            if err.kind() == io::ErrorKind::Interrupted {
+                continue; // EINTR — re-poll, signal pipe will be readable
+            }
+            eprintln!("[lean-daemon] poll error: {err}");
+            break;
+        }
+
+        // Signal received — shut down
+        if pollfds[1].revents & libc::POLLIN != 0 {
             eprintln!("[lean-daemon] Signal received, shutting down...");
             let (tx, rx) = mpsc::sync_channel(1);
             let _ = cmd_tx.send(Cmd::Shutdown { respond: tx });
+            // Coordinator handles cleanup and calls process::exit(0).
+            // This recv is a fallback in case the coordinator is stuck.
             let _ = rx.recv_timeout(Duration::from_secs(5));
             let _ = fs::remove_file(&sock_path);
-            eprintln!("[lean-daemon] Clean shutdown complete");
+            let _ = fs::remove_file(&pid_file);
             process::exit(0);
         }
 
-        match listener.accept() {
-            Ok((stream, _)) => {
-                stream.set_nonblocking(false).ok();
-                let tx = cmd_tx.clone();
-                thread::Builder::new()
-                    .name("client".into())
-                    .spawn(move || handle_client(&tx, stream))
-                    .ok();
+        // Connection ready
+        if pollfds[0].revents & libc::POLLIN != 0 {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    let tx = cmd_tx.clone();
+                    thread::Builder::new()
+                        .name("client".into())
+                        .spawn(move || handle_client(&tx, stream))
+                        .ok();
+                }
+                Err(e) => eprintln!("[lean-daemon] Accept error: {e}"),
             }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(Duration::from_millis(50));
-            }
-            Err(e) => eprintln!("[lean-daemon] Accept error: {e}"),
         }
     }
 }

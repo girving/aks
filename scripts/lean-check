@@ -296,7 +296,7 @@ def check_all():
     """Check all project .lean files in parallel. Auto-starts daemon if needed.
 
     All files are sent to the daemon concurrently. The daemon's coordinator
-    caps concurrency (default: min(nproc, 4), override with LEAN_DAEMON_JOBS)
+    caps concurrency (default: min(nproc, 8), override with LEAN_DAEMON_JOBS)
     and queues excess checks. Results are printed as they arrive."""
     if not daemon_running():
         if not start_daemon():
