@@ -841,6 +841,9 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       simp
     stranger_fringe_bound := by
       intro level idx
+      -- Requires item conservation (∑ card = n at every stage) to prove card ≈ cap.
+      -- Without it, stranger_bound gives stranger ≤ lam * cap but we need ≤ lam * card,
+      -- and cap ≥ card (wrong direction). See I1 plan in seiferas-plan.md.
       sorry
     idx_bound := by
       intro level idx hidx

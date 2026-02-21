@@ -7,6 +7,7 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 
 | File | Theorem | Status |
 |------|---------|--------|
+| `Invariant.lean` | `stranger_fringe_bound` maintenance | sorry (needs item conservation, see below) |
 | `Invariant.lean` | `small_cap_even` maintenance | sorry (moved from `bags_even_at_small_cap`) |
 | `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | **PROVED** |
 | `SplitStranger.lean` | `concreteSplit_cnative_bound` | sorry (75% confidence) |
@@ -147,45 +148,44 @@ touches several files and requires reproving item conservation through
 
 **Estimate:** 2-3 weeks.
 
-### S2: `concreteSplit_fromParent_filtered` (SplitStranger.lean)
+### S2: `concreteSplit_fromParent_filtered` (SplitStranger.lean) -- **PROVED**
 
 **Statement:** Among items sent from parent to child (`fromParent`), the
 j-stranger count at the parent level is at most `eps` times the full parent
 bag's j-stranger count.
 
-**Confidence: 90%.** The statement is almost certainly correct.
+**Status: PROVED.** LHS = 0 because all j-strangers have extreme perm values
+(via `isJStranger_antitone` + `isJStranger_one_perm_bound`), giving them
+extreme ranks (via `rankInBag_lt_count_below` / `rankInBag_ge_count_below`),
+which places them in the fringe, not in fromParent (middle items).
 
-**Key insight (from Rust validation):** LHS = 0 in ALL tested cases (max
-ratio 0.0000). This means for the concrete split, ALL parent-level
-strangers are captured by the fringe. The bound `eps * strangerCount` is
-very loose -- the true bound is 0.
+**Prerequisite added:** `stranger_fringe_bound` clause added to `SeifInvariant`
+(clause 7): `jStrangerCount(..., 1) ≤ lam * card`. This ensures the number of
+1-strangers fits in the fringe size `⌊lam * card⌋₊`. The clause's maintenance
+in `invariant_maintained` is sorry'd (see below).
 
-**Why LHS = 0:** j-strangers (j >= 1) at level `l` have `perm` values
-outside their native bag's interval at level `l`. This means their `perm`
-value is extreme relative to the bag. Since `rankInBag` orders items by
-`perm` value, j-strangers get extreme `rankInBag` values (near 0 or near
-b-1). The fringe captures the extreme-ranked positions (rank < f or
-rank >= f+2h), so all j-strangers end up in `toParent`, never in
-`toLeftChild`/`toRightChild`.
+### S2a: `stranger_fringe_bound` maintenance (Invariant.lean)
 
-**Proof strategy:**
-1. Use `isJStranger_perm_bound` to get: j-stranger => `perm` value outside
-   native interval at level `l`
-2. Use `rankInBag_lt_count_below` / `rankInBag_ge_count_below` to convert:
-   extreme `perm` value => extreme `rankInBag`
-3. Show: extreme `rankInBag` => captured by fringe (rank < f or rank >= f+2h)
-4. Conclude: j-strangers in `fromParent` = 0
+**Statement:** After rebag, the 1-stranger count relative to (level, idx)
+is at most `lam * (rebag card)`.
 
-The argument is multi-step but each step is well-defined. The main risk is
-step 2 (connecting perm-value bounds to rank bounds) which requires counting
-how many bag items have `perm` below/above a threshold.
+**Status: sorry'd.** NOT provable from the current invariant.
 
-**Files touched:** `SplitStranger.lean` (proof body at line ~253), possibly
-`Split.lean` (new rank-perm lemmas).
+**Root cause:** `stranger_bound` (clause 3) gives `stranger ≤ lam * cap`, but
+`stranger_fringe_bound` needs `stranger ≤ lam * card`. Since `capacity_bound`
+gives `card ≤ cap` (wrong direction), `lam * cap ≥ lam * card` and the
+implication fails. When `cap > card`, the stranger count can exceed
+`lam * card` while satisfying `lam * cap`.
 
-**Independent of S1.** Does not need item conservation or leaf-level fixes.
+**Fix: item conservation.** Seiferas's paper implicitly assumes items always
+occupy exactly one bag, so `∑ card = n` at every stage, keeping `card ≈ cap`.
+Adding this to the invariant would make `stranger_fringe_bound` follow from
+`stranger_bound`. This is part of the I1 infrastructure work.
 
-**Estimate:** 2-4 weeks.
+**Alternative fix:** Change `fringeSize` to use `cap` instead of `card`, but
+this breaks `childSendSize` when `cap >> card` (fringe can exceed card/2).
+Would require proving `card ≈ cap` anyway, so item conservation is the
+cleaner path.
 
 ### S3: `concreteSplit_cnative_bound` (SplitStranger.lean)
 
@@ -297,39 +297,20 @@ Added two new clauses to `SeifInvariant`:
 `small_cap_even`. The sorry moved from `SplitCard.lean` to
 `invariant_maintained` in `Invariant.lean`.
 
-### Instance I2: Detailed Plan
+### Instance I2: **COMPLETED**
 
-**Goal:** Prove `concreteSplit_fromParent_filtered`.
+**Goal:** Prove `concreteSplit_fromParent_filtered`. **PROVED.**
 
-**Strategy (prove LHS = 0):**
+Added `stranger_fringe_bound` clause to `SeifInvariant` (clause 7).
+The filtering proof shows LHS = 0 via:
+1. j-stranger → 1-stranger (`isJStranger_antitone`)
+2. 1-stranger → perm outside native interval (`isJStranger_one_perm_bound`)
+3. Extreme perm → extreme rank (`rankInBag_lt_count_below` / `rankInBag_ge_count_below`)
+4. Stranger count ≤ fringeSize (from `stranger_fringe_bound`)
+5. Extreme rank → in fringe → not in fromParent
 
-**Step 1:** Prove rank-perm ordering lemma: for items in a bag, if item `x`
-has `perm x < perm y` then `rankInBag perm bag x <= rankInBag perm bag y`.
-This should follow from `rankInBag` being defined as the count of items with
-smaller `perm` value.
-
-**Step 2:** Prove j-stranger -> extreme rank: if `isJStranger n perm x l i j`
-(j >= 1), then either:
-- `perm x < nativeIntervalLo n l i` => `rankInBag perm bag x < count_below`
-  => rank is small (near 0)
-- `perm x >= nativeIntervalHi n l i` => `rankInBag perm bag x >= count_above`
-  => rank is large (near b)
-
-**Step 3:** Prove extreme rank -> fringe: if rank < f or rank >= f+2h, then
-item is in `toParent` (fringe), not in `toLeftChild`/`toRightChild`.
-
-**Step 4:** Combine: j-strangers from parent bag are in `toParent`, so
-j-strangers in `fromParent` (= toLeftChild or toRightChild) = 0.
-
-**Step 5:** Conclude: `jStrangerCount ... fromParent ... <= eps * jStrangerCount`
-since LHS = 0.
-
-**Key definitions to understand:**
-- `rankInBag` (Split.lean): `(regs.filter (fun j => perm j < perm i)).card`
-- `isJStranger` (Defs.lean): `nativeBagIdx n perm r level idx != idx'`
-  where `idx'` is the j-ancestor's index
-- `fringeSize` (Split.lean): `floor(lam * b)`
-- `fromParent` in rebag: items sent to child from parent's split
+**Remaining gap:** `stranger_fringe_bound` maintenance in `invariant_maintained`
+is sorry'd — requires item conservation (see S2a above).
 
 ### Instance I3: Detailed Plan
 
