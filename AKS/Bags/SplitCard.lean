@@ -573,6 +573,52 @@ private theorem concreteSplit_components_disjoint {n : ℕ} (lam : ℝ)
     | (rw [Finset.disjoint_left]; intro x hx₁ hx₂
        simp only [Finset.mem_filter] at hx₁ hx₂; omega) }
 
+/-- At non-leaf levels, the three split components cover the entire bag.
+    Combined with `concreteSplit_components_disjoint`, this gives a partition.
+    The three rank predicates (`< f`, `[f, f+h)`, `[f+h, f+2h)`, `≥ f+2h`)
+    cover all naturals, so every item in the bag is in exactly one component. -/
+theorem concreteSplit_partition {n : ℕ} (lam : ℝ) (perm : Fin n → Fin n)
+    (bags : BagAssignment n) (level idx : ℕ) (hleaf : ¬(maxLevel n ≤ level)) :
+    bags level idx =
+      (concreteSplit lam perm bags level idx).toParent ∪
+      (concreteSplit lam perm bags level idx).toLeftChild ∪
+      (concreteSplit lam perm bags level idx).toRightChild := by
+  simp only [concreteSplit, if_neg hleaf]
+  ext x
+  simp only [Finset.mem_union, Finset.mem_filter]
+  constructor
+  · intro hm
+    by_cases h1 : rankInBag perm (bags level idx) x < fringeSize lam (bags level idx).card
+    · left; left; exact ⟨hm, Or.inl h1⟩
+    · push_neg at h1
+      by_cases h2 : rankInBag perm (bags level idx) x <
+          fringeSize lam (bags level idx).card + childSendSize lam (bags level idx).card
+      · left; right; exact ⟨hm, h1, h2⟩
+      · push_neg at h2
+        by_cases h3 : rankInBag perm (bags level idx) x <
+            fringeSize lam (bags level idx).card + 2 * childSendSize lam (bags level idx).card
+        · right; exact ⟨hm, h2, h3⟩
+        · push_neg at h3
+          left; left; exact ⟨hm, Or.inr h3⟩
+  · rintro ((⟨hm, _⟩ | ⟨hm, _⟩) | ⟨hm, _⟩) <;> exact hm
+
+/-- Cardinality version: at non-leaf levels, the bag size equals the sum of the
+    three disjoint components. -/
+theorem concreteSplit_card_partition {n : ℕ} (lam : ℝ) (perm : Fin n → Fin n)
+    (bags : BagAssignment n) (level idx : ℕ) (hleaf : ¬(maxLevel n ≤ level)) :
+    (bags level idx).card =
+      (concreteSplit lam perm bags level idx).toParent.card +
+      (concreteSplit lam perm bags level idx).toLeftChild.card +
+      (concreteSplit lam perm bags level idx).toRightChild.card := by
+  set s := concreteSplit lam perm bags level idx
+  have hpart := concreteSplit_partition lam perm bags level idx hleaf
+  have hdisj := concreteSplit_components_disjoint lam perm bags level idx
+  -- (P ∪ L) ∪ R with Disjoint (P ∪ L) R and Disjoint P L
+  have hdPL_R : Disjoint (s.toParent ∪ s.toLeftChild) s.toRightChild :=
+    Finset.disjoint_union_left.mpr ⟨hdisj.2.1, hdisj.2.2⟩
+  rw [hpart, Finset.card_union_of_disjoint hdPL_R,
+      Finset.card_union_of_disjoint hdisj.1]
+
 /-- `hrebag_disjoint`: bags at distinct positions are disjoint after rebagging. -/
 theorem concreteSplit_hrebag_disjoint {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
