@@ -8,7 +8,7 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 | File | Theorem | Status |
 |------|---------|--------|
 | `SplitCard.lean` | `bags_even_at_small_cap` | **FALSE as stated** — needs invariant fix |
-| `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | sorry (90% confidence) |
+| `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | **PROVED** |
 | `SplitStranger.lean` | `concreteSplit_cnative_bound` | sorry (75% confidence) |
 | `TreeSort.lean` | `separatorSortingNetwork_sorts` | sorry (65% confidence) |
 

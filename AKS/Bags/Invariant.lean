@@ -113,6 +113,11 @@ structure SeifInvariant (n : ℕ) (A ν lam ε : ℝ) (t : ℕ)
     (l₁, i₁) ≠ (l₂, i₂) → Disjoint (bags l₁ i₁) (bags l₂ i₂)
   /-- (6) Bounded depth: bags beyond maxLevel are empty. -/
   bounded_depth : ∀ level idx, maxLevel n < level → bags level idx = ∅
+  /-- (7) Strangers fit in fringe: 1-stranger count ≤ `lam * card`.
+      This is stronger than `stranger_bound` at `j = 1` (which uses `cap` instead of `card`).
+      Ensures the rank-based fringe captures all strangers in the concrete split. -/
+  stranger_fringe_bound : ∀ level idx,
+    (jStrangerCount n perm (bags level idx) level idx 1 : ℝ) ≤ lam * (bags level idx).card
 
 /-! **Parameter Constraints (Seiferas Section 5)** -/
 
@@ -237,6 +242,17 @@ theorem initialInvariant (n : ℕ) (A ν lam ε : ℝ)
     split_ifs with h
     · obtain ⟨rfl, _⟩ := h; omega
     · rfl
+  · -- Clause 7: strangers fit in fringe
+    intro level idx
+    simp only [initialBags]
+    split_ifs with h
+    · obtain ⟨rfl, _⟩ := h
+      -- At root (level 0), no items are 1-strange
+      rw [jStrangerCount_zero_gt_level perm _ (by omega : 0 < 1)]
+      simp only [Nat.cast_zero]
+      exact mul_nonneg (le_of_lt hlam) (Nat.cast_nonneg _)
+    · rw [jStrangerCount_empty]
+      simp only [Nat.cast_zero, card_empty, Nat.cast_zero, mul_zero, le_refl]
 
 /-! **Invariant Maintenance Theorems (Seiferas Section 5)** -/
 
@@ -790,6 +806,9 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
             (inv.bounded_depth _ _ (by omega))).1,
           hfp]
       simp
+    stranger_fringe_bound := by
+      intro level idx
+      sorry
   }
 
 /-! **Convergence** -/

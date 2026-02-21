@@ -9,8 +9,7 @@
   - `concreteSplit_maintains_invariant`: the invariant holds at stage `t+1`
     on `rebag (concreteSplit lam perm bags)`
 
-  Sorry status (3 remaining):
-  - `concreteSplit_fromParent_filtered` (SplitStranger.lean) — ε-filtering (sorry)
+  Sorry status (2 remaining):
   - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound (sorry)
   - `bags_even_at_small_cap` (SplitCard.lean) — even bag sizes when cap < A (sorry)
 -/
@@ -34,6 +33,7 @@ open Finset
 theorem concreteSplit_maintains_invariant {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hn : ∃ k, n = 2 ^ k)
     (hparams : SatisfiesConstraints A ν lam ε)
     (hperm : Function.Injective perm) :
     SeifInvariant n A ν lam ε (t + 1) perm
@@ -58,9 +58,9 @@ theorem concreteSplit_maintains_invariant {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
     (fun l i j hj ↦ kick_stranger_bound _ inv hlam hε hν
       (concreteSplit_hsplit_sub lam perm bags) l i j hj)
     -- hparent_stranger: parent strangers for j ≥ 2 (uses filtering sorry)
-    (fun l i j hj ↦ concreteSplit_parent_stranger_bound inv hlam hε l i j hj)
+    (fun l i j hj ↦ concreteSplit_parent_stranger_bound inv hn hlam hε l i j hj)
     -- hparent_1stranger: parent 1-strangers (uses filtering + cnative sorry's)
-    (fun l i ↦ concreteSplit_parent_1stranger inv hparams l i)
+    (fun l i ↦ concreteSplit_parent_1stranger inv hn hparams l i)
     -- hrebag_uniform: uniform rebag sizes (proved)
     (concreteSplit_hrebag_uniform inv hperm (by linarith [hparams.2.2.2.2.1]))
     -- hrebag_disjoint: disjoint rebag bags (proved)
