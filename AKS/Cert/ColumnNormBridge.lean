@@ -162,40 +162,32 @@ theorem mulAdjEntry_eq_getD (neighbors : Array Nat) (z : Array Int)
 
 /-! **`psdColumnStep` sub-expression specifications** -/
 
-/-- `zCol` (the column extraction loop in `psdColumnStep`) produces
+/-- `zCol` (the `Array.ofFn` in `psdColumnStep`) produces
     `certEntryInt certBytes k j` for `k ≤ j` and `0` for `k > j`. -/
-private theorem zCol_spec (certBytes : ByteArray) (n j : Nat) (hj : j < n) (v : Nat) :
-    (Nat.fold (j + 1) (fun i _ arr =>
-      arr.set! i (decodeBase85Int certBytes (j * (j + 1) / 2 + i)))
-      (Array.replicate n (0 : Int)))[v]? =
+private theorem zCol_spec (certBytes : ByteArray) (n j : Nat) (v : Nat) :
+    (Array.ofFn fun (i : Fin n) =>
+      if i.val ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + i.val)
+      else 0)[v]? =
     if v < n then some (certEntryInt certBytes v j) else none := by
-  rw [fold_set_getElem? _ n (j + 1) (by omega)]
-  split
-  case isTrue hv =>
-    congr 1
-    simp only [certEntryInt]
-    by_cases hvj : v ≤ j
-    · rw [if_pos hvj, if_pos (by omega)]
-    · rw [if_neg hvj, if_neg (by omega)]
-  case isFalse => rfl
+  simp only [Array.getElem?_ofFn, certEntryInt]; split <;> rfl
 
 /-- `getD` version of `zCol_spec`. -/
-private theorem zCol_getD (certBytes : ByteArray) (n j k : Nat) (hj : j < n) (hk : k < n) :
-    (Nat.fold (j + 1) (fun i _ arr =>
-      arr.set! i (decodeBase85Int certBytes (j * (j + 1) / 2 + i)))
-      (Array.replicate n (0 : Int))).getD k 0 =
+private theorem zCol_getD (certBytes : ByteArray) (n j k : Nat) (hk : k < n) :
+    (Array.ofFn fun (i : Fin n) =>
+      if i.val ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + i.val)
+      else 0).getD k 0 =
     certEntryInt certBytes k j :=
-  getD_of_getElem?_some (by rw [zCol_spec certBytes n j hj]; rw [if_pos hk])
+  getD_of_getElem?_some (by rw [zCol_spec certBytes n j]; rw [if_pos hk])
 
 /-- `colSum` (the column sum loop) equals `colSumZ certBytes n j`. -/
 private theorem colSum_spec (certBytes : ByteArray) (n j : Nat) (hj : j < n) :
     Nat.fold (j + 1) (fun k _ acc => acc +
-      (Nat.fold (j + 1) (fun i _ arr =>
-        arr.set! i (decodeBase85Int certBytes (j * (j + 1) / 2 + i)))
-        (Array.replicate n (0 : Int))).getD k 0) 0 =
+      (Array.ofFn fun (i : Fin n) =>
+        if i.val ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + i.val)
+        else 0).getD k 0) 0 =
     colSumZ certBytes n j := by
   rw [fold_sum_congr _ (fun k ↦ certEntryInt certBytes k j)
-    (fun k hk ↦ zCol_getD certBytes n j k hj (by omega))]
+    (fun k hk ↦ zCol_getD certBytes n j k (by omega))]
   rw [← sumTo_eq_fold]
   simp only [colSumZ]
   exact (sumTo_tail_zero _ (j + 1) n (by omega)
@@ -274,9 +266,8 @@ private theorem psdColumnStep_pij_eq
     (j i : Nat) (hj : j < n) (hi : i < n)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) :
     let neighbors := decodeNeighbors rotBytes n d
-    let zCol := Nat.fold (j + 1) (fun k _ arr =>
-      arr.set! k (decodeBase85Int certBytes (j * (j + 1) / 2 + k)))
-      (Array.replicate n (0 : Int))
+    let zCol : Array Int := .ofFn fun (k : Fin n) =>
+      if k.val ≤ j then decodeBase85Int certBytes (j * (j + 1) / 2 + k.val) else 0
     let bz := mulAdjPre neighbors zCol n d
     let colSum := Nat.fold (j + 1) (fun k _ acc => acc + zCol.getD k 0) 0
     c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum =
@@ -288,7 +279,7 @@ private theorem psdColumnStep_pij_eq
   rw [hmulAdj_eq]
   -- Step 1: zCol[i]! = certEntryInt certBytes i j
   have hzCol_i : (zCol : Array Int).getD i 0 = certEntryInt certBytes i j :=
-    zCol_getD certBytes n j i hj hi
+    zCol_getD certBytes n j i hi
   -- Step 2: colSum_imp = colSumZ certBytes n j = sumTo ... n
   have hcolSum : colSum_imp = sumTo (fun l ↦ certEntryInt certBytes l j) n := by
     change _ = colSumZ certBytes n j
@@ -298,9 +289,9 @@ private theorem psdColumnStep_pij_eq
       adjMulPure rotBytes (fun k ↦ certEntryInt certBytes k j) n d v := by
     intro v hv
     rw [mulAdjPre_getD_eq_adjMulPure rotBytes zCol n d v hv
-      (by rw [fold_set_size]; omega) hinv]
+      Array.size_ofFn hinv]
     exact adjMulPure_congr rotBytes _ _ n d v (by omega)
-      (fun k hk ↦ zCol_getD certBytes n j k hj hk)
+      (fun k hk ↦ zCol_getD certBytes n j k hk)
   -- Step 4: (mulAdjPre neighbors bz n d).getD i 0 = adjMulPure rotBytes (...) n d i
   have hb2z_i : (mulAdjPre neighbors bz n d).getD i 0 = adjMulPure rotBytes
       (fun v ↦ adjMulPure rotBytes (fun k ↦ certEntryInt certBytes k j) n d v) n d i := by
@@ -323,10 +314,8 @@ private def psdG (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : 
     (j i : Nat) : Int :=
   let neighbors := decodeNeighbors rotBytes n d
   let colStart := j * (j + 1) / 2
-  let zCol := Id.run do
-    let mut arr := Array.replicate n (0 : Int)
-    for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
-    return arr
+  let zCol : Array Int := .ofFn fun (k : Fin n) =>
+    if k.val ≤ j then decodeBase85Int certBytes (colStart + k.val) else 0
   let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0
@@ -574,10 +563,8 @@ private def psdColumnStepProd (neighbors : Array Nat) (d : Nat)
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
     (state : PSDChunkResult) (j : Nat) : Int × Bool × Int :=
   let colStart := j * (j + 1) / 2
-  let zCol := Id.run do
-    let mut arr := Array.replicate n (0 : Int)
-    for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
-    return arr
+  let zCol : Array Int := .ofFn fun (i : Fin n) =>
+    if i.val ≤ j then decodeBase85Int certBytes (colStart + i.val) else 0
   let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0

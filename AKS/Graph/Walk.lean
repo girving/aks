@@ -369,9 +369,35 @@ theorem Graph.spectralGap_contract {n : ℕ} (G : Graph n) {m : ℕ}
 
 /-! **Regular Graph Compatibility** -/
 
-/-- For a regular graph, `Graph.spectralGap` agrees with `spectralGap`. -/
-theorem spectralGap_toGraph {n d : ℕ} (G : RegularGraph n d) :
+/-- For a regular graph, `Graph.spectralGap` agrees with `spectralGap` (when `d > 0`).
+    When `d = 0`, isolated vertices have degree-weighted mean 0 but uniform mean is nonzero. -/
+theorem spectralGap_toGraph {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d) :
     G.toGraph.spectralGap = spectralGap G := by
-  sorry
+  have hdeg : ∀ w : Fin n, G.toGraph.deg w = d := fun w ↦ G.toGraph_deg hd w
+  -- Walk operator: normalizedWalkCLM = walkCLM
+  have hw : G.toGraph.normalizedWalkCLM = G.walkCLM := by
+    refine ContinuousLinearMap.ext (fun f ↦ ?_); apply PiLp.ext; intro v
+    show G.toGraph.normalizedWalkCLM f v = G.walkCLM f v
+    simp only [Graph.normalizedWalkCLM_apply, RegularGraph.walkCLM_apply, hdeg]
+    -- (1/√d) * ∑_{e:src=v} f(target e) / √d = (∑_i f(nbr v i)) / d
+    -- Factor 1/√d out of each summand
+    have rw_div : ∀ e ∈ Finset.univ.filter (G.toGraph.src · = v),
+        f (G.toGraph.target e) / Real.sqrt ↑d =
+        f (G.toGraph.target e) * (1 / Real.sqrt ↑d) := fun e _ ↦ by ring
+    rw [Finset.sum_congr rfl rw_div, ← Finset.sum_mul,
+      G.toGraph_sum_target hd v (fun w ↦ f w)]
+    -- (√d)⁻¹ * (S * (√d)⁻¹) = S / d
+    have hsd : Real.sqrt (d : ℝ) ≠ 0 := Real.sqrt_ne_zero'.mpr (Nat.cast_pos.mpr hd)
+    field_simp; rw [Real.sq_sqrt (Nat.cast_nonneg (α := ℝ) d)]; ring
+  -- Mean projection: degreeMeanCLM = meanCLM n
+  have hm : G.toGraph.degreeMeanCLM = meanCLM n := by
+    refine ContinuousLinearMap.ext (fun f ↦ ?_); apply PiLp.ext; intro v
+    show G.toGraph.degreeMeanCLM f v = meanCLM n f v
+    simp only [Graph.degreeMeanCLM_apply, meanCLM_apply, hdeg, RegularGraph.toGraph_halfs]
+    -- √d * (∑_w f(w) * √d) / (n*d) = (∑ f) / n
+    rw [← Finset.sum_mul, mul_comm (∑ w, f w) (Real.sqrt ↑d), ← mul_assoc,
+      Real.mul_self_sqrt (Nat.cast_nonneg _)]
+    push_cast; rw [mul_comm (↑n : ℝ) ↑d, mul_div_mul_left _ _ (Nat.cast_ne_zero.mpr (by omega) : (d : ℝ) ≠ 0)]
+  unfold Graph.spectralGap spectralGap; rw [hw, hm]
 
 end

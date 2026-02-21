@@ -164,6 +164,71 @@ theorem RegularGraph.toGraph_halfs {n d : ℕ} (G : RegularGraph n d) :
   rfl
 
 
+/-! **Regular Graph Embedding Properties** -/
+
+/-- Target vertex in `toGraph` expressed via the rotation map. -/
+private theorem RegularGraph.toGraph_target_eq {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d)
+    (e : Fin (n * d)) :
+    G.toGraph.target e = G.neighbor (rgVertex hd e) (rgPort hd e) := by
+  show G.toGraph.src (G.toGraph.rot e) = (G.rot (rgVertex hd e, rgPort hd e)).1
+  rw [show G.toGraph.rot e = rgRot G hd e from dif_pos hd]
+  simp only [rgRot]
+  -- G.toGraph.src (rgEncode result) = result.1
+  -- Both .val are result.1.val * d + result.2.val) / d = result.1.val
+  apply Fin.ext
+  show ((G.rot (rgVertex hd e, rgPort hd e)).1.val * d +
+    (G.rot (rgVertex hd e, rgPort hd e)).2.val) / d = _
+  rw [Nat.add_comm, Nat.add_mul_div_right _ _ hd, Nat.div_eq_of_lt (G.rot _).2.isLt]
+  omega
+
+/-- Round-trip: rgEncode(v, rgPort(e)) = e when src(e) = v. -/
+private theorem rgEncode_rgPort {n d : ℕ} (hd : 0 < d) (v : Fin n) (e : Fin (n * d))
+    (hv : e.val / d = v.val) : rgEncode (v, rgPort hd e) = e := by
+  apply Fin.ext; simp only [rgEncode, rgPort]
+  show v.val * d + e.val % d = e.val
+  have := Nat.div_add_mod e.val d; rw [hv] at this
+  have := Nat.mul_comm d v.val; omega
+
+/-- Each vertex of a regular graph has degree `d` in `toGraph`. -/
+theorem RegularGraph.toGraph_deg {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d)
+    (v : Fin n) : G.toGraph.deg v = d := by
+  show (univ.filter (fun e => G.toGraph.src e = v)).card = d
+  have heq : (univ.filter (fun e => G.toGraph.src e = v)).card = (univ (α := Fin d)).card :=
+    Finset.card_nbij' (fun e ↦ rgPort hd e) (fun i ↦ rgEncode (v, i))
+      -- Forward: filter → univ (trivial)
+      (fun _ _ ↦ mem_coe.mpr (mem_univ _))
+      -- Backward: univ → filter
+      (fun i _ ↦ mem_coe.mpr (mem_filter.mpr ⟨mem_univ _,
+        Fin.ext (congr_arg Fin.val (rgVertex_encode hd (v, i)))⟩))
+      -- Left inverse: encode(v, port(e)) = e
+      (fun e he ↦ rgEncode_rgPort hd v e
+        (congr_arg Fin.val ((mem_filter.mp (mem_coe.mp he)).2)))
+      -- Right inverse: port(encode(v, i)) = i
+      (fun i _ ↦ rgPort_encode hd (v, i))
+  rw [heq, card_univ, Fintype.card_fin]
+
+/-- Summing over half-edges at vertex `v` in `toGraph` equals summing over ports. -/
+theorem RegularGraph.toGraph_sum_target {n d : ℕ} (G : RegularGraph n d) (hd : 0 < d)
+    (v : Fin n) (f : Fin n → ℝ) :
+    ∑ e ∈ univ.filter (G.toGraph.src · = v), f (G.toGraph.target e) =
+      ∑ i : Fin d, f (G.neighbor v i) := by
+  apply Finset.sum_nbij' (fun e ↦ rgPort hd e) (fun i ↦ rgEncode (v, i))
+  -- Forward: filter → univ (trivial)
+  · intro _ _; exact mem_univ _
+  -- Backward: univ → filter
+  · intro i _
+    exact mem_filter.mpr ⟨mem_univ _, Fin.ext (congr_arg Fin.val (rgVertex_encode hd (v, i)))⟩
+  -- Left inverse: encode(v, port(e)) = e
+  · intro e he
+    exact rgEncode_rgPort hd v e (congr_arg Fin.val (mem_filter.mp he).2)
+  -- Right inverse: port(encode(v, i)) = i
+  · intro i _; exact rgPort_encode hd (v, i)
+  -- Function agrees: target(e) = neighbor(v, port(e))
+  · intro e he
+    have hv : e.val / d = v.val := congr_arg Fin.val (mem_filter.mp he).2
+    rw [G.toGraph_target_eq hd, show rgVertex hd e = v from Fin.ext hv]
+
+
 /-! **Double Counting** -/
 
 /-- Double-counting via the rotation bijection: summing `g(target e)` over

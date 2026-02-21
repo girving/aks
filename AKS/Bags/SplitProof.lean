@@ -60,7 +60,7 @@ theorem concreteSplit_maintains_invariant {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
     -- hparent_stranger: parent strangers for j ≥ 2 (uses filtering sorry)
     (fun l i j hj ↦ concreteSplit_parent_stranger_bound inv hn hlam hε l i j hj)
     -- hparent_1stranger: parent 1-strangers (uses filtering + cnative sorry's)
-    (fun l i ↦ concreteSplit_parent_1stranger inv hn hparams l i)
+    (fun l i ↦ concreteSplit_parent_1stranger inv hn hparams hperm l i)
     -- hrebag_uniform: uniform rebag sizes (proved)
     (concreteSplit_hrebag_uniform inv hperm (by linarith [hparams.2.2.2.2.1]))
     -- hrebag_disjoint: disjoint rebag bags (proved)

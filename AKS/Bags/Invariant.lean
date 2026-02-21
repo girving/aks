@@ -4,15 +4,16 @@
   Defines the invariant maintained by the bag-tree sorting network
   (Seiferas 2009, Sections 4–5) and states the maintenance theorems.
 
-  The invariant has eight clauses:
+  The invariant has nine clauses:
   1. Alternating levels empty: `(t + level) % 2 ≠ 0 → empty`
   2. Uniform size: all bags at an active level have equal size
   3. Capacity: items ≤ n · ν^t · A^level
   4. Strangers: j-strangers ≤ lam * eps^(j-1) * capacity
   5. Partition: distinct (level, idx) pairs have disjoint register sets
   6. Bounded depth: bags beyond maxLevel are empty
-  7. Index bound: bags at out-of-range indices are empty
-  8. Even size at small cap: when cap(l) < A, bags at level l+1 have even card
+  7. Strangers fit in fringe: 1-stranger count ≤ lam * card
+  8. Index bound: bags at out-of-range indices are empty
+  9. Even size at small cap: when cap(l) < A, bags at level l+1 have even card
 
   All definitions validated by Rust simulation (`rust/test-bags.rs`):
   - Invariant holds with adversarial separator for n = 8..16384

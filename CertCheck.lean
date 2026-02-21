@@ -152,10 +152,8 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
     (state : PSDChunkResult) (j : Nat) : PSDChunkResult :=
   let colStart := j * (j + 1) / 2
-  let zCol := Id.run do
-    let mut arr := Array.replicate n (0 : Int)
-    for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
-    return arr
+  let zCol : Array Int := .ofFn fun (i : Fin n) =>
+    if i.val ≤ j then decodeBase85Int certBytes (colStart + i.val) else 0
   let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0
