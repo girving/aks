@@ -38,7 +38,7 @@ These depend on substantial unfinished work, including the tree-based sorting co
 
 Requires [elan](https://github.com/leanprover/elan) (Lean), [rustup](https://rustup.rs/) (Rust), and optionally [uv](https://github.com/astral-sh/uv) (Python scripts).
 
-**Linux (Ubuntu/Debian):**
+**Linux:**
 ```bash
 curl https://elan.dev/install.sh -sSf | sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  # system cargo is too old
