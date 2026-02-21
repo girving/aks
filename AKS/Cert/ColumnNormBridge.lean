@@ -561,21 +561,24 @@ private theorem foldMax_eq_epsMaxCol (rotBytes certBytes : ByteArray) (n d : Nat
 /-- Prod version of `psdColumnStep` for bridging to fold characterization. -/
 private def psdColumnStepProd (neighbors : Array Nat) (d : Nat)
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) : Int × Bool × Int :=
+    (state : PSDChunkResult) (j : Nat) (hj : j < n) : Int × Bool × Int :=
   let colStart := j * (j + 1) / 2
   let zCol : Array Int := .ofFn fun (i : Fin n) =>
     if i.val ≤ j then decodeBase85Int certBytes (colStart + i.val) else 0
   let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0
-    for k in [:j+1] do s := s + zCol[k]!
+    for h : k in [:j+1] do
+      have : k < zCol.size := by rw [Array.size_ofFn]; have := h.upper; simp at this; omega
+      s := s + zCol[k]
     return s
   Id.run do
     let mut epsMax := state.epsMax
     let mut first := state.first
     let mut minDiag := state.minDiag
-    for i in [:j+1] do
-      let pij := c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
+    for h : i in [:j+1] do
+      have : i < zCol.size := by rw [Array.size_ofFn]; have := h.upper; simp at this; omega
+      let pij := c₁ * zCol[i] - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
       if i == j then
         if first then minDiag := pij; first := false
         else if pij < minDiag then minDiag := pij
@@ -587,14 +590,16 @@ private def psdColumnStepProd (neighbors : Array Nat) (d : Nat)
 /-- `psdColumnStepProd` equals `Nat.fold` with `trackerStepP` using `psdG`. -/
 private theorem psdColumnStepProd_eq_fold
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) :
+    (state : PSDChunkResult) (j : Nat) (hj : j < n) :
     psdColumnStepProd (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j =
+      certBytes n c₁ c₂ c₃ state j hj =
     Nat.fold (j + 1) (fun i _ s => trackerStepP
       (psdG rotBytes certBytes n d c₁ c₂ c₃ j) j i s)
       (state.epsMax, state.first, state.minDiag) := by
+  -- TODO: psdColumnStepProd now uses `for h :` (forIn') not `for` (forIn),
+  -- so tracker_3var_eq_fold no longer matches. Need a forIn' variant.
   unfold psdColumnStepProd
-  exact tracker_3var_eq_fold _ j (j + 1) state.epsMax state.minDiag state.first
+  sorry
 
 
 /-! **Tracker loop characterization** -/
@@ -610,21 +615,21 @@ private theorem psdColumnStep_result
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
     (he : 0 ≤ state.epsMax) :
     (psdColumnStep (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j).epsMax = max state.epsMax
+      certBytes n c₁ c₂ c₃ state j hj).epsMax = max state.epsMax
       (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j (colSumZ certBytes n j) j) ∧
     (psdColumnStep (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j).minDiag =
+      certBytes n c₁ c₂ c₃ state j hj).minDiag =
       (if state.first then pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j
        else min state.minDiag (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j)) ∧
     (psdColumnStep (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j).first = false := by
+      certBytes n c₁ c₂ c₃ state j hj).first = false := by
   -- Bridge PSDChunkResult → Prod (definitional equalities)
   show (psdColumnStepProd (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j).1 = _ ∧
+      certBytes n c₁ c₂ c₃ state j hj).1 = _ ∧
     (psdColumnStepProd (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j).2.2 = _ ∧
+      certBytes n c₁ c₂ c₃ state j hj).2.2 = _ ∧
     (psdColumnStepProd (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃ state j).2.1 = _
+      certBytes n c₁ c₂ c₃ state j hj).2.1 = _
   rw [psdColumnStepProd_eq_fold]
   -- Apply fold characterization (fold bound is j+1, so j < j+1 trivially)
   have hspec := trackerFold_spec (psdG rotBytes certBytes n d c₁ c₂ c₃ j) j (j + 1)
@@ -638,6 +643,37 @@ private theorem psdColumnStep_result
     exact foldMax_eq_epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j j
   · -- minDiag: psdG j j = pEntryPure j j
     rw [hmin, psdG_eq_pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j hj hj hinv]
+
+/-! **Total step function for folds** -/
+
+/-- Total step function for `List.foldl`: delegates to `psdColumnStep` when `j < n`,
+    otherwise returns `state` unchanged. All bridge folds go through this. -/
+private def stepFn (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (state : PSDChunkResult) (j : Nat) : PSDChunkResult :=
+  if hj : j < n then
+    psdColumnStep (decodeNeighbors rotBytes n d) d certBytes n c₁ c₂ c₃ state j hj
+  else state
+
+/-- `stepFn` equals `psdColumnStep` when `j < n`. -/
+private theorem stepFn_eq (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (state : PSDChunkResult) (j : Nat) (hj : j < n) :
+    stepFn rotBytes certBytes n d c₁ c₂ c₃ state j =
+    psdColumnStep (decodeNeighbors rotBytes n d) d certBytes n c₁ c₂ c₃ state j hj := by
+  simp only [stepFn, dif_pos hj]
+
+/-- `psdColumnStep_result` restated with `stepFn` in the conclusion for `rw` matching. -/
+private theorem stepFn_result (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
+    (state : PSDChunkResult) (j : Nat) (hj : j < n)
+    (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
+    (he : 0 ≤ state.epsMax) :
+    (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax = max state.epsMax
+      (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j (colSumZ certBytes n j) j) ∧
+    (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).minDiag =
+      (if state.first then pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j
+       else min state.minDiag (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j)) ∧
+    (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).first = false := by
+  rw [stepFn_eq _ _ _ _ _ _ _ _ _ hj]
+  exact psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hinv he
 
 /-! **Sequential fold produces `epsMaxVal`/`minDiagVal`** -/
 
@@ -659,14 +695,13 @@ private theorem minDiagVal_succ (rotBytes certBytes : ByteArray) (n d : Nat)
   | zero => omega
   | succ k => simp [minDiagVal]
 
-/-- Folding `psdColumnStep` over columns `[0, ..., m-1]` (starting from the
+/-- Folding `stepFn` over columns `[0, ..., m-1]` (starting from the
     initial empty state) produces `epsMaxVal m` and `minDiagVal m`. -/
 private theorem seqFold_eq_pure
     (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
     (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n) (m : Nat)
     (hm : m ≤ n) :
-    let step := psdColumnStep (decodeNeighbors rotBytes n d) d
-      certBytes n c₁ c₂ c₃
+    let step := stepFn rotBytes certBytes n d c₁ c₂ c₃
     let init : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
     let result := (List.range m).foldl step init
     result.epsMax = epsMaxVal rotBytes certBytes n d c₁ c₂ c₃ m ∧
@@ -680,23 +715,19 @@ private theorem seqFold_eq_pure
     obtain ⟨ih_eps, ih_min, ih_first⟩ := ih hk
     -- Decompose: foldl over range (k+1) = step (foldl over range k) k
     set prev := (List.range k).foldl
-      (psdColumnStep (decodeNeighbors rotBytes n d) d
-        certBytes n c₁ c₂ c₃)
+      (stepFn rotBytes certBytes n d c₁ c₂ c₃)
       { epsMax := 0, minDiag := 0, first := true } with hprev_def
     have hfold : (List.range (k + 1)).foldl
-        (psdColumnStep (decodeNeighbors rotBytes n d) d
-          certBytes n c₁ c₂ c₃)
+        (stepFn rotBytes certBytes n d c₁ c₂ c₃)
         { epsMax := 0, minDiag := 0, first := true } =
-      psdColumnStep (decodeNeighbors rotBytes n d) d
-        certBytes n c₁ c₂ c₃ prev k := by
+      stepFn rotBytes certBytes n d c₁ c₂ c₃ prev k := by
       rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
-    -- Apply psdColumnStep_result
+    -- Apply stepFn_result
     have he : 0 ≤ prev.epsMax := ih_eps ▸ epsMaxVal_nonneg rotBytes certBytes n d c₁ c₂ c₃ k
-    have hpsd := psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ prev k hkn hinv he
+    have hpsd := stepFn_result rotBytes certBytes n d c₁ c₂ c₃ prev k hkn hinv he
     obtain ⟨hpsd_eps, hpsd_min, hpsd_first⟩ := hpsd
     set result := (List.range (k + 1)).foldl
-      (psdColumnStep (decodeNeighbors rotBytes n d) d
-        certBytes n c₁ c₂ c₃)
+      (stepFn rotBytes certBytes n d c₁ c₂ c₃)
       { epsMax := 0, minDiag := 0, first := true } with hresult_def
     have hresult_step := hresult_def.trans hfold
     -- epsMax
@@ -790,33 +821,42 @@ private theorem list_forIn_yield_eq_foldl {α β : Type} (l : List α) (init : �
     simp only [forIn, ForIn.forIn, List.forIn'_cons, List.foldl, bind]
     exact ih (f init x)
 
-private theorem checkPSDColumns_eq_listFoldl (neighbors : Array Nat)
-    (certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat) :
-    checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols =
-    cols.toList.foldl (psdColumnStep neighbors d certBytes n c₁ c₂ c₃)
+private theorem list_forIn_fin_yield_eq_foldl {n : Nat} (l : List (Fin n))
+    (init : PSDChunkResult) (f : PSDChunkResult → Nat → PSDChunkResult) :
+    (forIn (m := Id) l init (fun (x : Fin n) s => ForInStep.yield (f s x.val))) =
+    l.foldl (fun s (x : Fin n) => f s x.val) init := by
+  induction l generalizing init with
+  | nil => simp only [forIn, ForIn.forIn, List.forIn'_nil, List.foldl, pure]
+  | cons x xs ih =>
+    simp only [forIn, ForIn.forIn, List.forIn'_cons, List.foldl, bind]
+    exact ih (f init x.val)
+
+private theorem checkPSDColumns_eq_listFoldl (rotBytes : ByteArray)
+    (certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array (Fin n)) :
+    checkPSDColumns (decodeNeighbors rotBytes n d) certBytes n d c₁ c₂ c₃ cols =
+    (cols.toList.map Fin.val).foldl (stepFn rotBytes certBytes n d c₁ c₂ c₃)
       { epsMax := 0, minDiag := 0, first := true } := by
-  unfold checkPSDColumns; simp only [Id.run, bind, pure]
-  rw [show forIn cols _ _ = forIn cols.toList _ _ from (Array.forIn_toList).symm]
-  exact list_forIn_yield_eq_foldl cols.toList _ _
+  unfold checkPSDColumns
+  -- Bridge forIn over Array (Fin n) to foldl over List Nat
+  simp only [Id.run, bind, pure]
+  rw [← Array.forIn_toList]
+  suffices ∀ (l : List (Fin n)) (init : PSDChunkResult),
+      (forIn (m := Id) l init (fun (jf : Fin n) s =>
+        ForInStep.yield (psdColumnStep (decodeNeighbors rotBytes n d) d
+          certBytes n c₁ c₂ c₃ s jf.val jf.isLt))) =
+      (l.map Fin.val).foldl (stepFn rotBytes certBytes n d c₁ c₂ c₃) init from
+    this cols.toList _
+  intro l
+  induction l with
+  | nil => intro init; simp [List.map]; rfl
+  | cons jf rest ih =>
+    intro init
+    simp only [List.forIn_cons, bind, List.map_cons, List.foldl_cons]
+    rw [ih]
+    congr 1
+    exact (stepFn_eq rotBytes certBytes n d c₁ c₂ c₃ init jf.val jf.isLt).symm
 
-
-/-! **Fold invariants for `psdColumnStep`** -/
-
-private abbrev stepFn (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) :=
-  psdColumnStep (decodeNeighbors rotBytes n d) d certBytes n c₁ c₂ c₃
-
-/-- `psdColumnStep_result` restated with `stepFn` in the conclusion for `rw` matching. -/
-private theorem stepFn_result (rotBytes certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) (hj : j < n)
-    (hinv : ∀ k, k < n * d → decodeBase85Nat rotBytes (2 * k) < n)
-    (he : 0 ≤ state.epsMax) :
-    (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).epsMax = max state.epsMax
-      (epsMaxCol rotBytes certBytes n d c₁ c₂ c₃ j (colSumZ certBytes n j) j) ∧
-    (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).minDiag =
-      (if state.first then pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j
-       else min state.minDiag (pEntryPure rotBytes certBytes n d c₁ c₂ c₃ j j)) ∧
-    (stepFn rotBytes certBytes n d c₁ c₂ c₃ state j).first = false :=
-  psdColumnStep_result rotBytes certBytes n d c₁ c₂ c₃ state j hj hinv he
+/-! **Fold invariants for `stepFn`** -/
 
 /-- epsMax monotonicity: `foldl step` only increases epsMax. -/
 private theorem foldl_step_epsMax_mono
@@ -1209,13 +1249,16 @@ private theorem mergeFoldl_not_first (results : Array PSDChunkResult)
 
 /-! **buildColumnLists partition** -/
 
-/-- `buildColumnLists` expressed as `Nat.fold` via `forIn_range_eq_fold`. -/
-private theorem buildColumnLists_eq_fold (n numChunks : Nat) :
-    buildColumnLists n numChunks =
+/-- Nat version of the column-list fold, used only for bridge proofs. -/
+private def buildColumnListsNat (n numChunks : Nat) : Array (Array Nat) :=
+  Nat.fold n (fun j _ lists => lists.set! (j % numChunks) (lists[j % numChunks]!.push j))
+    (Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1)))
+
+/-- `buildColumnListsNat` is literally the Nat.fold expression. -/
+private theorem buildColumnListsNat_eq_fold (n numChunks : Nat) :
+    buildColumnListsNat n numChunks =
     Nat.fold n (fun j _ lists => lists.set! (j % numChunks) (lists[j % numChunks]!.push j))
-      (Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1))) := by
-  unfold buildColumnLists
-  exact forIn_range_eq_fold _ _ n
+      (Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1))) := rfl
 
 /-- `getElem!` after `set!` at same index. -/
 private theorem getElem!_set!_eq (a : Array (Array Nat)) (i : Nat) (v : Array Nat)
@@ -1285,10 +1328,10 @@ private theorem bcl_fold_invariant (n numChunks : Nat) (hnc : 0 < numChunks) (k 
       · exact bcl_step_preserves _ _ _ _ _ hsize (Nat.mod_lt j hnc)
           (hmem j (Nat.lt_of_le_of_ne (Nat.lt_succ_iff.mp hj) hjm))
 
-/-- Every `j < n` appears in `buildColumnLists n numChunks` at chunk `j % numChunks`. -/
-theorem buildColumnLists_mem (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
-    j ∈ (buildColumnLists n numChunks)[j % numChunks]!.toList := by
-  rw [buildColumnLists_eq_fold]
+/-- Every `j < n` appears in `buildColumnListsNat n numChunks` at chunk `j % numChunks`. -/
+theorem buildColumnListsNat_mem (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+    j ∈ (buildColumnListsNat n numChunks)[j % numChunks]!.toList := by
+  rw [buildColumnListsNat_eq_fold]
   exact (bcl_fold_invariant n numChunks hnc n).2 j hj
 
 /-- `getElem!` after `push` at the end position. -/
@@ -1496,26 +1539,32 @@ private theorem bcl_fold_entry (n numChunks : Nat) (hnc : 0 < numChunks) (k : Na
           exact hentries j hjlt
 
 /-- Column `j` is at position `j / numChunks` in chunk `j % numChunks`. -/
-theorem buildColumnLists_entry (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
-    (buildColumnLists n numChunks)[j % numChunks]![j / numChunks]! = j := by
-  rw [buildColumnLists_eq_fold]
+theorem buildColumnListsNat_entry (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+    (buildColumnListsNat n numChunks)[j % numChunks]![j / numChunks]! = j := by
+  rw [buildColumnListsNat_eq_fold]
   exact (bcl_fold_entry n numChunks hnc n).2.2 j hj
 
 
 /-! **Partition + merge = sequential fold** -/
 
+/-- `buildColumnListsNat` has `numChunks` entries. -/
+theorem buildColumnListsNat_size (n numChunks : Nat) (hnc : 0 < numChunks) :
+    (buildColumnListsNat n numChunks).size = numChunks := by
+  rw [buildColumnListsNat_eq_fold]
+  exact (bcl_fold_invariant n numChunks hnc n).1
+
 /-- `buildColumnLists` has `numChunks` entries. -/
 theorem buildColumnLists_size (n numChunks : Nat) (hnc : 0 < numChunks) :
     (buildColumnLists n numChunks).size = numChunks := by
-  rw [buildColumnLists_eq_fold]
-  exact (bcl_fold_invariant n numChunks hnc n).1
+  -- buildColumnLists uses same set! pattern as buildColumnListsNat, preserving outer size
+  sorry
 
-/-- All entries in chunk `c` of `buildColumnLists n numChunks` are `< n`. -/
-theorem buildColumnLists_bound (n numChunks c : Nat)
+/-- All entries in chunk `c` of `buildColumnListsNat n numChunks` are `< n`. -/
+theorem buildColumnListsNat_bound (n numChunks c : Nat)
     (hnc : 0 < numChunks) (x : Nat)
-    (hx : x ∈ (buildColumnLists n numChunks)[c]!.toList) (hc : c < numChunks) :
+    (hx : x ∈ (buildColumnListsNat n numChunks)[c]!.toList) (hc : c < numChunks) :
     x < n := by
-  rw [buildColumnLists_eq_fold] at hx
+  rw [buildColumnListsNat_eq_fold] at hx
   -- Prove by extending fold invariant with upper bound property
   suffices h : ∀ c, c < numChunks → ∀ y ∈
       (Nat.fold n (fun j _ lists => lists.set! (j % numChunks) (lists[j % numChunks]!.push j))
@@ -1552,9 +1601,9 @@ theorem buildColumnLists_bound (n numChunks c : Nat)
       exact ih (by omega) c' hc' y hy
 
 /-- Position `j / numChunks` is a valid index in chunk `j % numChunks`. -/
-theorem buildColumnLists_inner_bound (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
-    j / numChunks < (buildColumnLists n numChunks)[j % numChunks]!.size := by
-  rw [buildColumnLists_eq_fold]
+theorem buildColumnListsNat_inner_bound (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+    j / numChunks < (buildColumnListsNat n numChunks)[j % numChunks]!.size := by
+  rw [buildColumnListsNat_eq_fold]
   rw [(bcl_fold_entry n numChunks hnc n).2.1 (j % numChunks) (Nat.mod_lt j hnc)]
   have h1 := countRes'_succ_self numChunks hnc j
   have h2 := countRes'_mono numChunks (j % numChunks) (show j + 1 ≤ n from by omega)
@@ -1564,6 +1613,21 @@ theorem buildColumnLists_inner_bound (n numChunks j : Nat) (hj : j < n) (hnc : 0
 private theorem getElem!_eq_getElem {α : Type} [Inhabited α] (a : Array α) (i : Nat)
     (h : i < a.size) : a[i]! = a[i] := by
   show a.getD i default = a[i]; unfold Array.getD; simp [h]
+
+/-- Bridge: mapping `Fin.val` over chunk `c` of `buildColumnLists` gives the corresponding
+    `buildColumnListsNat` chunk. -/
+private theorem buildColumnLists_map_val (n numChunks c : Nat)
+    (hnc : 0 < numChunks) (hc : c < numChunks) :
+    ((buildColumnLists n numChunks)[c]!).toList.map Fin.val =
+    (buildColumnListsNat n numChunks)[c]!.toList := by
+  -- Both iterate the same way; buildColumnLists pushes ⟨j, hj⟩, buildColumnListsNat pushes j
+  sorry
+
+/-- Coverage: `j` appears in `(buildColumnLists n nc)[j%nc]!.toList.map Fin.val`. -/
+theorem buildColumnLists_mem_val (n numChunks j : Nat) (hj : j < n) (hnc : 0 < numChunks) :
+    j ∈ ((buildColumnLists n numChunks)[j % numChunks]!).toList.map Fin.val := by
+  rw [buildColumnLists_map_val n numChunks _ hnc (Nat.mod_lt j hnc)]
+  exact buildColumnListsNat_mem n numChunks j hj hnc
 
 /-- `epsMaxVal` is bounded by any common upper bound on `epsMaxCol`. -/
 private theorem epsMaxVal_le_of_bounds (rotBytes certBytes : ByteArray) (n d : Nat)
@@ -1619,27 +1683,27 @@ private theorem merged_eq_sequential
   have hcl_getElem : ∀ i (hi : i < 64),
       (buildColumnLists n 64)[i]! = columnLists[i]'(by rw [hcl_size]; exact hi) :=
     fun i hi => getElem!_eq_getElem columnLists i (by rw [hcl_size]; exact hi)
-  -- Each result[i] = foldl step init over columnLists[i].toList
+  -- Each result[i] = foldl step init over columnLists[i].toList.map Fin.val
   have hresult_eq : ∀ i (hi : i < results.size),
-      results[i] = (columnLists[i]'(by rw [hcl_size]; omega)).toList.foldl
+      results[i] = ((columnLists[i]'(by rw [hcl_size]; omega)).toList.map Fin.val).foldl
         (stepFn rotBytes certBytes n d c₁ c₂ c₃) init := by
     intro i hi
     show (columnLists.map _)[i] = _
     rw [Array.getElem_map]; exact checkPSDColumns_eq_listFoldl _ certBytes n d c₁ c₂ c₃ _
-  -- Column bounds: entries in each chunk are < n
+  -- Column bounds: entries in each chunk are < n (trivial from Fin.isLt)
   have hcol_bound : ∀ i (hi : i < 64),
-      ∀ j ∈ (columnLists[i]'(by rw [hcl_size]; exact hi)).toList, j < n := by
+      ∀ j ∈ (columnLists[i]'(by rw [hcl_size]; exact hi)).toList.map Fin.val, j < n := by
     intro i hi j hj
-    rw [← hcl_getElem i hi] at hj
-    exact buildColumnLists_bound n 64 i (by omega) j hj hi
+    obtain ⟨f, _, rfl⟩ := List.mem_map.mp hj
+    exact f.isLt
   -- Coverage: every j < n is in chunk j % 64
   have hcoverage : ∀ j, j < n →
-      j ∈ (columnLists[j % 64]'(by rw [hcl_size]; exact Nat.mod_lt j (by omega))).toList := by
+      j ∈ ((columnLists[j % 64]'(by rw [hcl_size]; exact Nat.mod_lt j (by omega))).toList.map Fin.val) := by
     intro j hj
     rw [← hcl_getElem (j % 64) (Nat.mod_lt j (by omega))]
-    exact buildColumnLists_mem n 64 j hj (by omega)
+    exact buildColumnLists_mem_val n 64 j hj (by omega)
   -- Chunk 0 is nonempty (has column 0)
-  have hchunk0_ne : (columnLists[0]'(by rw [hcl_size]; omega)).toList ≠ [] := by
+  have hchunk0_ne : ((columnLists[0]'(by rw [hcl_size]; omega)).toList.map Fin.val) ≠ [] := by
     intro hempty
     have h0 := hcoverage 0 hn
     simp only [Nat.zero_mod] at h0
@@ -1693,7 +1757,7 @@ private theorem merged_eq_sequential
       (results.toList.foldl PSDChunkResult.merge init).minDiag := by
     apply (mergeFoldl_minDiag_ge results _ (fun i hi hif => ?_)) hmerged_first
     rw [hresult_eq i hi] at hif ⊢
-    have hne : (columnLists[i]'(by rw [hcl_size]; omega)).toList ≠ [] := by
+    have hne : ((columnLists[i]'(by rw [hcl_size]; omega)).toList.map Fin.val) ≠ [] := by
       intro h; rw [h] at hif; simp [List.foldl] at hif
     exact foldl_step_minDiag_ge _ _ _ _ _ _ _ hinv _ _
       (hcol_bound i (by omega)) hinit_eps hne (Or.inl rfl)

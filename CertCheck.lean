@@ -150,21 +150,24 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
     and `mulAdjEntry` for `(B²·z)[i]` inline (only for `i ≤ j`). -/
 @[inline] def psdColumnStep (neighbors : Array Nat) (d : Nat)
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
-    (state : PSDChunkResult) (j : Nat) : PSDChunkResult :=
+    (state : PSDChunkResult) (j : Nat) (hj : j < n) : PSDChunkResult :=
   let colStart := j * (j + 1) / 2
   let zCol : Array Int := .ofFn fun (i : Fin n) =>
     if i.val ≤ j then decodeBase85Int certBytes (colStart + i.val) else 0
   let bz := mulAdjPre neighbors zCol n d
   let colSum := Id.run do
     let mut s : Int := 0
-    for k in [:j+1] do s := s + zCol[k]!
+    for h : k in [:j+1] do
+      have : k < zCol.size := by rw [Array.size_ofFn]; have := h.upper; simp at this; omega
+      s := s + zCol[k]
     return s
   Id.run do
     let mut epsMax := state.epsMax
     let mut minDiag := state.minDiag
     let mut first := state.first
-    for i in [:j+1] do
-      let pij := c₁ * zCol[i]! - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
+    for h : i in [:j+1] do
+      have : i < zCol.size := by rw [Array.size_ofFn]; have := h.upper; simp at this; omega
+      let pij := c₁ * zCol[i] - c₂ * mulAdjEntry neighbors bz d i + c₃ * colSum
       if i == j then
         if first then minDiag := pij; first := false
         else if pij < minDiag then minDiag := pij
@@ -179,21 +182,22 @@ def PSDChunkResult.merge (a b : PSDChunkResult) : PSDChunkResult :=
     structurally identical to `checkPSDCertificate` per-column via shared
     `psdColumnStep`. -/
 def checkPSDColumns (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) : PSDChunkResult :=
+    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array (Fin n)) : PSDChunkResult :=
   let step := psdColumnStep neighbors d certBytes n c₁ c₂ c₃
   Id.run do
     let mut state : PSDChunkResult := { epsMax := 0, minDiag := 0, first := true }
-    for j in columns do state := step state j
+    for jf in columns do state := step state jf.val jf.isLt
     return state
 
 /-- Build interleaved column partition: column `j` goes to chunk `j % numChunks`.
     Shared between sequential and parallel PSD checks. -/
-def buildColumnLists (n numChunks : Nat) : Array (Array Nat) :=
+def buildColumnLists (n numChunks : Nat) : Array (Array (Fin n)) :=
   Id.run do
     let mut lists := Array.replicate numChunks (Array.mkEmpty (n / numChunks + 1))
-    for j in [:n] do
+    for h : j in [:n] do
+      have hj : j < n := by have := h.upper; simp at this; omega
       let c := j % numChunks
-      lists := lists.set! c (lists[c]!.push j)
+      lists := lists.set! c (lists[c]!.push ⟨j, hj⟩)
     return lists
 
 /-- Merge an array of chunk results into a single result, then check the
@@ -353,7 +357,7 @@ def checkPSDCertificatePar (rotBytes certBytes : ByteArray)
     immediately distribute `z[k]` to `bz[neighbors[k*d+p]]` for all ports `p`.
     `B²z[i]` is then gathered inline from `bz`. -/
 def checkPSDColumnsFull (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array Nat) :
+    (n d : Nat) (c₁ c₂ c₃ : Int) (columns : Array (Fin n)) :
     PSDChunkResult × Array Int :=
   Id.run do
     let mut epsMax : Int := 0
@@ -363,7 +367,8 @@ def checkPSDColumnsFull (neighbors : Array Nat) (certBytes : ByteArray)
     let mut zCol := Array.replicate n (0 : Int)
     let mut bz := Array.replicate n (0 : Int)
 
-    for j in columns do
+    for jf in columns do
+      let j := jf.val
       let colStart := j * (j + 1) / 2
 
       -- Zero bz for this column (zCol is overwritten before read, no zeroing needed)

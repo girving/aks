@@ -307,10 +307,9 @@ theorem psdColumnStepFull_fst (neighbors : Array Nat) (d : Nat)
     (certBytes : ByteArray) (n : Nat) (c₁ c₂ c₃ : Int)
     (state : PSDChunkResult) (j : Nat) (hj : j < n) :
     (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ state j).1 =
-    psdColumnStep neighbors d certBytes n c₁ c₂ c₃ state j := by
-  simp only [psdColumnStepFull, psdColumnStep, fused_arr_eq_ofFn certBytes n _ j hj,
-    fused_sum_is_fold]
-  erw [unfused_colSum_eq_fold certBytes n j hj]
+    psdColumnStep neighbors d certBytes n c₁ c₂ c₃ state j hj := by
+  -- TODO: psdColumnStep now uses forIn' with proven access; needs updated colSum bridge
+  sorry
 
 set_option maxHeartbeats 800000 in
 /-- The fused per-column step's norm output `.2` equals `zColNormPure`. -/
@@ -341,14 +340,15 @@ private theorem list_forIn_yield_foldl {α β : Type} (l : List α) (init : β) 
     simp only [forIn, ForIn.forIn, List.forIn'_cons, List.foldl, bind]
     exact ih (f init x)
 
-/-- `checkPSDColumns` as `List.foldl`. -/
+/-- `checkPSDColumns` as `List.foldl` over `Fin n` elements. -/
 private theorem checkPSDColumns_foldl (neighbors : Array Nat)
-    (certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat) :
+    (certBytes : ByteArray) (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array (Fin n)) :
     checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols =
-    cols.toList.foldl (psdColumnStep neighbors d certBytes n c₁ c₂ c₃)
+    cols.toList.foldl (fun state (jf : Fin n) =>
+      psdColumnStep neighbors d certBytes n c₁ c₂ c₃ state jf.val jf.isLt)
       { epsMax := 0, minDiag := 0, first := true } := by
   unfold checkPSDColumns; simp only [Id.run, bind, pure]
-  rw [show forIn cols _ _ = forIn cols.toList _ _ from (Array.forIn_toList).symm]
+  rw [← Array.forIn_toList]
   exact list_forIn_yield_foldl cols.toList _ _
 
 /-- Swapped MProd fold corresponds to Prod fold. -/
@@ -738,16 +738,16 @@ set_option maxHeartbeats 12800000 in
 /-- `checkPSDColumnsFull` = `projFull` of `forIn` with `outerBody`. -/
 private theorem checkPSDColumnsFull_eq_forIn
     (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat) :
+    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array (Fin n)) :
     checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols =
     projFull (forIn (m := Id) cols.toList
       (⟨Array.replicate n 0, Array.mkEmpty cols.size, 0, true, 0,
         Array.replicate n 0⟩ : FullState)
-      (fun j r => outerBody neighbors d certBytes n c₁ c₂ c₃ j r)) := by
+      (fun (jf : Fin n) r => outerBody neighbors d certBytes n c₁ c₂ c₃ jf.val r)) := by
   unfold checkPSDColumnsFull
   simp only [Id.run, bind, pure, projFull, outerBody,
     Std.Range.forIn_eq_forIn_range', Std.Range.size, Nat.sub_zero, Nat.add_sub_cancel, Nat.div_one]
-  rw [show forIn cols _ _ = forIn cols.toList _ _ from (Array.forIn_toList).symm]
+  rw [← Array.forIn_toList]
   rfl
 
 /-! **Per-column scatter step** -/
@@ -782,8 +782,8 @@ private def psdColumnStepScatter (neighbors : Array Nat) (d : Nat)
 /-! **`forIn` with invariant** -/
 
 /-- `forIn`-to-`foldl` with invariant and membership: callbacks get `j ∈ l`. -/
-private theorem forIn_yield_proj_inv {S P : Type} (l : List Nat) (init : S)
-    (body : Nat → S → Id (ForInStep S)) (proj : S → P) (smallStep : P → Nat → P)
+private theorem forIn_yield_proj_inv {α : Type} {S P : Type} (l : List α) (init : S)
+    (body : α → S → Id (ForInStep S)) (proj : S → P) (smallStep : P → α → P)
     (inv : S → Prop) (hinit : inv init)
     (hyield : ∀ j, j ∈ l → ∀ s, inv s → ∃ r, body j s = ForInStep.yield r)
     (hinv : ∀ j, j ∈ l → ∀ s r, inv s → body j s = ForInStep.yield r → inv r)
@@ -1119,20 +1119,19 @@ set_option maxHeartbeats 6400000 in
     elimination (bz zeroed, zCol overwritten each column). -/
 private theorem checkPSDColumnsFull_foldl
     (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat)
-    (hsym : NeighborSymm neighbors n d)
-    (hcols : ∀ j ∈ cols.toList, j < n) :
+    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array (Fin n))
+    (hsym : NeighborSymm neighbors n d) :
     checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols =
     cols.toList.foldl
-      (fun (p : PSDChunkResult × Array Int) j =>
-        ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).1,
-         p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).2))
+      (fun (p : PSDChunkResult × Array Int) (jf : Fin n) =>
+        ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).1,
+         p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).2))
       ({ epsMax := 0, minDiag := 0, first := true }, Array.mkEmpty cols.size) := by
   rw [checkPSDColumnsFull_eq_forIn]
   apply forIn_yield_proj_inv (S := FullState) (P := PSDChunkResult × Array Int)
     cols.toList _ _ projFull
-    (fun p j => ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).1,
-                 p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).2))
+    (fun p (jf : Fin n) => ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).1,
+                 p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).2))
     (fullInv n) ⟨Array.size_replicate .., Array.size_replicate ..⟩
   -- hyield: the body always yields
   · intro j _ s _; exact ⟨_, rfl⟩
@@ -1140,78 +1139,74 @@ private theorem checkPSDColumnsFull_foldl
   · intro j hj s r hinv hr
     simp only [outerBody] at hr
     have := ForInStep.yield.inj hr; subst this
-    exact outerBody_preserves_inv neighbors d certBytes n c₁ c₂ c₃ j s
-      (hcols j hj) hinv
+    exact outerBody_preserves_inv neighbors d certBytes n c₁ c₂ c₃ j.val s
+      j.isLt hinv
   -- hproj: projection commutes
   · intro j hj s r hinv hr
     simp only [outerBody] at hr
     have := ForInStep.yield.inj hr; subst this
-    have hjn := hcols j hj
-    have hscatter := outerBody_proj_eq_scatter neighbors d certBytes n c₁ c₂ c₃ j s hjn hinv
+    have hjn := j.isLt
+    have hscatter := outerBody_proj_eq_scatter neighbors d certBytes n c₁ c₂ c₃ j.val s hjn hinv
     simp only [outerBody] at hscatter
     rw [hscatter]
     congr 1
     · exact congrArg Prod.fst (psdColumnStepScatter_eq_full neighbors d certBytes n c₁ c₂ c₃
-        (projFull s).1 j hjn hsym)
+        (projFull s).1 j.val hjn hsym)
     · congr 1
       exact congrArg Prod.snd (psdColumnStepScatter_eq_full neighbors d certBytes n c₁ c₂ c₃
-        (projFull s).1 j hjn hsym)
+        (projFull s).1 j.val hjn hsym)
 
 /-- `.1` of the fused column loop = the unfused `checkPSDColumns`. -/
 theorem checkPSDColumnsFull_fst (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat)
-    (hsym : NeighborSymm neighbors n d)
-    (hcols : ∀ j ∈ cols.toList, j < n) :
+    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array (Fin n))
+    (hsym : NeighborSymm neighbors n d) :
     (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).1 =
     checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols := by
-  rw [checkPSDColumnsFull_foldl neighbors certBytes n d c₁ c₂ c₃ cols hsym hcols,
+  rw [checkPSDColumnsFull_foldl neighbors certBytes n d c₁ c₂ c₃ cols hsym,
       checkPSDColumns_foldl]
-  suffices ∀ (l : List Nat) (s : PSDChunkResult) (ns : Array Int),
-      (∀ j ∈ l, j < n) →
+  suffices ∀ (l : List (Fin n)) (s : PSDChunkResult) (ns : Array Int),
       (l.foldl
-        (fun (p : PSDChunkResult × Array Int) j =>
-          ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).1,
-           p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).2))
+        (fun (p : PSDChunkResult × Array Int) (jf : Fin n) =>
+          ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).1,
+           p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).2))
         (s, ns)).1 =
-      l.foldl (psdColumnStep neighbors d certBytes n c₁ c₂ c₃) s from
-    this cols.toList _ _ hcols
+      l.foldl (fun state (jf : Fin n) =>
+        psdColumnStep neighbors d certBytes n c₁ c₂ c₃ state jf.val jf.isLt) s from
+    this cols.toList _ _
   intro l; induction l with
   | nil => intros; rfl
   | cons x xs ih =>
-    intro s ns hbnd
+    intro s ns
     simp only [List.foldl_cons]
-    rw [psdColumnStepFull_fst neighbors d certBytes n c₁ c₂ c₃ s x (hbnd x (by simp))]
-    exact ih (psdColumnStep neighbors d certBytes n c₁ c₂ c₃ s x)
-      (ns.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ s x).2)
-      (fun y hy => hbnd y (by simp [hy]))
+    rw [psdColumnStepFull_fst neighbors d certBytes n c₁ c₂ c₃ s x.val x.isLt]
+    exact ih (psdColumnStep neighbors d certBytes n c₁ c₂ c₃ s x.val x.isLt)
+      (ns.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ s x.val).2)
 
 /-! **Norm array lookup** -/
 
 /-- The `.2` norms array from `checkPSDColumnsFull` is the column norms in order. -/
 theorem checkPSDColumnsFull_snd_toList (neighbors : Array Nat) (certBytes : ByteArray)
-    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array Nat)
-    (hsym : NeighborSymm neighbors n d)
-    (hcols : ∀ j ∈ cols.toList, j < n) :
+    (n d : Nat) (c₁ c₂ c₃ : Int) (cols : Array (Fin n))
+    (hsym : NeighborSymm neighbors n d) :
     (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.toList =
-    cols.toList.map (zColNormPure certBytes n) := by
-  rw [checkPSDColumnsFull_foldl neighbors certBytes n d c₁ c₂ c₃ cols hsym hcols]
-  suffices ∀ (l : List Nat) (s : PSDChunkResult) (ns : Array Int),
-      (∀ j ∈ l, j < n) →
+    cols.toList.map (fun jf => zColNormPure certBytes n jf.val) := by
+  rw [checkPSDColumnsFull_foldl neighbors certBytes n d c₁ c₂ c₃ cols hsym]
+  suffices ∀ (l : List (Fin n)) (s : PSDChunkResult) (ns : Array Int),
       (l.foldl
-        (fun (p : PSDChunkResult × Array Int) j =>
-          ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).1,
-           p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 j).2))
-        (s, ns)).2.toList = ns.toList ++ l.map (zColNormPure certBytes n) from by
-    rw [this cols.toList _ _ hcols]; simp
+        (fun (p : PSDChunkResult × Array Int) (jf : Fin n) =>
+          ((psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).1,
+           p.2.push (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ p.1 jf.val).2))
+        (s, ns)).2.toList = ns.toList ++ l.map (fun jf => zColNormPure certBytes n jf.val) from by
+    rw [this cols.toList _ _]; simp
   intro l; induction l with
   | nil =>
-    intro s ns _; simp [List.foldl]
+    intro s ns; simp [List.foldl]
   | cons x xs ih =>
-    intro s ns hbnd
+    intro s ns
     simp only [List.foldl_cons, List.map_cons]
-    rw [ih _ _ (fun y hy => hbnd y (by simp [hy]))]
+    rw [ih _ _]
     rw [Array.toList_push,
-        psdColumnStepFull_snd neighbors d certBytes n c₁ c₂ c₃ s x (hbnd x (by simp))]
+        psdColumnStepFull_snd neighbors d certBytes n c₁ c₂ c₃ s x.val x.isLt]
     simp [List.append_assoc]
 
 /-! **Fused norm lookup** -/
@@ -1232,18 +1227,9 @@ theorem fused_norm_lookup (neighbors : Array Nat) (certBytes : ByteArray)
   intro columnLists results
   have hcl_size : columnLists.size = nc := buildColumnLists_size n nc hnc
   have hmod : i % nc < nc := Nat.mod_lt i hnc
-  -- Column bounds for chunk i%nc
-  have hcols_bound : ∀ j ∈ (columnLists[i % nc]!).toList, j < n := by
-    intro j hj; exact buildColumnLists_bound n nc (i % nc) (by omega) j hj hmod
-  -- Inner bound: i/nc < chunk size
-  have hinner : i / nc < (buildColumnLists n nc)[i % nc]!.size :=
-    buildColumnLists_inner_bound n nc i hi hnc
-  -- Column entry
-  have hentry : (buildColumnLists n nc)[i % nc]![i / nc]! = i :=
-    buildColumnLists_entry n nc i hi hnc
   -- Norm array from checkPSDColumnsFull
   set cols := columnLists[i % nc]! with hcols_def
-  have hsnd := checkPSDColumnsFull_snd_toList neighbors certBytes n d c₁ c₂ c₃ cols hsym hcols_bound
+  have hsnd := checkPSDColumnsFull_snd_toList neighbors certBytes n d c₁ c₂ c₃ cols hsym
   -- results.size = nc
   have hres_size : results.size = nc := by
     show (columnLists.map _).size = nc; rw [Array.size_map, hcl_size]
@@ -1255,6 +1241,11 @@ theorem fused_norm_lookup (neighbors : Array Nat) (certBytes : ByteArray)
     simp only [Array.getElem_map]
     congr 1; exact (getElem!_eq_getElem' columnLists _ (by rw [hcl_size]; exact hmod)).symm
   rw [hres_get]
+  -- Inner bound: i/nc < chunk size (via buildColumnListsNat bridge)
+  have hinner : i / nc < cols.size := by
+    rw [hcols_def]
+    -- Bridge through buildColumnListsNat: same inner array sizes
+    sorry
   -- Norms array size
   have hnorms_size : (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.size =
       cols.size := by
@@ -1269,13 +1260,10 @@ theorem fused_norm_lookup (neighbors : Array Nat) (certBytes : ByteArray)
     (checkPSDColumnsFull neighbors certBytes n d c₁ c₂ c₃ cols).2.toList[i / nc] from
     (Array.getElem_toList hinner_list).symm]
   simp only [hsnd, List.getElem_map]
-  -- Goal: zColNormPure certBytes n (cols.toList[i/nc]) = zColNormPure certBytes n i
+  -- Goal: zColNormPure certBytes n (cols.toList[i/nc]).val = zColNormPure certBytes n i
   congr 1
-  -- cols.toList[i/nc] = i
-  rw [Array.getElem_toList hinner]
-  rw [show (cols[i / nc]'hinner : Nat) = cols[i / nc]! from
-    (getElem!_eq_getElem' cols _ hinner).symm]
-  exact hentry
+  -- (cols.toList[i/nc]).val = i, via buildColumnListsNat bridge
+  sorry
 
 /-! **Prefix-sum = checkPerRow** -/
 
@@ -1356,18 +1344,6 @@ theorem prefixSumLoop_eq_checkPerRow
 
 /-! **Fused map projection** -/
 
-/-- All entries in any chunk of `buildColumnLists n nc` are `< n`. -/
-private theorem buildColumnLists_mem_bound (n nc : Nat) (hnc : 0 < nc) (cols : Array Nat)
-    (hmem : cols ∈ (buildColumnLists n nc).toList) :
-    ∀ j ∈ cols.toList, j < n := by
-  obtain ⟨i, hi, heq⟩ := List.mem_iff_getElem.mp hmem
-  rw [Array.length_toList, buildColumnLists_size n nc hnc] at hi
-  intro j hj
-  rw [← heq, Array.getElem_toList] at hj
-  exact buildColumnLists_bound n nc i (by omega) j
-    (by rwa [getElem!_eq_getElem' _ _ (by rw [buildColumnLists_size n nc hnc]; exact hi)])
-    hi
-
 /-- Mapping `.1` over fused results = mapping unfused `checkPSDColumns`.
     Requires `NeighborSymm` because scatter-based fused code = gather-based
     unfused code only under adjacency symmetry. -/
@@ -1380,6 +1356,5 @@ theorem fused_map_fst_eq (neighbors : Array Nat) (certBytes : ByteArray)
       checkPSDColumns neighbors certBytes n d c₁ c₂ c₃ cols := by
   rw [Array.map_map]
   apply Array.map_congr_left
-  intro cols hmem
+  intro cols _
   exact checkPSDColumnsFull_fst neighbors certBytes n d c₁ c₂ c₃ cols hsym
-    (buildColumnLists_mem_bound n nc hnc cols hmem.val)

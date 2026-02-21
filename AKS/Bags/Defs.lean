@@ -91,7 +91,7 @@ theorem not_isJStranger_gt_level {n rank level idx j : ℕ} (h : level < j) :
   omega
 
 /-- `bagSize (2^k) (ℓ+1) * 2 = bagSize (2^k) ℓ`: each level doubles the bag size. -/
-private theorem bagSize_succ_mul_two {k ℓ : ℕ} (h : ℓ + 1 ≤ k) :
+theorem bagSize_succ_mul_two {k ℓ : ℕ} (h : ℓ + 1 ≤ k) :
     bagSize (2 ^ k) (ℓ + 1) * 2 = bagSize (2 ^ k) ℓ := by
   simp only [bagSize]
   rw [Nat.pow_div h (by positivity), Nat.pow_div (by omega) (by positivity), ← pow_succ]
@@ -243,3 +243,133 @@ theorem isJStranger_one_perm_bound {n rank level idx : ℕ}
     rank < idx * bagSize n level ∨ (idx + 1) * bagSize n level ≤ rank := by
   have h := isJStranger_perm_bound hs (by simpa using hbs)
   simpa using h
+
+/-! **Sibling-Native Perm Value Characterization**
+
+For `n = 2^k`, sibling-native items (1-stranger but not 2-stranger) have
+perm values on the "wrong side" of the child boundary. This is the structural
+basis for bounding sibling-native counts by the deviation |C - b/2|. -/
+
+/-- For even idx with valid parent index: sibling-native items have perm ≥ boundary. -/
+theorem siblingNative_even_perm_ge {k level idx rank : ℕ}
+    (hlev : 1 ≤ level) (hk : level ≤ k) (heven : idx % 2 = 0)
+    (hidx : idx / 2 < 2 ^ (level - 1))
+    (h1 : isJStranger (2 ^ k) rank level idx 1)
+    (h2 : ¬isJStranger (2 ^ k) rank level idx 2) :
+    (idx / 2) * bagSize (2 ^ k) (level - 1) + bagSize (2 ^ k) level ≤ rank := by
+  have hbs : 0 < bagSize (2 ^ k) level :=
+    bagSize_pos (Nat.pow_le_pow_right (by omega) hk)
+  have hbs_par : 0 < bagSize (2 ^ k) (level - 1) :=
+    bagSize_pos (Nat.pow_le_pow_right (by omega) (by omega : level - 1 ≤ k))
+  have hbag2 : bagSize (2 ^ k) level * 2 = bagSize (2 ^ k) (level - 1) := by
+    have : (level - 1) + 1 = level := by omega
+    rw [← this]; exact bagSize_succ_mul_two (by omega)
+  -- Key fact: (idx/2)*2 = idx for even idx
+  have heven_mul : idx / 2 * 2 = idx :=
+    Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero heven)
+  -- From 1-stranger: rank / bagSize(level) ≠ idx
+  obtain ⟨_, _, hne1⟩ := h1
+  simp only [Nat.sub_self, pow_zero, Nat.div_one, nativeBagIdx] at hne1
+  -- Show: idx * bagSize(level) ≤ rank
+  -- Then: rank / bagSize(level) ≥ idx, but ≠ idx, so ≥ idx+1
+  -- Hence rank ≥ (idx+1) * bagSize(level) = boundary
+  suffices hge : idx * bagSize (2 ^ k) level ≤ rank by
+    have hdiv : rank / bagSize (2 ^ k) level ≠ idx := hne1
+    have hdiv_ge : idx ≤ rank / bagSize (2 ^ k) level :=
+      (Nat.le_div_iff_mul_le hbs).mpr hge
+    have hdiv_gt : idx + 1 ≤ rank / bagSize (2 ^ k) level := by omega
+    have hrank : (idx + 1) * bagSize (2 ^ k) level ≤ rank :=
+      (Nat.le_div_iff_mul_le hbs).mp hdiv_gt
+    calc (idx / 2) * bagSize (2 ^ k) (level - 1) + bagSize (2 ^ k) level
+        = (idx / 2) * (bagSize (2 ^ k) level * 2) + bagSize (2 ^ k) level := by
+          rw [hbag2]
+      _ = idx * bagSize (2 ^ k) level + bagSize (2 ^ k) level := by
+          rw [Nat.mul_comm (bagSize _ _) 2, ← Nat.mul_assoc, heven_mul]
+      _ = (idx + 1) * bagSize (2 ^ k) level := by ring
+      _ ≤ rank := hrank
+  -- Prove: idx * bagSize(level) ≤ rank
+  by_cases hlev2 : 2 ≤ level
+  · -- Level ≥ 2: from not-2-stranger → nativeBagIdx(level-1) rank = idx/2
+    have h2' : ¬isJStranger (2 ^ k) rank level idx 2 := h2
+    simp only [isJStranger, not_and, not_not] at h2'
+    have hnat : nativeBagIdx (2 ^ k) (level - 1) rank = idx / 2 := by
+      have := h2' (by omega) hlev2
+      simp only [nativeBagIdx] at this ⊢; exact this
+    have : (idx / 2) * bagSize (2 ^ k) (level - 1) ≤ rank := by
+      simp only [nativeBagIdx] at hnat
+      rw [← hnat]; exact Nat.div_mul_le_self _ _
+    calc idx * bagSize (2 ^ k) level
+        = (idx / 2) * (bagSize (2 ^ k) level * 2) := by
+          rw [Nat.mul_comm (bagSize _ _) 2, ← Nat.mul_assoc, heven_mul]
+      _ = (idx / 2) * bagSize (2 ^ k) (level - 1) := by rw [hbag2]
+      _ ≤ rank := this
+  · -- Level = 1: idx = 0 (only even value with idx/2 < 2^0 = 1)
+    have : level = 1 := by omega
+    subst this
+    have : idx / 2 = 0 := by omega
+    have : idx = 0 := by omega
+    subst this; simp
+
+/-- For odd idx with valid parent index: sibling-native items have perm < boundary. -/
+theorem siblingNative_odd_perm_lt {k level idx rank : ℕ}
+    (hlev : 1 ≤ level) (hk : level ≤ k) (hodd : idx % 2 ≠ 0)
+    (hidx : idx / 2 < 2 ^ (level - 1))
+    (hrn : rank < 2 ^ k)
+    (h1 : isJStranger (2 ^ k) rank level idx 1)
+    (h2 : ¬isJStranger (2 ^ k) rank level idx 2) :
+    rank < (idx / 2) * bagSize (2 ^ k) (level - 1) + bagSize (2 ^ k) level := by
+  have hbs : 0 < bagSize (2 ^ k) level :=
+    bagSize_pos (Nat.pow_le_pow_right (by omega) hk)
+  have hbs_par : 0 < bagSize (2 ^ k) (level - 1) :=
+    bagSize_pos (Nat.pow_le_pow_right (by omega) (by omega : level - 1 ≤ k))
+  have hbag2 : bagSize (2 ^ k) level * 2 = bagSize (2 ^ k) (level - 1) := by
+    have : (level - 1) + 1 = level := by omega
+    rw [← this]; exact bagSize_succ_mul_two (by omega)
+  -- Key fact: (idx/2)*2 + 1 = idx for odd idx
+  have hodd_mul : idx / 2 * 2 + 1 = idx := by omega
+  -- From 1-stranger: rank / bagSize(level) ≠ idx (keep h1 for later)
+  have hne1 : rank / bagSize (2 ^ k) level ≠ idx := by
+    have := h1.2.2; simp only [nativeBagIdx] at this; simpa using this
+  -- Show: rank < (idx/2)*bagSize(level-1) + bagSize(level) = idx*bagSize(level)
+  suffices hlt : rank < idx * bagSize (2 ^ k) level by
+    have heq : idx * bagSize (2 ^ k) level =
+        idx / 2 * bagSize (2 ^ k) (level - 1) + bagSize (2 ^ k) level := by
+      rw [← hbag2]; nlinarith [hodd_mul]
+    linarith
+  -- Prove: rank < idx * bagSize(level)
+  by_cases hlev2 : 2 ≤ level
+  · -- Level ≥ 2: from not-2-stranger, rank ∈ [(idx/2)*bs_par, (idx/2+1)*bs_par)
+    have h2' : ¬isJStranger (2 ^ k) rank level idx 2 := h2
+    simp only [isJStranger, not_and, not_not] at h2'
+    have hnat : nativeBagIdx (2 ^ k) (level - 1) rank = idx / 2 := by
+      have := h2' (by omega) hlev2
+      simp only [nativeBagIdx] at this ⊢; exact this
+    -- rank / bagSize(level-1) = idx/2, so rank ∈ parent interval
+    have hlo : (idx / 2) * bagSize (2 ^ k) (level - 1) ≤ rank := by
+      simp only [nativeBagIdx] at hnat
+      rw [← hnat]; exact Nat.div_mul_le_self _ _
+    have hhi : rank < (idx / 2 + 1) * bagSize (2 ^ k) (level - 1) := by
+      simp only [nativeBagIdx] at hnat
+      rw [← hnat, Nat.add_mul, Nat.one_mul]; exact Nat.lt_div_mul_add hbs_par
+    -- Convert to level bounds: rank < (idx+1)*bs
+    have hhi' : rank < (idx + 1) * bagSize (2 ^ k) level := by
+      calc rank < (idx / 2 + 1) * bagSize (2 ^ k) (level - 1) := hhi
+        _ = (idx / 2 + 1) * (bagSize (2 ^ k) level * 2) := by rw [hbag2]
+        _ = (idx / 2 * 2 + 2) * bagSize (2 ^ k) level := by ring
+        _ = (idx + 1) * bagSize (2 ^ k) level := by rw [show idx / 2 * 2 + 2 = idx + 1 by omega]
+    rcases isJStranger_one_perm_bound h1 hbs with hbelow | habove
+    · exact hbelow
+    · omega
+  · -- Level = 1: idx ∈ {1} (only odd value with idx/2 < 2^0 = 1)
+    have hlev1 : level = 1 := by omega
+    subst hlev1
+    have hidx0 : idx / 2 = 0 := by omega
+    have hidx1 : idx = 1 := by omega
+    subst hidx1
+    -- Goal: rank < 1 * bagSize (2 ^ k) 1
+    rcases isJStranger_one_perm_bound h1 hbs with hbelow | habove
+    · exact hbelow  -- rank < idx * bagSize = rank < 1 * bagSize
+    · -- rank ≥ 2*bagSize(1) = n, contradicts rank < n
+      have : bagSize (2 ^ k) 1 * 2 = bagSize (2 ^ k) 0 := bagSize_succ_mul_two (by omega)
+      simp only [bagSize_zero] at this
+      omega
