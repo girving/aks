@@ -179,8 +179,28 @@ private theorem fusedFold_norm (certBytes : ByteArray) (colStart n j : Nat) :
 
 /-! **Component lemmas: fused decode components = unfused components** -/
 
-/-- The fused decode's array `.1` = the unfused single-variable decode array. -/
-private theorem fused_arr_eq_unfused (certBytes : ByteArray) (n colStart j : Nat) :
+/-- The unfused array-building fold equals `Array.ofFn`. -/
+private theorem unfused_arr_eq_ofFn (certBytes : ByteArray) (n colStart j : Nat)
+    (hj : j < n) :
+    Nat.fold (j + 1) (fun k _ arr =>
+      arr.set! k (decodeBase85Int certBytes (colStart + k)))
+      (Array.replicate n (0 : Int)) =
+    Array.ofFn fun (i : Fin n) =>
+      if i.val ≤ j then decodeBase85Int certBytes (colStart + i.val) else 0 := by
+  apply Array.ext_getElem?
+  intro v
+  rw [fold_set_getElem? _ n (j + 1) (by omega), Array.getElem?_ofFn]
+  split
+  case isTrue hv =>
+    congr 1
+    split
+    case isTrue hvj => simp [show v ≤ j from by omega]
+    case isFalse hvj => simp [show ¬(v ≤ j) from by omega]
+  case isFalse hv => rfl
+
+/-- The fused decode's array `.1` = `Array.ofFn`. -/
+private theorem fused_arr_eq_ofFn (certBytes : ByteArray) (n colStart j : Nat)
+    (hj : j < n) :
     (Id.run do
       let mut arr := Array.replicate n (0 : Int)
       let mut s : Int := 0
@@ -189,11 +209,10 @@ private theorem fused_arr_eq_unfused (certBytes : ByteArray) (n colStart j : Nat
         let v := decodeBase85Int certBytes (colStart + k)
         arr := arr.set! k v; s := s + v; norm := norm + intAbs v
       return (arr, s, norm)).1 =
-    (Id.run do
-      let mut arr := Array.replicate n (0 : Int)
-      for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (colStart + k))
-      return arr) := by
-  rw [fusedDecode_eq_fold, fusedFold_arr, ← forIn_range_eq_fold]
+    Array.ofFn fun (i : Fin n) =>
+      if i.val ≤ j then decodeBase85Int certBytes (colStart + i.val) else 0 := by
+  rw [fusedDecode_eq_fold, fusedFold_arr]
+  exact unfused_arr_eq_ofFn certBytes n colStart j hj
 
 /-- The fused decode's sum `.2.1` = direct `Nat.fold` sum of decoded values. -/
 private theorem fused_sum_is_fold (certBytes : ByteArray) (n colStart j : Nat) :
@@ -208,24 +227,29 @@ private theorem fused_sum_is_fold (certBytes : ByteArray) (n colStart j : Nat) :
     Nat.fold (j + 1) (fun k _ acc => acc + decodeBase85Int certBytes (colStart + k)) 0 := by
   rw [fusedDecode_eq_fold, fusedFold_sum]
 
+/-- `Array.ofFn` element access via `getElem!` for in-range indices. -/
+private theorem ofFn_getElem_bang {α : Type} [Inhabited α] {n : Nat} (f : Fin n → α)
+    (k : Nat) (hk : k < n) :
+    (Array.ofFn f)[k]! = f ⟨k, hk⟩ := by
+  rw [getElem!_pos _ _ (by rw [Array.size_ofFn]; exact hk)]
+  exact Array.getElem_ofFn (by rw [Array.size_ofFn]; exact hk)
+
 /-- The unfused `colSum` (sum of `zCol[k]!`) equals the direct `Nat.fold` sum. -/
 private theorem unfused_colSum_eq_fold (certBytes : ByteArray) (n j : Nat) (hj : j < n) :
     (Id.run do
       let mut s : Int := 0
       for k in [:j+1] do s := s +
-        (Id.run do
-          let mut arr := Array.replicate n (0 : Int)
-          for k in [:j+1] do arr := arr.set! k (decodeBase85Int certBytes (j * (j+1) / 2 + k))
-          return arr)[k]!
+        (Array.ofFn fun (i : Fin n) =>
+          if i.val ≤ j then decodeBase85Int certBytes (j * (j+1) / 2 + i.val)
+          else 0)[k]!
       return s) =
     Nat.fold (j + 1) (fun k _ acc => acc + decodeBase85Int certBytes (j * (j + 1) / 2 + k)) 0 := by
   rw [forIn_range_eq_fold]
-  erw [forIn_range_eq_fold]
   symm
   apply fold_sum_congr
   intro k hk
-  exact (fold_set_getD (fun i => decodeBase85Int certBytes (j * (j + 1) / 2 + i))
-    n (j + 1) (by omega) k hk).symm
+  rw [ofFn_getElem_bang _ k (by omega)]
+  simp [show k ≤ j from by omega]
 
 /-- The fused decode's norm `.2.2` = `Nat.fold` sum of `intAbs` of decoded values. -/
 private theorem fused_norm_is_fold (certBytes : ByteArray) (n colStart j : Nat) :
@@ -284,7 +308,8 @@ theorem psdColumnStepFull_fst (neighbors : Array Nat) (d : Nat)
     (state : PSDChunkResult) (j : Nat) (hj : j < n) :
     (psdColumnStepFull neighbors d certBytes n c₁ c₂ c₃ state j).1 =
     psdColumnStep neighbors d certBytes n c₁ c₂ c₃ state j := by
-  simp only [psdColumnStepFull, psdColumnStep, fused_arr_eq_unfused, fused_sum_is_fold]
+  simp only [psdColumnStepFull, psdColumnStep, fused_arr_eq_ofFn certBytes n _ j hj,
+    fused_sum_is_fold]
   erw [unfused_colSum_eq_fold certBytes n j hj]
 
 set_option maxHeartbeats 800000 in
