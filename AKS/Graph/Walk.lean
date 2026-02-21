@@ -360,11 +360,267 @@ theorem Graph.spectralGap_le_one {n : ℕ} (G : Graph n) :
 
 /-! **Contraction Bound** -/
 
+/-- The lifted function for the contraction bound:
+    `g(v) = f(s(v)) · √(deg_G(v)) / √(deg_{G.contract s}(s(v)))`.
+    Designed so that `‖g‖ = ‖f‖` (isometry) and the factorization
+    `(N'-P')f(u) = (1/√d'_u) · ∑_{v:s(v)=u} √d_v · ((N-P)g)(v)` holds. -/
+private def contractLift {n : ℕ} (G : Graph n) {m : ℕ} (s : Fin n → Fin m)
+    (f : Fin m → ℝ) : Fin n → ℝ :=
+  fun v ↦ f (s v) * Real.sqrt (G.deg v) / Real.sqrt ((G.contract s).deg (s v))
+
+/-- The lifted function satisfies `‖g‖² ≤ ‖f‖²` (with equality when all
+    contracted vertices have positive degree). -/
+private theorem contractLift_norm_sq_le {n : ℕ} (G : Graph n) {m : ℕ}
+    (s : Fin n → Fin m) (f : EuclideanSpace ℝ (Fin m)) :
+    ∑ v, (contractLift G s f v) ^ 2 ≤ ∑ u, (f u) ^ 2 := by
+  simp only [contractLift]
+  -- Group by fiber: ∑_v ... = ∑_u ∑_{v:s(v)=u} ...
+  rw [← Finset.sum_fiberwise_of_maps_to (g := s) (fun _ _ ↦ Finset.mem_univ _)]
+  apply Finset.sum_le_sum; intro u _
+  -- ∑_{v:s(v)=u} (f(u) * √d_v / √d'_u)² ≤ f(u)²
+  rw [Finset.sum_congr rfl (fun v hv ↦ by
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hv; rw [hv])]
+  rcases Nat.eq_zero_or_pos ((G.contract s).deg u) with hd | hd
+  · -- d'_u = 0: all summands are 0 (√0 = 0), so sum ≤ f(u)²
+    have fiber_zero : ∀ v ∈ Finset.univ.filter (s · = u),
+        Real.sqrt ↑(G.deg v) = 0 := by
+      intro v hv
+      have hdv : G.deg v = 0 := Nat.eq_zero_of_le_zero (by
+        calc G.deg v
+            ≤ ∑ x ∈ Finset.univ.filter (s · = u), G.deg x :=
+              Finset.single_le_sum (fun _ _ ↦ Nat.zero_le _) hv
+          _ = 0 := by rw [← G.contract_deg_eq_sum_fiber s u, hd])
+      rw [hdv, Nat.cast_zero]; exact Real.sqrt_zero
+    rw [Finset.sum_eq_zero (fun v hv ↦ by rw [fiber_zero v hv]; ring)]
+    exact sq_nonneg _
+  · -- d'_u > 0: factor out f(u)² / d'_u and use ∑ d_v = d'_u
+    have hne : (↑((G.contract s).deg u) : ℝ) ≠ 0 :=
+      Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp hd)
+    have factor : ∀ v ∈ Finset.univ.filter (s · = u),
+        (f u * Real.sqrt ↑(G.deg v) / Real.sqrt ↑((G.contract s).deg u)) ^ 2 =
+        f u ^ 2 * (↑(G.deg v) / ↑((G.contract s).deg u)) := by
+      intro v _; rw [mul_div_assoc, mul_pow, div_pow,
+        Real.sq_sqrt (Nat.cast_nonneg _), Real.sq_sqrt (Nat.cast_nonneg _)]
+    rw [Finset.sum_congr rfl factor, ← Finset.mul_sum, ← Finset.sum_div]
+    rw [show ∑ v ∈ Finset.univ.filter (s · = u), (G.deg v : ℝ) =
+      ↑((G.contract s).deg u) from by
+      rw [G.contract_deg_eq_sum_fiber s u]; push_cast; rfl]
+    rw [div_self hne, mul_one]
+
+/-- Per-summand: `g(w)/√d_w = f(s(w))/√d'_{s(w)}` when `d_w > 0`. -/
+private theorem contractLift_div_sqrt {n : ℕ} (G : Graph n) {m : ℕ} (s : Fin n → Fin m)
+    (f : Fin m → ℝ) (w : Fin n) (hdw : 0 < G.deg w) :
+    contractLift G s f w / Real.sqrt ↑(G.deg w) =
+    f (s w) / Real.sqrt ↑((G.contract s).deg (s w)) := by
+  simp only [contractLift, div_div]
+  exact mul_div_mul_right _ _ (Real.sqrt_ne_zero'.mpr (Nat.cast_pos.mpr hdw))
+
+/-- Mean sum identity: `∑_w g(w) * √d_w = ∑_u f(u) * √d'_u`. -/
+private theorem contractLift_mean_sum {n : ℕ} (G : Graph n) {m : ℕ} (s : Fin n → Fin m)
+    (f : Fin m → ℝ) :
+    ∑ w, contractLift G s f w * Real.sqrt ↑(G.deg w) =
+    ∑ u, f u * Real.sqrt ↑((G.contract s).deg u) := by
+  simp only [contractLift]
+  -- LHS: ∑_w (f(s w) * √d_w / √d'_{s w}) * √d_w = ∑_w f(s w) * d_w / √d'_{s w}
+  have simpl : ∀ w : Fin n,
+      f (s w) * Real.sqrt ↑(G.deg w) / Real.sqrt ↑((G.contract s).deg (s w)) *
+        Real.sqrt ↑(G.deg w) =
+      f (s w) * ↑(G.deg w) / Real.sqrt ↑((G.contract s).deg (s w)) := by
+    intro w
+    have h := Real.mul_self_sqrt (Nat.cast_nonneg (α := ℝ) (G.deg w))
+    rw [div_mul_eq_mul_div, mul_assoc, h]
+  simp_rw [simpl]
+  -- Group by fiber
+  rw [← Finset.sum_fiberwise_of_maps_to (g := s) (fun _ _ ↦ Finset.mem_univ _)]
+  apply Finset.sum_congr rfl; intro u _
+  -- ∑_{v:s(v)=u} f(u) * d_v / √d'_u = f(u) * √d'_u
+  rw [Finset.sum_congr rfl (fun v hv ↦ by
+    simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hv; rw [hv])]
+  -- Factor out f(u) and 1/√d'_u
+  have : ∀ v ∈ Finset.univ.filter (s · = u),
+      f u * ↑(G.deg v) / Real.sqrt ↑((G.contract s).deg u) =
+      f u * (↑(G.deg v) / Real.sqrt ↑((G.contract s).deg u)) := fun v _ ↦ mul_div_assoc _ _ _
+  rw [Finset.sum_congr rfl this, ← Finset.mul_sum, ← Finset.sum_div]
+  rw [show ∑ v ∈ Finset.univ.filter (s · = u), (G.deg v : ℝ) =
+    ↑((G.contract s).deg u) from by
+    rw [G.contract_deg_eq_sum_fiber s u]; push_cast; rfl]
+  -- f(u) * (d'_u / √d'_u) = f(u) * √d'_u
+  rcases Nat.eq_zero_or_pos ((G.contract s).deg u) with hd | hd
+  · simp [hd]
+  · congr 1
+    rw [div_eq_iff (Real.sqrt_ne_zero'.mpr (Nat.cast_pos.mpr hd))]
+    exact (Real.mul_self_sqrt (Nat.cast_nonneg _)).symm
+
+/-- The key factorization: `(N'-P')f(u) = (1/√d'_u) · ∑_{v:s(v)=u} √d_v · ((N-P)g)(v)`.
+    This decomposes the contracted operator into a weighted sum over fibers. -/
+private theorem contract_factorization {n : ℕ} (G : Graph n) {m : ℕ}
+    (s : Fin n → Fin m) (f : EuclideanSpace ℝ (Fin m)) (u : Fin m) :
+    (G.contract s).normalizedWalkCLM f u - (G.contract s).degreeMeanCLM f u =
+    (1 / Real.sqrt ((G.contract s).deg u)) *
+      ∑ v ∈ Finset.univ.filter (s · = u),
+        Real.sqrt (G.deg v) *
+        (G.normalizedWalkCLM (WithLp.toLp 2 (contractLift G s f)) v -
+         G.degreeMeanCLM (WithLp.toLp 2 (contractLift G s f)) v) := by
+  set S := Finset.univ.filter (fun v : Fin n ↦ s v = u)
+  set fiber := fun v ↦ Finset.univ.filter (fun e : Fin G.halfs ↦ G.src e = v)
+  -- Fiber partition (same as in contract_deg_eq_sum_fiber)
+  have partition : Finset.univ.filter (fun e : Fin G.halfs ↦ s (G.src e) = u) =
+      S.biUnion fiber := by
+    ext e; simp only [S, fiber, mem_filter, mem_univ, true_and, mem_biUnion]
+    exact ⟨fun h ↦ ⟨G.src e, h, rfl⟩, fun ⟨_, hv, he⟩ ↦ he ▸ hv⟩
+  have hdisj : (S : Set (Fin n)).PairwiseDisjoint fiber := by
+    intro v₁ _ v₂ _ hne
+    simp only [fiber, Finset.disjoint_filter]
+    intro e _ h₁ h₂; exact hne (h₁.symm.trans h₂)
+  -- Prove walk and mean parts separately, then combine
+  have walk : (G.contract s).normalizedWalkCLM f u =
+      (1 / Real.sqrt ↑((G.contract s).deg u)) *
+        ∑ v ∈ S, Real.sqrt ↑(G.deg v) *
+          G.normalizedWalkCLM (WithLp.toLp 2 (contractLift G s f)) v := by
+    -- Work at the ℝ level
+    show (G.contract s).normalizedWalkFun (WithLp.ofLp f) u =
+      (1 / Real.sqrt ↑((G.contract s).deg u)) *
+        ∑ v ∈ S, Real.sqrt ↑(G.deg v) *
+          G.normalizedWalkFun (contractLift G s (WithLp.ofLp f)) v
+    simp only [Graph.normalizedWalkFun, Graph.contract_src, Graph.contract_target]
+    congr 1
+    -- Cancel √d_v * (1/√d_v * inner_sum) = inner_sum, then fiberwise collapse
+    have cancel : ∀ v ∈ S,
+        Real.sqrt ↑(G.deg v) * (1 / Real.sqrt ↑(G.deg v) *
+          ∑ e ∈ fiber v,
+            contractLift G s (WithLp.ofLp f) (G.target e) /
+            Real.sqrt ↑(G.deg (G.target e))) =
+        ∑ e ∈ fiber v,
+          contractLift G s (WithLp.ofLp f) (G.target e) /
+          Real.sqrt ↑(G.deg (G.target e)) := by
+      intro v _
+      rcases Nat.eq_zero_or_pos (G.deg v) with hd | hd
+      · have : fiber v = ∅ := Finset.card_eq_zero.mp (show _ = 0 from hd ▸ rfl)
+        simp [this, hd]
+      · rw [one_div, ← mul_assoc,
+            mul_inv_cancel₀ (Real.sqrt_ne_zero'.mpr (Nat.cast_pos.mpr hd)), one_mul]
+    rw [Finset.sum_congr rfl cancel, ← Finset.sum_biUnion hdisj, ← partition]
+    -- Summands: g(target)/√d_{target} = f(s(target))/√d'_{s(target)}
+    apply Finset.sum_congr rfl; intro e _
+    exact (contractLift_div_sqrt G s _ (G.target e) (G.deg_src_pos (G.rot e))).symm
+  have mean : (G.contract s).degreeMeanCLM f u =
+      (1 / Real.sqrt ↑((G.contract s).deg u)) *
+        ∑ v ∈ S, Real.sqrt ↑(G.deg v) *
+          G.degreeMeanCLM (WithLp.toLp 2 (contractLift G s f)) v := by
+    -- Work at the ℝ level
+    show (G.contract s).degreeMeanFun (WithLp.ofLp f) u =
+      (1 / Real.sqrt ↑((G.contract s).deg u)) *
+        ∑ v ∈ S, Real.sqrt ↑(G.deg v) *
+          G.degreeMeanFun (contractLift G s (WithLp.ofLp f)) v
+    simp only [Graph.degreeMeanFun]
+    -- Factor: √d_v * (√d_v * S_g / halfs) = d_v * (S_g / halfs)
+    set Sg := ∑ w, contractLift G s (WithLp.ofLp f) w * Real.sqrt ↑(G.deg w)
+    have factor : ∀ v ∈ S,
+        Real.sqrt ↑(G.deg v) * (Real.sqrt ↑(G.deg v) * Sg / ↑G.halfs) =
+        ↑(G.deg v) * (Sg / ↑G.halfs) := by
+      intro v _
+      rw [← mul_div_assoc, ← mul_assoc, Real.mul_self_sqrt (Nat.cast_nonneg _), mul_div_assoc]
+    rw [Finset.sum_congr rfl factor, ← Finset.sum_mul]
+    -- ∑_{v∈S} d_v = d'_u
+    rw [show ∑ v ∈ S, (G.deg v : ℝ) = ↑((G.contract s).deg u) from by
+      rw [G.contract_deg_eq_sum_fiber s u]; push_cast; rfl]
+    -- halfs' = halfs (definitional)
+    rw [show (G.contract s).halfs = G.halfs from rfl]
+    -- S_g = S' (mean sum identity)
+    rw [show Sg = ∑ w, (WithLp.ofLp f) w * Real.sqrt ↑((G.contract s).deg w) from
+      contractLift_mean_sum G s (WithLp.ofLp f)]
+    -- Goal: √d' * S' / halfs = (1/√d') * (d' * (S' / halfs))
+    rcases Nat.eq_zero_or_pos ((G.contract s).deg u) with hd | hd
+    · simp [hd]
+    · have hne := Real.sqrt_ne_zero'.mpr (Nat.cast_pos.mpr hd)
+      have key : (Real.sqrt ↑((G.contract s).deg u))⁻¹ * ↑((G.contract s).deg u) =
+          Real.sqrt ↑((G.contract s).deg u) := by
+        rw [inv_mul_eq_div, div_eq_iff hne]
+        exact (Real.mul_self_sqrt (Nat.cast_nonneg _)).symm
+      rw [one_div, ← mul_assoc, key, mul_div_assoc]
+  rw [walk, mean, ← mul_sub, ← Finset.sum_sub_distrib]
+  congr 1
+  exact Finset.sum_congr rfl (fun v _ ↦ (mul_sub _ _ _).symm)
+
+/-- Per-vertex Cauchy-Schwarz: `((N'-P')f(u))² ≤ ∑_{v:s(v)=u} ((N-P)g(v))²`.
+    Uses the factorization `(N'-P')f(u) = (1/√d'_u) · ∑ √d_v · h_v`
+    and weighted CS: `(∑ √w · h)² ≤ (∑ w)(∑ h²)`. -/
+private theorem contract_per_vertex_bound {n : ℕ} (G : Graph n) {m : ℕ}
+    (s : Fin n → Fin m) (f : EuclideanSpace ℝ (Fin m)) (u : Fin m) :
+    ((G.contract s).normalizedWalkCLM f u - (G.contract s).degreeMeanCLM f u) ^ 2 ≤
+    ∑ v ∈ Finset.univ.filter (s · = u),
+      (G.normalizedWalkCLM (WithLp.toLp 2 (contractLift G s f)) v -
+       G.degreeMeanCLM (WithLp.toLp 2 (contractLift G s f)) v) ^ 2 := by
+  -- Rewrite LHS using the factorization (BEFORE setting abbreviations)
+  rw [contract_factorization G s f u]
+  -- Goal LHS: ((1/√d') * ∑ √d_v * (N-P)g(v))^2
+  -- Goal RHS: ∑ ((N-P)g(v))^2
+  rcases Nat.eq_zero_or_pos ((G.contract s).deg u) with hd | hd
+  · -- d'_u = 0: LHS = 0 since 1/√0 = 0
+    have : Real.sqrt ↑((G.contract s).deg u) = 0 := by
+      rw [show ((G.contract s).deg u : ℝ) = 0 from by exact_mod_cast hd]; exact Real.sqrt_zero
+    rw [this, div_zero, zero_mul, zero_pow (by omega : 2 ≠ 0)]
+    exact Finset.sum_nonneg (fun v _ ↦ sq_nonneg _)
+  · -- d'_u > 0: weighted Cauchy-Schwarz
+    rw [mul_pow, div_pow, one_pow,
+        Real.sq_sqrt (Nat.cast_nonneg (α := ℝ) ((G.contract s).deg u))]
+    -- Goal: 1/↑d' * (∑ ...)^2 ≤ ∑ (...)^2
+    rw [div_mul_eq_mul_div, one_mul]
+    -- Goal: (∑ ...)^2 / ↑d' ≤ ∑ (...)^2
+    have hd_ne : (↑((G.contract s).deg u) : ℝ) ≠ 0 :=
+      Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp hd)
+    rw [div_le_iff₀ (Nat.cast_pos.mpr hd)]
+    -- Goal: (∑ ...)^2 ≤ ↑d' * ∑ (...)^2
+    -- Apply CS: (∑ a*b)^2 ≤ (∑ a^2)(∑ b^2) where a_v = √d_v
+    -- CS: (∑ a*b)^2 ≤ (∑ a^2)(∑ b^2)
+    refine le_trans (sum_mul_sq_le_sq_mul_sq _ _ _) ?_
+    -- Goal: (∑ (√d_v)^2) * (∑ h^2) ≤ (∑ h^2) * d'_u
+    -- Since ∑ (√d_v)^2 = ∑ d_v = d'_u
+    have sqrt_sq : ∑ v ∈ Finset.univ.filter (s · = u),
+        Real.sqrt ↑(G.deg v) ^ 2 = ↑((G.contract s).deg u) := by
+      simp_rw [Real.sq_sqrt (Nat.cast_nonneg (α := ℝ) _)]
+      rw [G.contract_deg_eq_sum_fiber s u]; push_cast; rfl
+    rw [sqrt_sq, mul_comm]
+
 /-- The spectral gap can only decrease under contraction. -/
 theorem Graph.spectralGap_contract {n : ℕ} (G : Graph n) {m : ℕ}
     (s : Fin n → Fin m) :
     (G.contract s).spectralGap ≤ G.spectralGap := by
-  sorry
+  set G' := G.contract s
+  apply ContinuousLinearMap.opNorm_le_bound _ G.spectralGap_nonneg
+  intro f
+  -- Define the lifted function g
+  set g : EuclideanSpace ℝ (Fin n) := WithLp.toLp 2 (contractLift G s f)
+  -- Step 1: ‖(N'-P')f‖ ≤ ‖(N-P)g‖ via per-vertex Cauchy-Schwarz
+  have step1 : ‖(G'.normalizedWalkCLM - G'.degreeMeanCLM) f‖ ≤
+      ‖(G.normalizedWalkCLM - G.degreeMeanCLM) g‖ := by
+    suffices hsq : ‖(G'.normalizedWalkCLM - G'.degreeMeanCLM) f‖ ^ 2 ≤
+        ‖(G.normalizedWalkCLM - G.degreeMeanCLM) g‖ ^ 2 by
+      have := Real.sqrt_le_sqrt hsq
+      rwa [Real.sqrt_sq (norm_nonneg _), Real.sqrt_sq (norm_nonneg _)] at this
+    rw [EuclideanSpace.norm_sq_eq, EuclideanSpace.norm_sq_eq]
+    simp_rw [Real.norm_eq_abs, sq_abs, ContinuousLinearMap.sub_apply]
+    calc ∑ u, (G'.normalizedWalkCLM f u - G'.degreeMeanCLM f u) ^ 2
+        ≤ ∑ u, ∑ v ∈ Finset.univ.filter (s · = u),
+            (G.normalizedWalkCLM g v - G.degreeMeanCLM g v) ^ 2 :=
+          Finset.sum_le_sum (fun u _ ↦ contract_per_vertex_bound G s f u)
+      _ = ∑ v, (G.normalizedWalkCLM g v - G.degreeMeanCLM g v) ^ 2 := by
+          rw [← Finset.sum_fiberwise_of_maps_to (g := s) (fun _ _ ↦ Finset.mem_univ _)]
+  -- Step 2: ‖(N-P)g‖ ≤ spectralGap * ‖g‖ (operator norm bound)
+  -- Step 3: ‖g‖ = ‖f‖ (isometry)
+  have step3 : ‖g‖ ≤ ‖f‖ := by
+    rw [← Real.sqrt_sq (norm_nonneg g), ← Real.sqrt_sq (norm_nonneg f)]
+    apply Real.sqrt_le_sqrt
+    rw [EuclideanSpace.norm_sq_eq, EuclideanSpace.norm_sq_eq]
+    simp_rw [Real.norm_eq_abs, sq_abs]
+    exact contractLift_norm_sq_le G s f
+  calc ‖(G'.normalizedWalkCLM - G'.degreeMeanCLM) f‖
+      ≤ ‖(G.normalizedWalkCLM - G.degreeMeanCLM) g‖ := step1
+    _ ≤ ‖G.normalizedWalkCLM - G.degreeMeanCLM‖ * ‖g‖ :=
+        (G.normalizedWalkCLM - G.degreeMeanCLM).le_opNorm g
+    _ ≤ G.spectralGap * ‖f‖ := by
+        unfold Graph.spectralGap
+        exact mul_le_mul_of_nonneg_left step3 (norm_nonneg _)
 
 
 /-! **Regular Graph Compatibility** -/
