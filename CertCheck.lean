@@ -68,15 +68,12 @@ def checkInvolution (rotBytes : ByteArray) (n d : Nat) : Bool :=
     `(mulAdjWith f z n d)[v] = ∑_{p<d} z[f(v*d+p)]!`. -/
 @[inline] def mulAdjWith (getNeighbor : Nat → Nat) (z : Array Int)
     (n d : Nat) : Array Int :=
-  Id.run do
-    let mut result := Array.replicate n 0
-    for v in [:n] do
-      let mut acc : Int := 0
-      for p in [:d] do
-        let w := getNeighbor (v * d + p)
-        acc := acc + z[w]!
-      result := result.set! v acc
-    return result
+  .ofFn fun (v : Fin n) => Id.run do
+    let mut acc : Int := 0
+    for p in [:d] do
+      let w := getNeighbor (v.val * d + p)
+      acc := acc + z[w]!
+    return acc
 
 /-- Given base-85 encoded rotation map and vector `z`, compute `B·z` where `B`
     is the adjacency matrix. `(B·z)[v] = ∑_{p=0}^{d-1} z[neighbor(v,p)]`. -/

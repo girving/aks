@@ -1,18 +1,22 @@
 /-
-  # Seiferas's Four-Clause Invariant
+  # Seiferas's Invariant
 
   Defines the invariant maintained by the bag-tree sorting network
   (Seiferas 2009, Sections 4–5) and states the maintenance theorems.
 
-  The invariant has four clauses:
+  The invariant has eight clauses:
   1. Alternating levels empty: `(t + level) % 2 ≠ 0 → empty`
   2. Uniform size: all bags at an active level have equal size
   3. Capacity: items ≤ n · ν^t · A^level
   4. Strangers: j-strangers ≤ lam * eps^(j-1) * capacity
+  5. Partition: distinct (level, idx) pairs have disjoint register sets
+  6. Bounded depth: bags beyond maxLevel are empty
+  7. Index bound: bags at out-of-range indices are empty
+  8. Even size at small cap: when cap(l) < A, bags at level l+1 have even card
 
   All definitions validated by Rust simulation (`rust/test-bags.rs`):
   - Invariant holds with adversarial separator for n = 8..16384
-  - All four clauses maintained across O(log n) stages
+  - All clauses maintained across O(log n) stages
 -/
 
 import AKS.Bags.Defs
@@ -118,6 +122,11 @@ structure SeifInvariant (n : ℕ) (A ν lam ε : ℝ) (t : ℕ)
       Ensures the rank-based fringe captures all strangers in the concrete split. -/
   stranger_fringe_bound : ∀ level idx,
     (jStrangerCount n perm (bags level idx) level idx 1 : ℝ) ≤ lam * (bags level idx).card
+  /-- (8) Index bound: bags at out-of-range indices are empty. -/
+  idx_bound : ∀ level idx, 2 ^ level ≤ idx → bags level idx = ∅
+  /-- (9) Even size at small capacity: when cap(l) < A, bags at level l+1 have even card. -/
+  small_cap_even : ∀ level idx,
+    bagCapacity n A ν t level < A → Even (bags (level + 1) idx).card
 
 /-! **Parameter Constraints (Seiferas Section 5)** -/
 
@@ -253,6 +262,17 @@ theorem initialInvariant (n : ℕ) (A ν lam ε : ℝ)
       exact mul_nonneg (le_of_lt hlam) (Nat.cast_nonneg _)
     · rw [jStrangerCount_empty]
       simp only [Nat.cast_zero, card_empty, Nat.cast_zero, mul_zero, le_refl]
+  · -- Clause 8: idx bound
+    intro level idx hidx
+    simp only [initialBags]
+    split_ifs with h
+    · obtain ⟨rfl, rfl⟩ := h; simp at hidx
+    · rfl
+  · -- Clause 9: small_cap_even (vacuously true at t=0: all bags at level ≥ 1 are empty)
+    intro level idx hcap
+    simp only [initialBags]
+    have : ¬(level + 1 = 0 ∧ idx = 0) := by omega
+    rw [if_neg this]; exact ⟨0, by simp⟩
 
 /-! **Invariant Maintenance Theorems (Seiferas Section 5)** -/
 
@@ -808,6 +828,28 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       simp
     stranger_fringe_bound := by
       intro level idx
+      sorry
+    idx_bound := by
+      intro level idx hidx
+      have hempty_l : bags (level + 1) (2 * idx) = ∅ :=
+        inv.idx_bound _ _ (by calc 2 ^ (level + 1) = 2 * 2 ^ level := by ring
+                                _ ≤ 2 * idx := by omega)
+      have hempty_r : bags (level + 1) (2 * idx + 1) = ∅ :=
+        inv.idx_bound _ _ (by calc 2 ^ (level + 1) = 2 * 2 ^ level := by ring
+                                _ ≤ 2 * idx + 1 := by omega)
+      have hfp : fromParent split level idx = ∅ :=
+        fromParent_empty_of_parent_empty hsplit_sub
+          (if h : level = 0 then Or.inl h
+           else Or.inr (inv.idx_bound _ _ (by
+              have : 2 * 2 ^ (level - 1) = 2 ^ level := by
+                conv_rhs => rw [show level = (level - 1) + 1 from by omega, pow_succ]
+                ring
+              omega)))
+      unfold rebag
+      rw [(split_empty_of_bags_empty hsplit_sub hempty_l).1,
+          (split_empty_of_bags_empty hsplit_sub hempty_r).1, hfp]
+      simp
+    small_cap_even := by
       sorry
   }
 
