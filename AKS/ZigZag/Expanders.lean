@@ -13,6 +13,7 @@
 import AKS.ZigZag.Spectral
 import AKS.ZigZag.RVWBound
 import AKS.Graph.Square
+import AKS.Graph.Walk
 
 open Matrix BigOperators Finset
 
@@ -153,7 +154,81 @@ theorem zigzagFamily_gap {D : ℕ} {H₀ : RegularGraph ((D * D) * (D * D)) D}
     exact (zigzag_spectral_bound _ _ _ _ h₁ hc2_le hβ hβ_le hD).trans hiter
 
 
-/-! **The Main Result** -/
+/-! **Family Size** -/
+
+/-- The vertex count at level `k` is `B^(k+1)` where `B = (D*D)*(D*D)`. -/
+theorem zigzagFamily_size {D : ℕ} (H₀ : RegularGraph ((D * D) * (D * D)) D) (k : ℕ) :
+    (zigzagFamily H₀ k).1 = ((D * D) * (D * D)) ^ (k + 1) := by
+  induction k with
+  | zero => simp [zigzagFamily, pow_one]
+  | succ k ih => simp only [zigzagFamily, ih]; ring
+
+/-- For any `n`, there exists a level `k` such that the family has ≥ `n` vertices.
+    Since `B = (D*D)*(D*D) ≥ 16` when `D ≥ 2`, we have `B^(n+1) ≥ 2^n > n`. -/
+theorem exists_zigzagFamily_ge {D : ℕ} (hD : 2 ≤ D)
+    (H₀ : RegularGraph ((D * D) * (D * D)) D) (n : ℕ) :
+    ∃ k, n ≤ (zigzagFamily H₀ k).1 := by
+  use n
+  rw [zigzagFamily_size]
+  have hB : 2 ≤ (D * D) * (D * D) := by
+    have : 4 ≤ D * D := by nlinarith
+    nlinarith
+  exact le_of_lt (calc
+    n < 2 ^ n := Nat.lt_two_pow_self
+    _ ≤ ((D * D) * (D * D)) ^ n := Nat.pow_le_pow_left hB n
+    _ ≤ ((D * D) * (D * D)) ^ (n + 1) :=
+        Nat.pow_le_pow_right (by omega : 0 < (D * D) * (D * D)) (Nat.le_succ n))
+
+
+/-! **Contracted Expanders at Arbitrary Sizes** -/
+
+/-- An expander at any target size `n`, built by contracting an oversized
+    zig-zag family member. The result is a `Graph n` (possibly irregular)
+    with spectral gap ≤ `c`. -/
+noncomputable def contractedExpander {D : ℕ} (hD : 2 ≤ D)
+    (H₀ : RegularGraph ((D * D) * (D * D)) D)
+    (n : ℕ) (hn : 0 < n) : Graph n :=
+  let k := (exists_zigzagFamily_ge hD H₀ n).choose
+  (zigzagFamily H₀ k).2.toGraph.contract (fun v => ⟨v.val % n, Nat.mod_lt _ hn⟩)
+
+/-- The spectral gap of the contracted expander is bounded by the family's
+    fixed-point constant `c`. Chains three proved results:
+    1. `Graph.spectralGap_contract`: contraction can only decrease spectral gap
+    2. `spectralGap_toGraph`: `Graph.spectralGap` agrees with `spectralGap` for regular graphs
+    3. `zigzagFamily_gap`: the family's spectral gap is bounded by `c` -/
+theorem contractedExpander_spectralGap {D : ℕ} (hD : 2 ≤ D)
+    {H₀ : RegularGraph ((D * D) * (D * D)) D}
+    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hβ_le : β ≤ 1)
+    (hbase : β ^ 2 ≤ c) (hc_le : c ≤ 1)
+    (hiter : rvwBound (c ^ 2) β ≤ c) (n : ℕ) (hn : 0 < n) :
+    (contractedExpander hD H₀ n hn).spectralGap ≤ c := by
+  set k := (exists_zigzagFamily_ge hD H₀ n).choose
+  set Gk := (zigzagFamily H₀ k).2
+  show (Gk.toGraph.contract _).spectralGap ≤ c
+  calc (Gk.toGraph.contract _).spectralGap
+      ≤ Gk.toGraph.spectralGap := Graph.spectralGap_contract _ _
+    _ = spectralGap Gk := spectralGap_toGraph Gk (show 0 < D * D by nlinarith)
+    _ ≤ c := zigzagFamily_gap (show 0 < D by omega) hβ hβ_le hbase hc_le hiter k
+
+/-- **Explicit expanders at every positive size** (via contraction).
+
+    Given a D-regular base expander `H₀` on D⁴ vertices with spectral gap ≤ β,
+    and constants satisfying the iteration fixed-point conditions, there is
+    an expander graph with spectral gap ≤ c at every positive size `n`.
+
+    Unlike `explicit_expanders_exist_zigzag` (which incorrectly claims a
+    `RegularGraph`), this produces a `Graph n` which may be irregular. -/
+theorem explicit_expanders_graph {D : ℕ} (hD : 2 ≤ D)
+    {H₀ : RegularGraph ((D * D) * (D * D)) D}
+    {β c : ℝ} (hβ : spectralGap H₀ ≤ β) (hβ_le : β ≤ 1)
+    (hbase : β ^ 2 ≤ c) (hc_le : c ≤ 1)
+    (hiter : rvwBound (c ^ 2) β ≤ c) :
+    ∀ n, n > 0 → ∃ G : Graph n, G.spectralGap ≤ c :=
+  fun n hn => ⟨contractedExpander hD H₀ n hn,
+    contractedExpander_spectralGap hD hβ hβ_le hbase hc_le hiter n hn⟩
+
+
+/-! **The Main Result (RegularGraph — sorry'd)** -/
 
 /-- **Explicit expander families exist** (via zig-zag).
 

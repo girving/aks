@@ -30,7 +30,6 @@ import AKS.Bags.SplitProof
 import AKS.Graph.Regular
 import AKS.Graph.Square
 import AKS.Graph.Complete
-import AKS.Graph.Quotient
 import AKS.Graph.Graph
 import AKS.Graph.Walk
 import AKS.Halver.Mixing
