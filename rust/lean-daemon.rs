@@ -115,6 +115,8 @@ enum Cmd {
     LayoutChanged,
     /// LSP reader hit EOF — lake serve crashed
     LspCrashed,
+    /// Daemon source code changed — shut down so next lean-check starts new version
+    DaemonSourceChanged,
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +268,13 @@ impl Coordinator {
             Cmd::LspCrashed => {
                 self.handle_lsp_crash();
             }
+            Cmd::DaemonSourceChanged => {
+                eprintln!("[lean-daemon] Daemon source changed, shutting down (will restart on next check)...");
+                self.shutdown();
+                let _ = fs::remove_file(&self.sock_path);
+                let _ = fs::remove_file(&self.pid_path);
+                process::exit(0);
+            }
         }
     }
 
@@ -373,6 +382,9 @@ impl Coordinator {
                     let _ = respond.send(Err(DaemonError::ServerInitializing));
                 }
                 Ok(Cmd::LspCrashed) => {} // Stale from old reader after restart, ignore
+                Ok(Cmd::DaemonSourceChanged) => {
+                    self.handle_cmd(Cmd::DaemonSourceChanged); // exits process
+                }
                 Ok(Cmd::Shutdown { respond }) => {
                     let _ = respond.send(());
                     self.shutdown();
@@ -757,11 +769,19 @@ fn lsp_reader_thread(cmd_tx: Sender<Cmd>, stdout: ChildStdout) {
 
 fn start_watcher(project_root: &Path, cmd_tx: Sender<Cmd>) -> Option<RecommendedWatcher> {
     let root = project_root.to_path_buf();
+    let daemon_source = root.join("rust/lean-daemon.rs");
 
     let mut watcher =
         notify::recommended_watcher(move |res: std::result::Result<Event, notify::Error>| {
             if let Ok(event) = res {
                 for path in &event.paths {
+                    // Daemon source changed — shut down so next lean-check gets new version
+                    if *path == daemon_source {
+                        if matches!(event.kind, EventKind::Modify(_)) {
+                            let _ = cmd_tx.send(Cmd::DaemonSourceChanged);
+                        }
+                        continue;
+                    }
                     if path.extension().and_then(|e| e.to_str()) != Some("lean") {
                         continue;
                     }
@@ -787,7 +807,7 @@ fn start_watcher(project_root: &Path, cmd_tx: Sender<Cmd>) -> Option<Recommended
         .ok()?;
 
     let _ = watcher.watch(project_root, RecursiveMode::NonRecursive);
-    for dir in &["AKS", "Bench"] {
+    for dir in &["AKS", "Bench", "rust"] {
         let d = project_root.join(dir);
         if d.is_dir() {
             let _ = watcher.watch(&d, RecursiveMode::Recursive);
