@@ -152,6 +152,19 @@ noncomputable def parentStrangerCoeff (A lam ε : ℝ) : ℝ :=
 noncomputable def cnativeCoeff (A lam ε : ℝ) : ℝ :=
   ε / 2 + 2 * lam * ε * A ^ 2 / (1 - (2 * ε * A) ^ 2) + 1 / (8 * A ^ 2 - 2)
 
+/-- `cnativeCoeff` is nonneg when `A > 1`, `0 < lam`, `0 ≤ ε`, and `(2εA)² < 1`. -/
+theorem cnativeCoeff_nonneg {A lam ε : ℝ}
+    (hA : 1 < A) (hlam : 0 ≤ lam) (hε : 0 ≤ ε) (h2εA : (2 * ε * A) ^ 2 < 1) :
+    0 ≤ cnativeCoeff A lam ε := by
+  unfold cnativeCoeff
+  have hA_pos : (0 : ℝ) < A := by linarith
+  have hden1 : (0 : ℝ) < 1 - (2 * ε * A) ^ 2 := by linarith
+  have hden2 : (0 : ℝ) < 8 * A ^ 2 - 2 := by nlinarith [sq_nonneg A]
+  apply add_nonneg (add_nonneg _ _) _
+  · exact div_nonneg (by linarith) (by linarith)
+  · exact div_nonneg (by positivity) (by linarith)
+  · exact div_nonneg (by linarith) (by linarith)
+
 /-- `parentStrangerCoeff × A = lam*ε + cnativeCoeff`: the parent coefficient at child level
     decomposes into the 2-stranger contribution plus sibling-native contribution. -/
 theorem parentStrangerCoeff_mul_A {A lam ε : ℝ} (hA : A ≠ 0) :
