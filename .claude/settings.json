@@ -9,7 +9,11 @@
       "Edit(AKS/Random/**)",
       "Write(AKS/Random/**)",
       "Bash(git commit)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Edit(.github/**)",
+      "Write(.github/**)",
+      "Edit(.githooks/**)",
+      "Write(.githooks/**)"
     ],
     "allow": [
       "Bash(cat *)",
