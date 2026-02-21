@@ -247,3 +247,21 @@ theorem Graph.sum_deg {n : ℕ} (G : Graph n) :
     (fun e _ ↦ Finset.mem_univ (G.src e))
   simp only [Finset.card_univ, Fintype.card_fin] at h
   linarith
+
+/-- The degree of a contracted vertex equals the sum of degrees in the fiber. -/
+theorem Graph.contract_deg_eq_sum_fiber {n : ℕ} (G : Graph n) {m : ℕ}
+    (s : Fin n → Fin m) (u : Fin m) :
+    (G.contract s).deg u = ∑ v ∈ univ.filter (s · = u), G.deg v := by
+  unfold Graph.deg; simp only [Graph.contract_src]
+  set S := univ.filter (fun v : Fin n ↦ s v = u)
+  set fiber := fun v ↦ univ.filter (fun e : Fin G.halfs ↦ G.src e = v)
+  have partition : (univ.filter (fun e : Fin G.halfs ↦ s (G.src e) = u)) =
+      S.biUnion fiber := by
+    ext e; simp only [S, fiber, mem_filter, mem_univ, true_and, mem_biUnion]
+    exact ⟨fun h ↦ ⟨G.src e, h, rfl⟩, fun ⟨_, hv, he⟩ ↦ he ▸ hv⟩
+  have hdisj : (S : Set (Fin n)).PairwiseDisjoint fiber := by
+    intro v₁ _ v₂ _ hne
+    simp only [fiber, Finset.disjoint_filter]
+    intro e _ h₁ h₂; exact hne (h₁.symm.trans h₂)
+  show (univ.filter (fun e : Fin G.halfs ↦ s (G.src e) = u)).card = _
+  rw [partition, Finset.card_biUnion hdisj]
