@@ -441,6 +441,30 @@ theorem below_boundary_deviation {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
   sorry
 
+/-- Sub-lemma A (rank structure): siblingNativeCount of fromParent ≤ |C - ⌊b/2⌋|.
+
+    For items received from the parent split, the sibling-native count is bounded
+    by the deviation of the below-boundary count from half the parent bag size.
+
+    **Proof sketch** (validated by `rust/test-cnative-upper-bound.rs`):
+    1. Characterize sibling-native items as those with perm values crossing the
+       child boundary (needs n = 2^k for clean interval splitting)
+    2. In fromParent (rank range [f, f+h) or [f+h, f+2h) in parent bag B),
+       items with perm on the "wrong side" have rank ≥ C (or < C)
+    3. Count = max(0, f+h - max(f, C)) ≤ max(0, b/2 - C) ≤ |C - b/2| -/
+theorem siblingNative_le_deviation {n : ℕ} {lam : ℝ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (hn : ∃ k, n = 2 ^ k) (hperm : Function.Injective perm) (hlam : lam ≤ 1)
+    (level idx : ℕ) (hlev : 1 ≤ level) :
+    let B := bags (level - 1) (idx / 2)
+    let boundary := (idx / 2) * bagSize n (level - 1) + bagSize n level
+    let C := (B.filter (fun i ↦ (perm i).val < boundary)).card
+    siblingNativeCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      level idx ≤
+    Int.natAbs (↑C - ↑(B.card / 2)) := by
+  sorry
+
 /-- Sibling-native bound for the concrete split: items from parent that are
     native to the sibling child are bounded by `cnativeCoeff · cap(parent)`.
 
@@ -456,13 +480,15 @@ theorem below_boundary_deviation {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
 theorem concreteSplit_cnative_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hn : ∃ k, n = 2 ^ k)
     (hparams : SatisfiesConstraints A ν lam ε)
+    (hperm : Function.Injective perm)
     (level idx : ℕ) :
     (siblingNativeCount n perm
       (fromParent (concreteSplit lam perm bags) level idx)
       level idx : ℝ) ≤
     cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
-  obtain ⟨hA, hν, hν1, hlam, _, hε, _, hC4, _⟩ := hparams
+  obtain ⟨hA, hν, hν1, hlam, hlam_half, hε, _, hC4, _⟩ := hparams
   have hA_pos : (0 : ℝ) < A := by linarith
   -- Derive (2εA)² < 1 from C4_gt1 + ν < 1
   have h2εA : (2 * ε * A) ^ 2 < 1 := by
@@ -481,8 +507,14 @@ theorem concreteSplit_cnative_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
   · subst hlev; simp only [fromParent, ite_true]
     rw [siblingNativeCount_empty]; simp only [Nat.cast_zero]
     exact mul_nonneg hcnc (by unfold bagCapacity; positivity)
-  -- Level ≥ 1: the core deviation bound (sorry'd via below_boundary_deviation)
-  · sorry
+  -- Level ≥ 1: chain Sub-lemma A (rank structure) + Sub-lemma B (deviation bound)
+  · have hlev1 : 1 ≤ level := by omega
+    have hlam1 : lam ≤ 1 := by linarith
+    have hA_le := siblingNative_le_deviation (bags := bags) hn hperm hlam1 level idx hlev1
+    have hparams' : SatisfiesConstraints A ν lam ε :=
+      ⟨hA, hν, hν1, hlam, hlam_half, hε, ‹_›, hC4, ‹_›⟩
+    have hB_le := below_boundary_deviation inv hparams' hperm level idx hlev1
+    exact le_trans (by exact_mod_cast hA_le) hB_le
 
 /-! **Concrete Split: Assembled Stranger Bounds**
 
@@ -509,6 +541,7 @@ theorem concreteSplit_parent_1stranger {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     (inv : SeifInvariant n A ν lam ε t perm bags)
     (hn : ∃ k, n = 2 ^ k)
     (hparams : SatisfiesConstraints A ν lam ε)
+    (hperm : Function.Injective perm)
     (level idx : ℕ) :
     (jStrangerCount n perm
       (fromParent (concreteSplit lam perm bags) level idx)
@@ -517,5 +550,5 @@ theorem concreteSplit_parent_1stranger {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
   parent_1stranger_from_inv _ inv hparams
     (fun l i j hj hl ↦ concreteSplit_fromParent_filtered inv hn
       (le_of_lt hparams.2.2.2.1) (le_of_lt hparams.2.2.2.2.2.1) l i j hj hl)
-    (fun l i ↦ concreteSplit_cnative_bound inv hparams l i)
+    (fun l i ↦ concreteSplit_cnative_bound inv hn hparams hperm l i)
     level idx
