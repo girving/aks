@@ -152,7 +152,7 @@ struct Coordinator {
     pending_checks: HashMap<String, Vec<PendingCheck>>,
     opened_files: HashMap<String, u64>,
     changed_files: HashSet<String>,
-    file_snapshot: HashSet<String>,
+    layout_changed: bool,
     /// Max number of files checked concurrently by the LSP server
     max_concurrent: usize,
     /// Number of checks currently in flight
@@ -201,7 +201,7 @@ impl Coordinator {
             pending_checks: HashMap::new(),
             opened_files: HashMap::new(),
             changed_files: HashSet::new(),
-            file_snapshot: HashSet::new(),
+            layout_changed: false,
             max_concurrent,
             active_count: 0,
             check_queue: VecDeque::new(),
@@ -261,8 +261,7 @@ impl Coordinator {
                 self.changed_files.insert(relpath);
             }
             Cmd::LayoutChanged => {
-                // Clear snapshot so restart_if_stale detects the change
-                self.file_snapshot.clear();
+                self.layout_changed = true;
             }
             Cmd::LspCrashed => {
                 self.handle_lsp_crash();
@@ -314,7 +313,7 @@ impl Coordinator {
         }
         self.active_count = 0;
         self.opened_files.clear();
-        self.file_snapshot = snapshot_lean_files(&self.project_root);
+        self.layout_changed = false;
 
         // Spawn LSP reader thread
         let tx = self.cmd_tx.clone();
@@ -426,8 +425,7 @@ impl Coordinator {
     }
 
     fn restart_if_stale(&mut self) {
-        let current = snapshot_lean_files(&self.project_root);
-        if current == self.file_snapshot {
+        if !self.layout_changed {
             return;
         }
         eprintln!("[lean-daemon] File layout changed, restarting lake serve...");
@@ -816,41 +814,6 @@ fn socket_path(hash: &str) -> String {
 
 fn pid_path(hash: &str) -> String {
     format!("/tmp/lean-daemon-{}.pid", hash)
-}
-
-fn snapshot_lean_files(root: &Path) -> HashSet<String> {
-    let mut files = HashSet::new();
-    // Top-level *.lean files
-    if let Ok(entries) = fs::read_dir(root) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("lean") {
-                if let Ok(rel) = path.strip_prefix(root) {
-                    files.insert(rel.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-    // AKS/**/*.lean (recursive)
-    collect_lean_files_recursive(&root.join("AKS"), root, &mut files);
-    files
-}
-
-fn collect_lean_files_recursive(dir: &Path, root: &Path, files: &mut HashSet<String>) {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_lean_files_recursive(&path, root, files);
-        } else if path.extension().and_then(|e| e.to_str()) == Some("lean") {
-            if let Ok(rel) = path.strip_prefix(root) {
-                files.insert(rel.to_string_lossy().to_string());
-            }
-        }
-    }
 }
 
 fn path_to_uri(path: &Path) -> String {
