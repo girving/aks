@@ -9,9 +9,11 @@
   - `concreteSplit_maintains_invariant`: the invariant holds at stage `t+1`
     on `rebag (concreteSplit lam perm bags)`
 
-  Remaining gaps (2):
+  Remaining gaps (4):
   - `concreteSplit_cnative_bound` (SplitStranger.lean) — sibling-native bound
-  - `small_cap_even` maintenance (Invariant.lean) — even bag sizes when cap < A
+  - `concreteSplit_stranger_fringe` — strangers fit in fringe after rebag
+  - `concreteSplit_small_cap_even` — even bag sizes after rebag when cap < A
+  Both fringe/even require item conservation (see seiferas-plan.md I4).
 -/
 
 import AKS.Bags.SplitCard
@@ -65,3 +67,9 @@ theorem concreteSplit_maintains_invariant {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
     (concreteSplit_hrebag_uniform inv hperm (by linarith [hparams.2.2.2.2.1]))
     -- hrebag_disjoint: disjoint rebag bags (proved)
     (concreteSplit_hrebag_disjoint inv)
+    -- hrebag_stranger_fringe: strangers fit in fringe after rebag
+    -- Requires item conservation to show card ≈ cap (see seiferas-plan.md I4)
+    (by intro level idx; sorry)
+    -- hrebag_small_cap_even: even bag sizes after rebag when cap < A
+    -- Requires subtree counting + item conservation (see seiferas-plan.md I4)
+    (by intro level idx hcap; sorry)
