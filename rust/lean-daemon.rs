@@ -4,7 +4,7 @@
 notify = "8"
 serde_json = "1"
 md-5 = "0.10"
-glob = "0.3"
+libc = "0.2"
 
 [profile.release]
 opt-level = 2
@@ -28,18 +28,63 @@ opt-level = 2
 //!                       └─────────────┘
 //!   ```
 
-use glob::glob;
 use md5::{Digest, Md5};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::fmt;
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::time::{Duration, Instant};
 use std::{env, fs, process, thread};
+
+// ---------------------------------------------------------------------------
+// Error type
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+enum DaemonError {
+    Io(io::Error),
+    Json(serde_json::Error),
+    Timeout { operation: &'static str, seconds: u64 },
+    LspNotStarted,
+    ServerRestarted,
+    ServerInitializing,
+    MissingField(&'static str),
+    CoordinatorDead,
+    Other(String),
+}
+
+impl fmt::Display for DaemonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DaemonError::Io(e) => write!(f, "I/O error: {e}"),
+            DaemonError::Json(e) => write!(f, "JSON error: {e}"),
+            DaemonError::Timeout { operation, seconds } =>
+                write!(f, "{operation} timed out after {seconds}s"),
+            DaemonError::LspNotStarted => write!(f, "LSP not started"),
+            DaemonError::ServerRestarted => write!(f, "Server restarted"),
+            DaemonError::ServerInitializing => write!(f, "Server initializing"),
+            DaemonError::MissingField(name) => write!(f, "Missing '{name}' field"),
+            DaemonError::CoordinatorDead => write!(f, "Coordinator dead"),
+            DaemonError::Other(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl From<io::Error> for DaemonError {
+    fn from(e: io::Error) -> Self { DaemonError::Io(e) }
+}
+
+impl From<serde_json::Error> for DaemonError {
+    fn from(e: serde_json::Error) -> Self { DaemonError::Json(e) }
+}
+
+type Result<T> = std::result::Result<T, DaemonError>;
 
 // ---------------------------------------------------------------------------
 // Commands sent to the coordinator
@@ -49,7 +94,7 @@ enum Cmd {
     Check {
         file: String,
         close_after: bool,
-        respond: SyncSender<Result<Value, String>>,
+        respond: SyncSender<Result<Value>>,
     },
     Close {
         file: String,
@@ -77,14 +122,14 @@ struct PendingCheck {
     filepath: String,
     t0: Instant,
     close_after: bool,
-    respond: SyncSender<Result<Value, String>>,
+    respond: SyncSender<Result<Value>>,
 }
 
 /// A check request waiting for a concurrency slot.
 struct QueuedCheck {
     file: String,
     close_after: bool,
-    respond: SyncSender<Result<Value, String>>,
+    respond: SyncSender<Result<Value>>,
 }
 
 struct Coordinator {
@@ -209,7 +254,7 @@ impl Coordinator {
 
     // -- Lake serve lifecycle -----------------------------------------------
 
-    fn start_lake_serve(&mut self) -> Result<(), String> {
+    fn start_lake_serve(&mut self) -> Result<()> {
         eprintln!("[lean-daemon] Building CertCheck shared lib...");
         let _ = Command::new("lake")
             .args(["build", "CertCheck:shared"])
@@ -228,11 +273,10 @@ impl Coordinator {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .current_dir(&self.project_root)
-            .spawn()
-            .map_err(|e| format!("Failed to spawn lake serve: {e}"))?;
+            .spawn()?;
 
         self.lsp_stdin = proc.stdin.take();
-        let stdout = proc.stdout.take().ok_or("No stdout")?;
+        let stdout = proc.stdout.take().ok_or(DaemonError::Other("No stdout".into()))?;
         self.lake_proc = Some(proc);
 
         // Reset state
@@ -243,11 +287,11 @@ impl Coordinator {
         // Error out any pending/queued checks from before restart
         for (_, checks) in self.pending_checks.drain() {
             for check in checks {
-                let _ = check.respond.send(Err("Server restarted".into()));
+                let _ = check.respond.send(Err(DaemonError::ServerRestarted));
             }
         }
         for queued in self.check_queue.drain(..) {
-            let _ = queued.respond.send(Err("Server restarted".into()));
+            let _ = queued.respond.send(Err(DaemonError::ServerRestarted));
         }
         self.active_count = 0;
         self.opened_files.clear();
@@ -257,8 +301,7 @@ impl Coordinator {
         let tx = self.cmd_tx.clone();
         thread::Builder::new()
             .name("lsp-reader".into())
-            .spawn(move || lsp_reader_thread(tx, stdout))
-            .map_err(|e| format!("Failed to spawn reader thread: {e}"))?;
+            .spawn(move || lsp_reader_thread(tx, stdout))?;
 
         // Send initialize request and wait for response
         let t0 = Instant::now();
@@ -277,14 +320,14 @@ impl Coordinator {
                     }
                 },
             },
-        })).unwrap())?;
+        }))?)?;
 
         // Drain command channel until we get the initialize response
         let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                return Err("initialize timed out after 60s".into());
+                return Err(DaemonError::Timeout { operation: "initialize", seconds: 60 });
             }
             match self.cmd_rx.recv_timeout(remaining) {
                 Ok(Cmd::LspMessage(msg)) => {
@@ -299,14 +342,14 @@ impl Coordinator {
                 Ok(Cmd::Ping { respond }) => { let _ = respond.send(()); }
                 Ok(Cmd::Close { .. }) => {}
                 Ok(Cmd::Check { respond, .. }) => {
-                    let _ = respond.send(Err("Server initializing".into()));
+                    let _ = respond.send(Err(DaemonError::ServerInitializing));
                 }
                 Ok(Cmd::Shutdown { respond }) => {
                     let _ = respond.send(());
                     self.shutdown();
                     process::exit(0);
                 }
-                Err(_) => return Err("initialize timed out".into()),
+                Err(_) => return Err(DaemonError::Timeout { operation: "initialize", seconds: 60 }),
             }
         }
 
@@ -362,20 +405,21 @@ impl Coordinator {
 
     // -- LSP I/O (direct writes, no locks) ----------------------------------
 
-    fn lsp_send_raw(&mut self, body: &[u8]) -> Result<(), String> {
-        let stdin = self.lsp_stdin.as_mut().ok_or("LSP not started")?;
+    fn lsp_send_raw(&mut self, body: &[u8]) -> Result<()> {
+        let stdin = self.lsp_stdin.as_mut().ok_or(DaemonError::LspNotStarted)?;
         let header = format!("Content-Length: {}\r\n\r\n", body.len());
-        stdin.write_all(header.as_bytes()).map_err(|e| e.to_string())?;
-        stdin.write_all(body).map_err(|e| e.to_string())?;
-        stdin.flush().map_err(|e| e.to_string())
+        stdin.write_all(header.as_bytes())?;
+        stdin.write_all(body)?;
+        stdin.flush()?;
+        Ok(())
     }
 
-    fn lsp_notify(&mut self, method: &str, params: Value) -> Result<(), String> {
+    fn lsp_notify(&mut self, method: &str, params: Value) -> Result<()> {
         let body = serde_json::to_vec(&serde_json::json!({
             "jsonrpc": "2.0",
             "method": method,
             "params": params,
-        })).unwrap();
+        }))?;
         self.lsp_send_raw(&body)
     }
 
@@ -526,7 +570,7 @@ impl Coordinator {
         &mut self,
         filepath: &str,
         close_after: bool,
-        respond: SyncSender<Result<Value, String>>,
+        respond: SyncSender<Result<Value>>,
     ) {
         let (abspath, uri) = self.file_uri(filepath);
 
@@ -535,7 +579,7 @@ impl Coordinator {
         let content = match fs::read_to_string(&abspath) {
             Ok(c) => c,
             Err(e) => {
-                let _ = respond.send(Err(format!("Failed to read {filepath}: {e}")));
+                let _ = respond.send(Err(DaemonError::Io(e)));
                 return;
             }
         };
@@ -575,7 +619,7 @@ impl Coordinator {
         };
 
         if let Err(e) = send_result {
-            let _ = respond.send(Err(format!("LSP send failed: {e}")));
+            let _ = respond.send(Err(e));
             return;
         }
 
@@ -662,7 +706,7 @@ fn start_watcher(project_root: &Path, cmd_tx: Sender<Cmd>) -> Option<Recommended
     let root = project_root.to_path_buf();
 
     let mut watcher =
-        notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+        notify::recommended_watcher(move |res: std::result::Result<Event, notify::Error>| {
             if let Ok(event) = res {
                 for path in &event.paths {
                     if path.extension().and_then(|e| e.to_str()) != Some("lean") {
@@ -717,17 +761,37 @@ fn socket_path(hash: &str) -> String {
 
 fn snapshot_lean_files(root: &Path) -> HashSet<String> {
     let mut files = HashSet::new();
-    for pattern in &["*.lean", "AKS/**/*.lean"] {
-        let full = root.join(pattern).to_string_lossy().to_string();
-        if let Ok(paths) = glob(&full) {
-            for entry in paths.flatten() {
-                if let Ok(rel) = entry.strip_prefix(root) {
+    // Top-level *.lean files
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("lean") {
+                if let Ok(rel) = path.strip_prefix(root) {
                     files.insert(rel.to_string_lossy().to_string());
                 }
             }
         }
     }
+    // AKS/**/*.lean (recursive)
+    collect_lean_files_recursive(&root.join("AKS"), root, &mut files);
     files
+}
+
+fn collect_lean_files_recursive(dir: &Path, root: &Path, files: &mut HashSet<String>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_lean_files_recursive(&path, root, files);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("lean") {
+            if let Ok(rel) = path.strip_prefix(root) {
+                files.insert(rel.to_string_lossy().to_string());
+            }
+        }
+    }
 }
 
 fn path_to_uri(path: &Path) -> String {
@@ -739,7 +803,7 @@ fn path_to_uri(path: &Path) -> String {
 // ---------------------------------------------------------------------------
 
 fn handle_client(cmd_tx: &Sender<Cmd>, mut stream: UnixStream) {
-    let result: Result<String, String> = (|| {
+    let result: Result<String> = (|| {
         let mut data = Vec::new();
         let mut buf = [0u8; 4096];
         loop {
@@ -755,14 +819,13 @@ fn handle_client(cmd_tx: &Sender<Cmd>, mut stream: UnixStream) {
             }
         }
 
-        let request: Value =
-            serde_json::from_slice(&data).map_err(|e| format!("Invalid JSON: {e}"))?;
+        let request: Value = serde_json::from_slice(&data)?;
         let command = request.get("command").and_then(|v| v.as_str()).unwrap_or("");
 
         match command {
             "check" => {
                 let file = request.get("file").and_then(|v| v.as_str())
-                    .ok_or("Missing 'file' field")?;
+                    .ok_or(DaemonError::MissingField("file"))?;
                 let close_after = request.get("close_after").and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let (tx, rx) = mpsc::sync_channel(1);
@@ -770,24 +833,24 @@ fn handle_client(cmd_tx: &Sender<Cmd>, mut stream: UnixStream) {
                     file: file.to_string(),
                     close_after,
                     respond: tx,
-                }).map_err(|e| format!("Coordinator dead: {e}"))?;
+                }).map_err(|_| DaemonError::CoordinatorDead)?;
                 // Block until coordinator signals completion (or timeout).
                 // 600s accommodates queue wait + check time for large files.
                 let result = rx.recv_timeout(Duration::from_secs(600))
-                    .map_err(|_| "File processing timed out after 600s".to_string())??;
-                Ok(serde_json::to_string(&result).unwrap())
+                    .map_err(|_| DaemonError::Timeout { operation: "file check", seconds: 600 })??;
+                Ok(serde_json::to_string(&result)?)
             }
             "close" => {
                 let file = request.get("file").and_then(|v| v.as_str())
-                    .ok_or("Missing 'file' field")?;
+                    .ok_or(DaemonError::MissingField("file"))?;
                 cmd_tx.send(Cmd::Close { file: file.to_string() })
-                    .map_err(|e| format!("Coordinator dead: {e}"))?;
+                    .map_err(|_| DaemonError::CoordinatorDead)?;
                 Ok(r#"{"status":"closed"}"#.to_string())
             }
             "ping" => {
                 let (tx, rx) = mpsc::sync_channel(1);
                 cmd_tx.send(Cmd::Ping { respond: tx })
-                    .map_err(|e| format!("Coordinator dead: {e}"))?;
+                    .map_err(|_| DaemonError::CoordinatorDead)?;
                 let _ = rx.recv();
                 Ok(r#"{"status":"ok"}"#.to_string())
             }
@@ -804,11 +867,18 @@ fn handle_client(cmd_tx: &Sender<Cmd>, mut stream: UnixStream) {
     match result {
         Ok(response) => { let _ = stream.write_all(response.as_bytes()); }
         Err(e) => {
-            let r = serde_json::json!({"error": e});
+            let r = serde_json::json!({"error": e.to_string()});
             let _ = stream.write_all(serde_json::to_string(&r).unwrap().as_bytes());
         }
     }
     let _ = stream.flush();
+}
+
+/// Global shutdown flag set by signal handlers.
+static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn signal_handler(_sig: libc::c_int) {
+    SHUTDOWN.store(true, Ordering::SeqCst);
 }
 
 fn main() {
@@ -819,6 +889,14 @@ fn main() {
     let hash = project_hash(&project_root);
     let sock_path = socket_path(&hash);
     let _ = fs::remove_file(&sock_path);
+
+    // Install SIGTERM/SIGINT handler for clean shutdown.
+    // The handler sets SHUTDOWN; the accept loop checks it and tells
+    // the coordinator to shut down (kills lake serve, removes socket).
+    unsafe {
+        libc::signal(libc::SIGTERM, signal_handler as libc::sighandler_t);
+        libc::signal(libc::SIGINT, signal_handler as libc::sighandler_t);
+    }
 
     let (cmd_tx, cmd_rx) = mpsc::channel();
     let (ready_tx, ready_rx) = mpsc::sync_channel(1);
@@ -844,16 +922,32 @@ fn main() {
             process::exit(1);
         }
     };
+    // Non-blocking so we can check the shutdown flag periodically
+    listener.set_nonblocking(true).ok();
     eprintln!("[lean-daemon] Listening on {sock_path}");
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
+    loop {
+        if SHUTDOWN.load(Ordering::SeqCst) {
+            eprintln!("[lean-daemon] Signal received, shutting down...");
+            let (tx, rx) = mpsc::sync_channel(1);
+            let _ = cmd_tx.send(Cmd::Shutdown { respond: tx });
+            let _ = rx.recv_timeout(Duration::from_secs(5));
+            let _ = fs::remove_file(&sock_path);
+            eprintln!("[lean-daemon] Clean shutdown complete");
+            process::exit(0);
+        }
+
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false).ok();
                 let tx = cmd_tx.clone();
                 thread::Builder::new()
                     .name("client".into())
                     .spawn(move || handle_client(&tx, stream))
                     .ok();
+            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(50));
             }
             Err(e) => eprintln!("[lean-daemon] Accept error: {e}"),
         }
