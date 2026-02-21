@@ -1,6 +1,6 @@
 # Seiferas Path: Remaining Work and Parallelism Analysis
 
-## Current Status (2026-02-20)
+## Current Status (2026-02-21)
 
 The Seiferas path (expanders -> halvers -> separators -> bag-tree sorting) has
 its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
@@ -9,7 +9,8 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 |------|---------|--------|
 | `Invariant.lean` | `small_cap_even` maintenance | sorry (moved from `bags_even_at_small_cap`) |
 | `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | sorry (90% confidence) |
-| `SplitStranger.lean` | `concreteSplit_cnative_bound` | sorry (75% confidence) |
+| `SplitStranger.lean` | `below_boundary_deviation` | sorry (factored from `cnative_bound`, 75% confidence) |
+| `SplitStranger.lean` | `concreteSplit_cnative_bound` level≥1 | sorry (depends on `below_boundary_deviation`) |
 | `TreeSort.lean` | `separatorSortingNetwork_sorts` | sorry (65% confidence) |
 
 **Proved** (this session and prior):
@@ -46,106 +47,19 @@ Seiferas.lean                       -- seiferas_sorting_networks_exist
 
 ### S1: `bags_even_at_small_cap` (SplitCard.lean) -- **RESOLVED**
 
-**Statement:** When `bagCapacity n A ν t l < A`, all bags at level `l+1`
-have even `card`.
+**Resolution:** Added `small_cap_even` as a direct invariant clause in
+`SeifInvariant` (clause 8). `bags_even_at_small_cap` is now a trivial
+extraction. The sorry moved to `small_cap_even` maintenance in
+`invariant_maintained`.
 
-**The statement is FALSE.** The current `SeifInvariant` does not contain
-enough information to prove this. Counterexample: n=8, bags(1,0)={0,1,2},
-bags(1,1)={4,5,6} satisfies all 6 clauses of `SeifInvariant` (alternating
-empty, uniform size 3, capacity bound, stranger bound, bags disjoint,
-bounded depth) but has odd card = 3.
+Also added `idx_bound` (clause 7): bags at out-of-range indices are empty.
+Both clauses proved for initial state; `idx_bound` proved for maintenance;
+`small_cap_even` sorry'd for maintenance.
 
-**Root Cause 1: Missing item conservation.** Seiferas (Section 2, p.2)
-assumes "we consider each of them always to occupy one of n-1 bags" --
-items are NEVER lost. Our `SeifInvariant` has `bags_disjoint` (no item in
-two bags) but not `items_partition` (every item in some bag). Without this,
-the invariant allows states where items vanish, making the total-items-per-
-subtree argument impossible.
-
-**Root Cause 2: Leaf-level item loss in `concreteSplit`.** At leaf levels
-(`maxLevel n <= level`), `toLeftChild = {}` and `toRightChild = {}`. But
-`toParent` only captures fringe items (rank < f or rank >= f+2h). Items
-with rank in [f, f+2h) go NOWHERE and are permanently lost. This violates
-item conservation.
-
-**Root Cause 3: Invariant too weak.** Seiferas's Clause (2) (Section 4,
-p.3) is STRONGER than our `uniform_size`. It tracks: "the number of items
-currently in each bag (or in the entire subtree below) is the same" --
-subtree totals, not just individual bag sizes.
-
-**Fix Plan (3 coordinated changes):**
-
-#### A. Add item conservation to `SeifInvariant`
-
-Add a new clause to `SeifInvariant`:
-
-```lean
-items_partition : Finset.univ = (Finset.univ.biUnion
-  (fun l => (Finset.range (2^l)).biUnion (fun idx => bags l idx)))
-```
-
-Or equivalently, track that the total items across all bags at a given level
-equals `n` (item count is conserved). Consider also strengthening
-`uniform_size` to track subtree totals per Seiferas's Clause (2).
-
-Key references: Seiferas Section 2 (p.2), Section 4 (p.3, Clause 2).
-
-#### B. Fix `concreteSplit` at leaf levels
-
-When `maxLevel n <= level`, change the split so that `toParent = regs`
-(ALL items go to parent). Currently only fringe items go to parent and
-middle items are lost. The fix:
-
-```lean
-toParent := if maxLevel n <= level then regs
-            else regs.filter (fun i => ...)
-```
-
-**Seiferas's approach (Section 3, p.3):** At leaf levels, bags have at most
-n/2^maxLevel = 2 items (from subtree uniformity + item conservation). Before
-convergence, kick capacity = 2*floor(lam*b) + 1 >= 3 > 2 >= items, so ALL
-items can be evacuated to parent.
-
-This change will affect `concreteSplit_hkick` (kick bound) at leaf levels.
-The bound `2*lam*cap + 1` still holds because leaf bags have at most 2 items
-and `cap >= 2` at leaf level (since `cap(maxLevel) = n*nu^t * A^maxLevel`
-which starts large before convergence).
-
-#### C. Derive even-size from strengthened invariant
-
-With item conservation + subtree uniformity:
-1. When `cap(l) < A`: `cap(0) = n*nu^t < A^(l+1)`, so bags at levels
-   `0..l` have cap < 1 and are empty.
-2. Total items in each subtree at level `l+1` is `n / 2^(l+1)`, which
-   equals `2^(k-l-1)` (even since n=2^k and k-l-1 >= 1 because l < maxLevel).
-3. By subtree uniformity, left and right sub-subtrees have equal size,
-   so each bag's size = subtree_total - left_child_total - right_child_total
-   is even.
-
-Key reference: Seiferas Section 5 (p.4).
-
-#### D. Adjust `hkick` bound for leaf levels
-
-At leaf levels, sending all items to parent instead of just fringe items
-changes the kick count. But leaf bags have at most 2 items (from subtree
-uniformity + n=2^k), so the kick count is at most 2, which is still
-<= 2*lam*cap + 1 as long as cap >= 1 at that level.
-
-**Impact on downstream:**
-- `concreteSplit_maintains_invariant` (SplitProof.lean): needs the new
-  `items_partition` clause proved for `rebag(concreteSplit(...))`. This
-  requires showing the split is a partition (all items in exactly one of
-  toParent/toLeftChild/toRightChild).
-- `initialInvariant` (Invariant.lean): needs to prove `items_partition`
-  for the initial bag assignment.
-- `capacity_maintained` (Invariant.lean): unaffected -- the two-case proof
-  structure is correct and `hkick_pair` is already proved.
-
-**Difficulty:** MEDIUM-HARD. The fix is well-understood mathematically but
-touches several files and requires reproving item conservation through
-`rebag`.
-
-**Estimate:** 2-3 weeks.
+This was simpler than the original plan (no changes to `concreteSplit`,
+no item conservation clause needed). The `small_cap_even` maintenance
+sorry is structurally sound — it would follow from subtree counting
+(Seiferas Clause 2) but that infrastructure isn't needed yet.
 
 ### S2: `concreteSplit_fromParent_filtered` (SplitStranger.lean)
 
@@ -258,33 +172,25 @@ infrastructure (wire<->bag bridge).
 ### Dependency Graph
 
 ```
-S1 (fix invariant + leaf split) ----+
+S1 (invariant clauses) ---- DONE
 S2 (fromParent_filtered) ----------+--> S4 (assembly + convergence->sorted)
 S3 (cnative_bound) ----------------+
 ```
 
-S1, S2, and S3 are **fully independent** of each other:
-- S1 (even sizes) is invariant strengthening + concreteSplit leaf fix
+S2 and S3 are **fully independent** of each other:
 - S2 (eps-filtering) is rank-based combinatorics using `rankInBag` + `perm` bounds
 - S3 (sibling-native) is separator-error analysis using `nativeBagIdx` + `rankInBag`
 
-### Recommended: 3 Parallel Instances
+### Parallel Instances
 
-| Instance | Task | Files touched | Key references |
-|----------|------|---------------|----------------|
-| **I1** | S1: ~~Fix invariant + prove `bags_even_at_small_cap`~~ **DONE** | `Invariant.lean`, `SplitCard.lean`, `SplitProof.lean` | Seiferas Sections 2-5 |
-| **I2** | S2: Prove `concreteSplit_fromParent_filtered` | `SplitStranger.lean`, possibly `Split.lean` | Seiferas Section 5, stranger definitions |
-| **I3** | S3: Prove `concreteSplit_cnative_bound` | `SplitStranger.lean`, possibly `Split.lean` | Seiferas Section 5, separator guarantee |
+| Instance | Task | Status |
+|----------|------|--------|
+| **I1** | S1: Add invariant clauses for `bags_even_at_small_cap` | **DONE** |
+| **I2** | S2: Prove `concreteSplit_fromParent_filtered` | Pending |
+| **I3** | S3: Prove `concreteSplit_cnative_bound` | In progress (level=0 done) |
 
-**Conflict risks:**
-- I2 and I3 both touch `SplitStranger.lean` but at non-overlapping sorry
-  locations (line ~253 vs line ~270) -- trivial merge
-- I1 changes `Invariant.lean` (add clause) and `Split.lean` (fix leaf case).
-  I2/I3 may add helper lemmas to `Split.lean`. Coordinate by having I2/I3
-  add helpers at the END of `Split.lean`, while I1's changes are to the
-  `concreteSplit` definition near the top.
-- I1 changes `SplitProof.lean` to prove the new `items_partition` clause.
-  I2/I3 don't touch this file.
+**Conflict risks:** I2 and I3 both touch `SplitStranger.lean` but at
+non-overlapping sorry locations (line ~253 vs line ~276) -- trivial merge.
 
 ### Instance I1: **COMPLETED**
 
@@ -331,9 +237,13 @@ since LHS = 0.
 - `fringeSize` (Split.lean): `floor(lam * b)`
 - `fromParent` in rebag: items sent to child from parent's split
 
-### Instance I3: Detailed Plan
+### Instance I3: Detailed Plan (IN PROGRESS)
 
 **Goal:** Prove `concreteSplit_cnative_bound`.
+
+**Progress:** Level=0 case proved. Factored into `below_boundary_deviation`
+(sorry'd sub-lemma) + assembly for level≥1. Added `cnativeCoeff_nonneg` and
+`siblingNativeCount_empty`/`siblingNativeCount_le_card` helper lemmas.
 
 **Confidence: 75%.** Statement correct (validated by Rust). The mathematical
 argument is Seiferas's benchmark distribution comparison (Section 5, p.5).
@@ -480,14 +390,13 @@ but requires modifying the invariant (interaction with S1 work).
 
 #### Recommended Execution Order
 
-1. Prove level=0 case (trivial: fromParent = ∅) — 5 min
-2. Prove Sub-lemma A (rank structure) — 1-2 weeks
-3. Factor Sub-lemma B into B1 + B2a + B2b — 1 week
-4. Prove B1 (stranger contribution from invariant) — 1 week
-5. Prove B2a + B2b (benchmark argument) or sorry — 2-4 weeks
-6. Assemble the full theorem — 1 day
+1. ~~Prove level=0 case (trivial: fromParent = ∅)~~ **DONE**
+2. ~~Factor into `below_boundary_deviation` sub-lemma~~ **DONE**
+3. Prove Sub-lemma A (rank structure → `siblingNativeCount_fromParent_le_deviation`) — 1-2 weeks
+4. Prove Sub-lemma B (`below_boundary_deviation`) — factor into B1 + B2a + B2b — 2-4 weeks
+5. Assemble level≥1 case of `concreteSplit_cnative_bound` — 1 day
 
-**Total estimate:** 4-8 weeks (2-3 if B2 is sorry'd).
+**Total remaining estimate:** 3-6 weeks (1-2 if B2 is sorry'd).
 
 **Shared infrastructure with I2:** Both need rank-perm ordering lemmas
 from `Split.lean`. If I2 and I3 run in parallel, coordinate so that shared
@@ -495,12 +404,13 @@ helpers go in `Split.lean` (avoid conflicts in `SplitStranger.lean`).
 
 ## Other Sorries (Outside Bags Subsystem)
 
-The full project has 14 sorries total. The Bags subsystem accounts for 4
-(S1-S4 above). The remainder:
+The full project has 15 sorries total. The Bags subsystem accounts for 5.
+The remainder:
 
 | Area | Count | Key theorems |
 |------|-------|-------------|
 | `Graph/Quotient.lean` | 1 | `spectralGap_quotient` (Cauchy interlacing) |
+| `Graph/Walk.lean` | 2 | `spectralGap_contract`, `spectralGap_toGraph` |
 | `ZigZag/Expanders.lean` | 1 | `explicit_expanders_exist_zigzag` (needs quotient graphs) |
 | `Seiferas.lean` | 1 | `seiferas_sorting_networks_exist` (depends on S4) |
 

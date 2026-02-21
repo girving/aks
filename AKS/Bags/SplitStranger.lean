@@ -4,10 +4,10 @@
   Proves the stranger-count hypotheses of `invariant_maintained` for any
   split where `toParent ⊆ bags` (Seiferas 2009, Section 5).
 
-  All theorems in this file are **sorry-free**: the separator-dependent
-  bounds (`hfilter`, `hcnative`) are taken as explicit parameters.
-  Concrete-split-specific instantiations (with sorry's) are in
-  `SplitStranger` section below and assembled in `SplitProof.lean`.
+  Abstract theorems (taking `hfilter`, `hcnative` as parameters) are proved.
+  Concrete-split-specific instantiations have remaining gaps:
+  - `concreteSplit_fromParent_filtered` (I2)
+  - `below_boundary_deviation` + `concreteSplit_cnative_bound` level≥1 (I3)
 
   Key results:
   - `jStrangerCount_level_shift`: j-strangers at (l-1, i/2) = (j+1)-strangers at (l, i)
