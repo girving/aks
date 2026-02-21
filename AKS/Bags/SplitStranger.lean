@@ -4,10 +4,10 @@
   Proves the stranger-count hypotheses of `invariant_maintained` for any
   split where `toParent ⊆ bags` (Seiferas 2009, Section 5).
 
-  All theorems in this file are **sorry-free**: the separator-dependent
-  bounds (`hfilter`, `hcnative`) are taken as explicit parameters.
-  Concrete-split-specific instantiations (with sorry's) are in
-  `SplitStranger` section below and assembled in `SplitProof.lean`.
+  Abstract theorems (taking `hfilter`, `hcnative` as parameters) are proved.
+  Concrete-split-specific instantiations have remaining gaps:
+  - `concreteSplit_fromParent_filtered` (I2)
+  - `below_boundary_deviation` + `concreteSplit_cnative_bound` level≥1 (I3)
 
   Key results:
   - `jStrangerCount_level_shift`: j-strangers at (l-1, i/2) = (j+1)-strangers at (l, i)
@@ -234,26 +234,244 @@ For `concreteSplit_cnative_bound`:
   their rank-based assignment. Sources (c) and (d) in cnativeCoeff are zero
   for the concrete split (Rust experiment: max ratio 0.0000). -/
 
+/-- Items with perm value below the parent's native interval are 1-strangers. -/
+private theorem perm_below_isJStranger_one {n rank level idx : ℕ}
+    (hlev : 1 ≤ level)
+    (hbs : 0 < bagSize n level)
+    (hlt : rank < idx * bagSize n level) :
+    isJStranger n rank level idx 1 := by
+  refine ⟨le_refl 1, hlev, ?_⟩
+  simp only [Nat.sub_self, pow_zero, Nat.div_one, nativeBagIdx]
+  exact Nat.ne_of_lt ((Nat.div_lt_iff_lt_mul hbs).mpr hlt)
+
+/-- Items with perm value above the parent's native interval are 1-strangers. -/
+private theorem perm_above_isJStranger_one {n rank level idx : ℕ}
+    (hlev : 1 ≤ level)
+    (hbs : 0 < bagSize n level)
+    (hge : (idx + 1) * bagSize n level ≤ rank) :
+    isJStranger n rank level idx 1 := by
+  refine ⟨le_refl 1, hlev, ?_⟩
+  simp only [Nat.sub_self, pow_zero, Nat.div_one, nativeBagIdx]
+  exact Nat.ne_of_gt ((Nat.le_div_iff_mul_le hbs).mpr hge)
+
+/-- Below-interval items in a bag form a subset of 1-strangers. -/
+private theorem filter_below_subset_stranger {n : ℕ} (perm : Fin n → Fin n)
+    (regs : Finset (Fin n)) {level idx : ℕ} (hlev : 1 ≤ level)
+    (hbs : 0 < bagSize n level) :
+    regs.filter (fun i ↦ (perm i).val < idx * bagSize n level) ⊆
+    regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1) := by
+  intro x hx
+  simp only [Finset.mem_filter] at hx ⊢
+  exact ⟨hx.1, perm_below_isJStranger_one hlev hbs hx.2⟩
+
+/-- Above-interval items in a bag form a subset of 1-strangers. -/
+private theorem filter_above_subset_stranger {n : ℕ} (perm : Fin n → Fin n)
+    (regs : Finset (Fin n)) {level idx : ℕ} (hlev : 1 ≤ level)
+    (hbs : 0 < bagSize n level) :
+    regs.filter (fun i ↦ (idx + 1) * bagSize n level ≤ (perm i).val) ⊆
+    regs.filter (fun i ↦ isJStranger n (perm i).val level idx 1) := by
+  intro x hx
+  simp only [Finset.mem_filter] at hx ⊢
+  exact ⟨hx.1, perm_above_isJStranger_one hlev hbs hx.2⟩
+
 /-- Separator filtering for the concrete split: among items sent from parent
     to child, the stranger count at the parent level is at most `ε` times
     the full parent bag's stranger count.
 
-    This captures the structural property that `concreteSplit` sends extreme-
-    ranked items (which are the parent-level strangers) to the fringe
-    (`toParent`), not to children (`toLeftChild`/`toRightChild`). -/
+    **Proof**: LHS = 0 because all j-strangers get extreme ranks (captured by
+    the fringe), while fromParent items have middle ranks.
+    Requires `n = 2^k` for `isJStranger_antitone` (j ≥ 2 case). -/
 theorem concreteSplit_fromParent_filtered {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hn : ∃ k, n = 2 ^ k)
+    (hlam : 0 ≤ lam) (hε : 0 ≤ ε)
     (level idx j : ℕ) (hj : 1 ≤ j) (hlev : 1 ≤ level) :
     (jStrangerCount n perm
       (fromParent (concreteSplit lam perm bags) level idx)
       (level - 1) (idx / 2) j : ℝ) ≤
     ε * ↑(jStrangerCount n perm (bags (level - 1) (idx / 2))
       (level - 1) (idx / 2) j) := by
+  -- It suffices to show LHS = 0 (since 0 ≤ ε * RHS)
+  suffices hsuff : jStrangerCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      (level - 1) (idx / 2) j = 0 by
+    rw [hsuff]; simp only [Nat.cast_zero]
+    exact mul_nonneg hε (Nat.cast_nonneg _)
+  -- Show the filter set is empty: no item in fromParent is a j-stranger
+  rw [jStrangerCount, Finset.card_eq_zero, Finset.filter_eq_empty_iff]
+  intro i hi
+  -- Unfold fromParent: i ∈ toLeftChild or toRightChild of parent split
+  unfold fromParent at hi
+  rw [if_neg (show level ≠ 0 by omega)] at hi
+  -- Extract i ∈ parent bag, and rank bounds, from concreteSplit filter
+  -- In both even/odd branches, after unfolding concreteSplit:
+  -- toLeftChild items have f ≤ rank < f + h
+  -- toRightChild items have f + h ≤ rank < f + 2h
+  -- where h = childSendSize, f = fringeSize, all computed on bags (level-1) (idx/2)
+  have h_mem : i ∈ bags (level - 1) (idx / 2) := by
+    simp only [concreteSplit] at hi; split_ifs at hi <;> simp at hi <;> exact hi.1
+  have h_rank_lb : fringeSize lam (bags (level - 1) (idx / 2)).card ≤
+      rankInBag perm (bags (level - 1) (idx / 2)) i := by
+    simp only [concreteSplit] at hi; split_ifs at hi <;> simp at hi
+    · exact hi.2.1
+    · exact le_trans (Nat.le_add_right _ _) hi.2.1
+  have h_rank_ub : rankInBag perm (bags (level - 1) (idx / 2)) i <
+      fringeSize lam (bags (level - 1) (idx / 2)).card +
+      2 * childSendSize lam (bags (level - 1) (idx / 2)).card := by
+    simp only [concreteSplit] at hi; split_ifs at hi <;> simp at hi
+    · calc rankInBag perm (bags (level - 1) (idx / 2)) i
+          < fringeSize lam (bags (level - 1) (idx / 2)).card +
+            childSendSize lam (bags (level - 1) (idx / 2)).card := hi.2.2
+        _ ≤ _ := by omega
+    · exact hi.2.2
+  -- Case: j > level - 1 → trivially not j-strange
+  by_cases hjp : level - 1 < j
+  · exact not_isJStranger_gt_level hjp
+  push_neg at hjp
+  -- Case: level = 1 (parent at level 0) → not strange at root
+  by_cases hlev1 : level = 1
+  · subst hlev1; exact not_isJStranger_at_root n (perm i).val (idx / 2) j
+  have hplev1 : 1 ≤ level - 1 := by omega
+  -- Derive n = 2^k, bagSize > 0, and level-1 ≤ k
+  obtain ⟨k, rfl⟩ := hn
+  have hkp : level - 1 ≤ k := by
+    by_contra hc; push_neg at hc
+    have hml : maxLevel (2 ^ k) < level - 1 := by
+      unfold maxLevel; rw [Nat.log_pow (by omega : 1 < 2)]; omega
+    have := inv.bounded_depth (level - 1) (idx / 2) hml
+    rw [this] at h_mem; simp at h_mem
+  have hbs : 0 < bagSize (2 ^ k) (level - 1) :=
+    bagSize_pos (Nat.pow_le_pow_right (by omega : 0 < 2) hkp)
+  -- Core: assume j-stranger, derive contradiction with middle rank
+  intro hstr
+  -- Reduce to 1-stranger
+  have h1str : isJStranger (2 ^ k) (perm i).val (level - 1) (idx / 2) 1 := by
+    rcases eq_or_lt_of_le hj with rfl | hj2
+    · exact hstr
+    · -- j ≥ 2: apply antitone repeatedly to reduce to 1-strange
+      suffices ∀ m, 1 ≤ m → m ≤ level - 1 →
+          isJStranger (2 ^ k) (perm i).val (level - 1) (idx / 2) m →
+          isJStranger (2 ^ k) (perm i).val (level - 1) (idx / 2) 1 from
+        this j hj hjp hstr
+      intro m hm hmp hm_str
+      induction m with
+      | zero => omega
+      | succ m' ihm =>
+        rcases eq_or_lt_of_le hm with h1 | h2
+        · rwa [show m' + 1 = 1 from by omega] at hm_str
+        · exact ihm (by omega) (by omega)
+            (isJStranger_antitone ⟨k, rfl⟩ (Nat.pow_le_pow_right (by omega) hkp)
+              (by omega) (by omega) hm_str)
+  -- 1-stranger → perm outside parent interval
+  have h_outside := isJStranger_one_perm_bound h1str hbs
+  -- stranger_fringe_bound: 1-stranger count ≤ lam * card → ≤ ⌊lam * card⌋₊ = fringeSize
+  have hsfb := inv.stranger_fringe_bound (level - 1) (idx / 2)
+  have h_str_le_f : jStrangerCount (2 ^ k) perm (bags (level - 1) (idx / 2))
+      (level - 1) (idx / 2) 1 ≤ fringeSize lam (bags (level - 1) (idx / 2)).card := by
+    rw [fringeSize, Nat.le_floor_iff (mul_nonneg hlam (Nat.cast_nonneg _))]
+    exact_mod_cast hsfb
+  -- Abbreviate for readability
+  set regs := bags (level - 1) (idx / 2)
+  set b := regs.card
+  set f := fringeSize lam b
+  set cs := childSendSize lam b
+  -- If cs = 0, the middle range [f, f+2*0) = [f, f) is empty, so h_rank_lb/h_rank_ub
+  -- give f ≤ rank < f, which is absurd.
+  suffices hcs_pos : 0 < cs by
+    -- Now cs > 0, so f < b/2, and we can do the fringe argument
+    have hcs_def : cs = b / 2 - f := rfl
+    have hf_le_half : f ≤ b / 2 := by omega
+    rcases h_outside with hbelow | habove
+    · -- perm(i) < lo → rank < count_below ≤ f
+      have ha := rankInBag_lt_count_below h_mem hbelow
+      have hb : (Finset.filter (fun j ↦ (perm j).val <
+          idx / 2 * bagSize (2 ^ k) (level - 1)) regs).card ≤ f :=
+        le_trans (Finset.card_le_card
+          (filter_below_subset_stranger perm _ hplev1 hbs)) h_str_le_f
+      omega  -- rank < f contradicts f ≤ rank
+    · -- perm(i) ≥ hi → rank ≥ b - count_above ≥ b - f ≥ f + 2cs
+      have ha := rankInBag_ge_count_below h_mem habove
+      -- count_above ≤ f
+      have hb : (Finset.filter (fun j ↦
+          (idx / 2 + 1) * bagSize (2 ^ k) (level - 1) ≤ (perm j).val) regs).card ≤ f :=
+        le_trans (Finset.card_le_card
+          (filter_above_subset_stranger perm _ hplev1 hbs)) h_str_le_f
+      -- Partition: count_lt + count_above = b
+      have hc : (Finset.filter (fun j ↦ (perm j).val <
+            (idx / 2 + 1) * bagSize (2 ^ k) (level - 1)) regs).card +
+          (Finset.filter (fun j ↦
+            (idx / 2 + 1) * bagSize (2 ^ k) (level - 1) ≤ (perm j).val) regs).card = b := by
+        have h := @Finset.card_filter_add_card_filter_not _ regs
+          (fun j ↦ (perm j).val < (idx / 2 + 1) * bagSize (2 ^ k) (level - 1)) _ _
+        rwa [show (Finset.filter (fun j ↦ ¬(perm j).val <
+          (idx / 2 + 1) * bagSize (2 ^ k) (level - 1)) regs) =
+          Finset.filter (fun j ↦ (idx / 2 + 1) * bagSize (2 ^ k) (level - 1) ≤ (perm j).val)
+          regs from by congr 1; ext x; simp [not_lt]] at h
+      -- rank ≥ count_lt ≥ b - f ≥ f + 2cs, contradicts rank < f + 2cs
+      have hd : 2 * (b / 2) ≤ b := by linarith [Nat.div_mul_le_self b 2]
+      omega
+  -- Prove cs > 0 (or show the middle range is empty → contradiction)
+  by_contra hcs0; push_neg at hcs0
+  have hcs_eq : cs = 0 := Nat.eq_zero_of_le_zero hcs0
+  show False
+  have : 2 * cs = 0 := by omega
+  omega  -- h_rank_lb : f ≤ rank, h_rank_ub : rank < f + 0 = f
+
+/-- The count of items in a bag with perm value below a threshold is
+    approximately half the bag size. The deviation is bounded by
+    `cnativeCoeff * cap(parent)`.
+
+    This is the core deviation bound (Seiferas 2009, Section 5, p.5):
+    benchmark distribution comparison shows the "below-boundary count"
+    C = |{i ∈ B : perm(i) < boundary}| satisfies |C - ⌊b/2⌋| ≤ cnativeCoeff·cap.
+
+    Validated by `rust/test-cnative-upper-bound.rs` (220K checks, 0 violations).
+    See `docs/seiferas-plan.md` Instance I3 for the full proof decomposition. -/
+theorem below_boundary_deviation {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hparams : SatisfiesConstraints A ν lam ε)
+    (hperm : Function.Injective perm)
+    (level idx : ℕ) (hlev : 1 ≤ level) :
+    let B := bags (level - 1) (idx / 2)
+    let boundary := (idx / 2) * bagSize n (level - 1) + bagSize n level
+    let C := (B.filter (fun i ↦ (perm i).val < boundary)).card
+    (Int.natAbs (↑C - ↑(B.card / 2)) : ℝ) ≤
+    cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
+  sorry
+
+/-- Sub-lemma A (rank structure): siblingNativeCount of fromParent ≤ |C - ⌊b/2⌋|.
+
+    For items received from the parent split, the sibling-native count is bounded
+    by the deviation of the below-boundary count from half the parent bag size.
+
+    **Proof sketch** (validated by `rust/test-cnative-upper-bound.rs`):
+    1. Characterize sibling-native items as those with perm values crossing the
+       child boundary (needs n = 2^k for clean interval splitting)
+    2. In fromParent (rank range [f, f+h) or [f+h, f+2h) in parent bag B),
+       items with perm on the "wrong side" have rank ≥ C (or < C)
+    3. Count = max(0, f+h - max(f, C)) ≤ max(0, b/2 - C) ≤ |C - b/2| -/
+theorem siblingNative_le_deviation {n : ℕ} {lam : ℝ}
+    {perm : Fin n → Fin n} {bags : BagAssignment n}
+    (hn : ∃ k, n = 2 ^ k) (hperm : Function.Injective perm) (hlam : lam ≤ 1)
+    (level idx : ℕ) (hlev : 1 ≤ level) :
+    let B := bags (level - 1) (idx / 2)
+    let boundary := (idx / 2) * bagSize n (level - 1) + bagSize n level
+    let C := (B.filter (fun i ↦ (perm i).val < boundary)).card
+    siblingNativeCount n perm
+      (fromParent (concreteSplit lam perm bags) level idx)
+      level idx ≤
+    Int.natAbs (↑C - ↑(B.card / 2)) := by
   sorry
 
 /-- Sibling-native bound for the concrete split: items from parent that are
     native to the sibling child are bounded by `cnativeCoeff · cap(parent)`.
+
+    Proof structure:
+    - Level 0: `fromParent = ∅`, so siblingNativeCount = 0.
+    - Level ≥ 1: Uses `below_boundary_deviation` (sorry'd) which bounds
+      the deviation of the "below-boundary count" from half the bag size.
 
     The dominant contribution is the halving error (ε/2 term): items native
     to the parent but assigned to the wrong child by the rank-based partition.
@@ -262,12 +480,41 @@ theorem concreteSplit_fromParent_filtered {n : ℕ} {A ν lam ε : ℝ} {t : ℕ
 theorem concreteSplit_cnative_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hn : ∃ k, n = 2 ^ k)
+    (hparams : SatisfiesConstraints A ν lam ε)
+    (hperm : Function.Injective perm)
     (level idx : ℕ) :
     (siblingNativeCount n perm
       (fromParent (concreteSplit lam perm bags) level idx)
       level idx : ℝ) ≤
     cnativeCoeff A lam ε * bagCapacity n A ν t (level - 1) := by
-  sorry
+  obtain ⟨hA, hν, hν1, hlam, hlam_half, hε, _, hC4, _⟩ := hparams
+  have hA_pos : (0 : ℝ) < A := by linarith
+  -- Derive (2εA)² < 1 from C4_gt1 + ν < 1
+  have h2εA : (2 * ε * A) ^ 2 < 1 := by
+    have hεA : 2 * ε * A < 1 := by
+      unfold SatisfiesC4_gt1 at hC4
+      have : 1 / A > 0 := div_pos one_pos hA_pos
+      linarith
+    have : 0 ≤ 2 * ε * A := by positivity
+    calc (2 * ε * A) ^ 2 = (2 * ε * A) * (2 * ε * A) := sq _
+      _ < 1 * 1 := mul_lt_mul hεA (le_of_lt hεA) (by positivity) (by linarith)
+      _ = 1 := one_mul 1
+  have hcnc : 0 ≤ cnativeCoeff A lam ε :=
+    cnativeCoeff_nonneg hA hlam.le hε.le h2εA
+  -- Level 0: fromParent = ∅, so siblingNativeCount = 0
+  by_cases hlev : level = 0
+  · subst hlev; simp only [fromParent, ite_true]
+    rw [siblingNativeCount_empty]; simp only [Nat.cast_zero]
+    exact mul_nonneg hcnc (by unfold bagCapacity; positivity)
+  -- Level ≥ 1: chain Sub-lemma A (rank structure) + Sub-lemma B (deviation bound)
+  · have hlev1 : 1 ≤ level := by omega
+    have hlam1 : lam ≤ 1 := by linarith
+    have hA_le := siblingNative_le_deviation (bags := bags) hn hperm hlam1 level idx hlev1
+    have hparams' : SatisfiesConstraints A ν lam ε :=
+      ⟨hA, hν, hν1, hlam, hlam_half, hε, ‹_›, hC4, ‹_›⟩
+    have hB_le := below_boundary_deviation inv hparams' hperm level idx hlev1
+    exact le_trans (by exact_mod_cast hA_le) hB_le
 
 /-! **Concrete Split: Assembled Stranger Bounds**
 
@@ -277,6 +524,7 @@ Wire the abstract framework to the concrete split. -/
 theorem concreteSplit_parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hn : ∃ k, n = 2 ^ k)
     (hlam : 0 ≤ lam) (hε : 0 ≤ ε)
     (level idx j : ℕ) (hj : 2 ≤ j) :
     (jStrangerCount n perm
@@ -284,19 +532,23 @@ theorem concreteSplit_parent_stranger_bound {n : ℕ} {A ν lam ε : ℝ} {t : �
       level idx j : ℝ) ≤
     lam * ε ^ (j - 1) * bagCapacity n A ν t (level - 1) :=
   parent_stranger_bound _ inv hlam hε
-    (fun l i ↦ concreteSplit_fromParent_filtered inv l i) level idx j hj
+    (fun l i j hj hl ↦ concreteSplit_fromParent_filtered inv hn hlam hε l i j hj hl)
+    level idx j hj
 
 /-- Concrete parent 1-stranger bound. -/
 theorem concreteSplit_parent_1stranger {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
+    (hn : ∃ k, n = 2 ^ k)
     (hparams : SatisfiesConstraints A ν lam ε)
+    (hperm : Function.Injective perm)
     (level idx : ℕ) :
     (jStrangerCount n perm
       (fromParent (concreteSplit lam perm bags) level idx)
       level idx 1 : ℝ) ≤
     parentStrangerCoeff A lam ε * bagCapacity n A ν t level :=
   parent_1stranger_from_inv _ inv hparams
-    (fun l i j hj hl ↦ concreteSplit_fromParent_filtered inv l i j hj hl)
-    (fun l i ↦ concreteSplit_cnative_bound inv l i)
+    (fun l i j hj hl ↦ concreteSplit_fromParent_filtered inv hn
+      (le_of_lt hparams.2.2.2.1) (le_of_lt hparams.2.2.2.2.2.1) l i j hj hl)
+    (fun l i ↦ concreteSplit_cnative_bound inv hn hparams hperm l i)
     level idx
