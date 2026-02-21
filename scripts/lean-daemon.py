@@ -182,12 +182,26 @@ def _snapshot_lean_files() -> frozenset[str]:
     return frozenset(files)
 
 
+def _snapshot_file_mtimes() -> dict[str, float]:
+    """Return {relative_path: mtime} for all project .lean files."""
+    import glob
+    mtimes: dict[str, float] = {}
+    for pattern in ["*.lean", "AKS/**/*.lean"]:
+        for f in glob.glob(pattern, root_dir=PROJECT_ROOT, recursive=True):
+            try:
+                mtimes[f] = os.path.getmtime(os.path.join(PROJECT_ROOT, f))
+            except OSError:
+                pass
+    return mtimes
+
+
 class LeanDaemon:
     """Persistent Lean language server wrapper."""
 
     def __init__(self):
         self.conn: LspConnection | None = None
         self.opened_files: dict[str, int] = {}  # uri -> version
+        self._file_mtimes: dict[str, float] = {}  # relative path -> mtime
         self._file_snapshot: frozenset[str] = frozenset()
 
     def start(self):
@@ -234,12 +248,59 @@ class LeanDaemon:
         })
         self.conn.notify("initialized", {})
         self._file_snapshot = _snapshot_lean_files()
+        self._file_mtimes = _snapshot_file_mtimes()
         dt = time.time() - t0
         print(f"[lean-daemon] Initialized in {dt:.1f}s", flush=True)
 
     def files_changed(self) -> bool:
         """Check if the set of .lean files has changed since startup."""
         return _snapshot_lean_files() != self._file_snapshot
+
+    def _sync_changed_files(self, target_uri: str):
+        """Notify the LSP server about project files that changed on disk.
+
+        For files previously opened via didOpen: send didChange with new content.
+        For other files: send workspace/didChangeWatchedFiles so the server
+        invalidates its cached elaboration and re-reads from disk.
+        Skips the target file (handled by the normal check_file flow)."""
+        current_mtimes = _snapshot_file_mtimes()
+        changed = [
+            rp for rp, mt in current_mtimes.items()
+            if mt != self._file_mtimes.get(rp)
+        ]
+        if not changed:
+            self._file_mtimes = current_mtimes
+            return
+
+        watched_changes = []
+        for relpath in changed:
+            abspath = os.path.join(PROJECT_ROOT, relpath)
+            uri = f"file://{abspath}"
+            if uri == target_uri:
+                continue  # handled by check_file
+
+            if uri in self.opened_files:
+                # File is open — send didChange with new content
+                try:
+                    with open(abspath, "r") as f:
+                        content = f.read()
+                    self.opened_files[uri] += 1
+                    self.conn.notify("textDocument/didChange", {
+                        "textDocument": {"uri": uri, "version": self.opened_files[uri]},
+                        "contentChanges": [{"text": content}],
+                    })
+                except Exception:
+                    pass
+            else:
+                # File not open — tell server it changed on disk
+                watched_changes.append({"uri": uri, "type": 2})  # 2 = Changed
+
+        if watched_changes:
+            self.conn.notify("workspace/didChangeWatchedFiles", {
+                "changes": watched_changes,
+            })
+
+        self._file_mtimes = current_mtimes
 
     def check_file(self, filepath: str) -> dict:
         """Check a file and return diagnostics after full processing."""
@@ -249,6 +310,9 @@ class LeanDaemon:
             else filepath
         )
         uri = f"file://{abspath}"
+
+        # Sync any dependency files that changed on disk before checking
+        self._sync_changed_files(uri)
 
         with open(abspath, "r") as f:
             content = f.read()
@@ -317,6 +381,7 @@ class LeanDaemon:
         print("[lean-daemon] File layout changed, restarting lake serve...", flush=True)
         self.shutdown()
         self.opened_files.clear()
+        self._file_mtimes.clear()
         self.start()
         return True
 
