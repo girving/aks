@@ -351,20 +351,14 @@ theorem concreteSplit_hsend_right {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
 /-! **Harder Properties** -/
 
 /-- When `bagCapacity n A ν t l < A`, bags at level `l+1` have even size.
-    (Seiferas Section 5: subtree counting argument — all ancestor bags empty,
-    items equally distributed among subtrees, symmetric left/right.)
-    The argument: `cap(l) < A` means `cap(0) = n·ν^t < A^(l+1)`, so bags at
-    levels `0..l` hold fewer than 1 item and are empty. The total items in
-    each subtree rooted at level `l+1` is `n / 2^(l+1)`, which equals a power
-    of 2 (since `n` is a power of 2). By `uniform_size`, left and right
-    sub-subtrees have equal size, making each bag's size even. -/
+    Extracted directly from `SeifInvariant.small_cap_even`. -/
 private theorem bags_even_at_small_cap {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
     (inv : SeifInvariant n A ν lam ε t perm bags)
-    (hA : 1 < A) {l : ℕ}
+    (_ : 1 < A) {l : ℕ}
     (hcap : bagCapacity n A ν t l < A) :
-    ∀ idx, Even (bags (l + 1) idx).card := by
-  sorry
+    ∀ idx, Even (bags (l + 1) idx).card :=
+  fun idx ↦ inv.small_cap_even l idx hcap
 
 /-- When `b` is even and `lam ≤ 1/2`: `b - 2 * childSendSize lam b = 2 * fringeSize lam b`.
     The rounding error in `b / 2` vanishes because `b` is even. -/
