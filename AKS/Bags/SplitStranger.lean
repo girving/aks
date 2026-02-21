@@ -18,6 +18,7 @@
 
 import AKS.Bags.Invariant
 import AKS.Bags.Split
+import AKS.Bags.SplitCard
 
 open Finset
 
@@ -454,7 +455,7 @@ theorem below_boundary_deviation {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     3. Count = max(0, f+h - max(f, C)) ≤ max(0, b/2 - C) ≤ |C - b/2| -/
 theorem siblingNative_le_deviation {n : ℕ} {lam : ℝ}
     {perm : Fin n → Fin n} {bags : BagAssignment n}
-    (hn : ∃ k, n = 2 ^ k) (hperm : Function.Injective perm) (hlam : lam ≤ 1)
+    (hn : ∃ k, n = 2 ^ k) (hperm : Function.Injective perm)
     (level idx : ℕ) (hlev : 1 ≤ level) :
     let B := bags (level - 1) (idx / 2)
     let boundary := (idx / 2) * bagSize n (level - 1) + bagSize n level
@@ -463,7 +464,123 @@ theorem siblingNative_le_deviation {n : ℕ} {lam : ℝ}
       (fromParent (concreteSplit lam perm bags) level idx)
       level idx ≤
     Int.natAbs (↑C - ↑(B.card / 2)) := by
-  sorry
+  obtain ⟨k, rfl⟩ := hn
+  -- Abbreviate
+  set B := bags (level - 1) (idx / 2)
+  set b := B.card
+  set f := fringeSize lam b
+  set cs := childSendSize lam b
+  set boundary := (idx / 2) * bagSize (2 ^ k) (level - 1) + bagSize (2 ^ k) level
+  set C := (B.filter (fun i ↦ (perm i).val < boundary)).card
+  -- fromParent = toLeftChild (even) or toRightChild (odd) of parent split
+  have hfp : fromParent (concreteSplit lam perm bags) level idx =
+      if idx % 2 = 0
+      then (concreteSplit lam perm bags (level - 1) (idx / 2)).toLeftChild
+      else (concreteSplit lam perm bags (level - 1) (idx / 2)).toRightChild := by
+    unfold fromParent; rw [if_neg (by omega)]
+  -- Generic bound: siblingNativeCount ≤ cs ≤ b/2
+  have hsnc_le : siblingNativeCount (2 ^ k) perm
+      (fromParent (concreteSplit lam perm bags) level idx) level idx ≤ cs := by
+    calc siblingNativeCount _ _ _ _ _ ≤
+          (fromParent (concreteSplit lam perm bags) level idx).card :=
+          siblingNativeCount_le_card _ _ _ _
+      _ ≤ cs := by
+          rw [hfp]; split_ifs with hev
+          · exact concreteSplit_toLeftChild_card_le lam perm bags hperm (level - 1) (idx / 2)
+          · exact concreteSplit_toRightChild_card_le lam perm bags hperm (level - 1) (idx / 2)
+  have hcs_le : cs ≤ b / 2 := by simp only [cs, childSendSize]; omega
+  -- Degenerate: level > k or idx/2 ≥ 2^(level-1) → use generic bound
+  -- siblingNativeCount ≤ cs ≤ b/2 ≤ |C - b/2| when C = 0 or C = b
+  by_cases hk : level ≤ k; swap
+  · -- level > k: fromParent is filtered from parent bag which has bagSize level = 0
+    -- Actually just use: siblingNativeCount ≤ cs, and cs = 0 when b = 0
+    -- or go through generic bound
+    -- When level > k, concreteSplit at level-1 may be at leaf → toLeftChild/toRightChild = ∅
+    -- since maxLevel(2^k) = k-1 and level-1 ≥ k ≥ k-1+1 = maxLevel+1
+    push_neg at hk
+    have hleaf : maxLevel (2 ^ k) ≤ level - 1 := by
+      unfold maxLevel; rw [Nat.log_pow (by omega : 1 < 2)]; omega
+    have hfp_empty : fromParent (concreteSplit lam perm bags) level idx = ∅ := by
+      rw [hfp]; split_ifs <;> simp [concreteSplit, if_pos hleaf]
+    rw [hfp_empty, siblingNativeCount_empty]; exact Nat.zero_le _
+  by_cases hidx : idx / 2 < 2 ^ (level - 1); swap
+  · -- idx/2 ≥ 2^(level-1): boundary ≥ n, C = b
+    push_neg at hidx
+    have hbd_ge : 2 ^ k ≤ boundary := by
+      calc 2 ^ k = 2 ^ (level - 1) * bagSize (2 ^ k) (level - 1) := by
+            simp only [bagSize, Nat.mul_div_cancel' (Nat.pow_dvd_pow 2 (by omega : level - 1 ≤ k))]
+        _ ≤ (idx / 2) * bagSize (2 ^ k) (level - 1) + bagSize (2 ^ k) level :=
+            le_add_right (Nat.mul_le_mul_right _ hidx)
+    have hC_eq : C = b := by
+      simp only [C]; rw [Finset.filter_true_of_mem]
+      intro i _; exact (perm i).isLt.trans_le hbd_ge
+    -- siblingNativeCount ≤ cs ≤ b/2 ≤ b - b/2 = |C - b/2| since C = b
+    have hCb : C = b := hC_eq
+    calc siblingNativeCount (2 ^ k) perm
+          (fromParent (concreteSplit lam perm bags) level idx) level idx
+        ≤ cs := hsnc_le
+      _ ≤ b / 2 := hcs_le
+      _ ≤ b - b / 2 := by omega
+      _ ≤ (↑C - ↑(b / 2) : ℤ).natAbs := by omega
+  -- Degenerate: cs = 0 → fromParent has 0 items
+  by_cases hcs0 : cs = 0
+  · calc siblingNativeCount (2 ^ k) perm _ level idx ≤ cs := hsnc_le
+      _ = 0 := hcs0
+      _ ≤ _ := Nat.zero_le _
+  -- Main case: level ≤ k, idx/2 < 2^(level-1), cs > 0
+  have hcs_pos : 0 < cs := by omega
+  -- f + cs = b / 2
+  have hf_cs : f + cs = b / 2 := by
+    simp only [cs, childSendSize] at hcs_pos ⊢; omega
+  by_cases heven : idx % 2 = 0
+  · -- Even: fromParent = toLeftChild, rank ∈ [f, f+cs)
+    -- Sibling-native items have perm ≥ boundary → rank ≥ C → count ≤ b/2 - C
+    suffices h : siblingNativeCount (2 ^ k) perm
+        (fromParent (concreteSplit lam perm bags) level idx) level idx ≤ b / 2 - C by
+      omega
+    rw [hfp, if_pos heven]
+    simp only [siblingNativeCount, concreteSplit]
+    split_ifs with hleaf
+    · simp
+    · calc (Finset.filter (fun i ↦
+              isJStranger (2 ^ k) (perm i).val level idx 1 ∧
+              ¬isJStranger (2 ^ k) (perm i).val level idx 2)
+            (Finset.filter (fun i ↦
+              f ≤ rankInBag perm B i ∧ rankInBag perm B i < f + cs) B)).card
+          ≤ (Finset.filter (fun i ↦ C ≤ rankInBag perm B i ∧
+              rankInBag perm B i < f + cs) B).card := by
+            apply Finset.card_le_card
+            intro i hi
+            simp only [Finset.mem_filter] at hi ⊢
+            refine ⟨hi.1.1, ?_, hi.1.2.2⟩
+            exact rankInBag_ge_count_below hi.1.1
+              (siblingNative_even_perm_ge hlev hk heven hidx hi.2.1 hi.2.2)
+        _ ≤ (f + cs) - C := filter_rankInBag_Ico_card_le hperm C (f + cs)
+        _ = b / 2 - C := by rw [hf_cs]
+  · -- Odd: fromParent = toRightChild, rank ∈ [f+cs, f+2*cs)
+    -- Sibling-native items have perm < boundary → rank < C → count ≤ C - b/2
+    suffices h : siblingNativeCount (2 ^ k) perm
+        (fromParent (concreteSplit lam perm bags) level idx) level idx ≤ C - b / 2 by
+      omega
+    rw [hfp, if_neg heven]
+    simp only [siblingNativeCount, concreteSplit]
+    split_ifs with hleaf
+    · simp
+    · calc (Finset.filter (fun i ↦
+              isJStranger (2 ^ k) (perm i).val level idx 1 ∧
+              ¬isJStranger (2 ^ k) (perm i).val level idx 2)
+            (Finset.filter (fun i ↦
+              f + cs ≤ rankInBag perm B i ∧ rankInBag perm B i < f + 2 * cs) B)).card
+          ≤ (Finset.filter (fun i ↦ f + cs ≤ rankInBag perm B i ∧
+              rankInBag perm B i < C) B).card := by
+            apply Finset.card_le_card
+            intro i hi
+            simp only [Finset.mem_filter] at hi ⊢
+            refine ⟨hi.1.1, hi.1.2.1, ?_⟩
+            exact rankInBag_lt_count_below hi.1.1
+              (siblingNative_odd_perm_lt hlev hk heven hidx (perm i).isLt hi.2.1 hi.2.2)
+        _ ≤ C - (f + cs) := filter_rankInBag_Ico_card_le hperm (f + cs) C
+        _ = C - b / 2 := by rw [hf_cs]
 
 /-- Sibling-native bound for the concrete split: items from parent that are
     native to the sibling child are bounded by `cnativeCoeff · cap(parent)`.
@@ -509,8 +626,7 @@ theorem concreteSplit_cnative_bound {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
     exact mul_nonneg hcnc (by unfold bagCapacity; positivity)
   -- Level ≥ 1: chain Sub-lemma A (rank structure) + Sub-lemma B (deviation bound)
   · have hlev1 : 1 ≤ level := by omega
-    have hlam1 : lam ≤ 1 := by linarith
-    have hA_le := siblingNative_le_deviation (bags := bags) hn hperm hlam1 level idx hlev1
+    have hA_le := siblingNative_le_deviation (lam := lam) (bags := bags) hn hperm level idx hlev1
     have hparams' : SatisfiesConstraints A ν lam ε :=
       ⟨hA, hν, hν1, hlam, hlam_half, hε, ‹_›, hC4, ‹_›⟩
     have hB_le := below_boundary_deviation inv hparams' hperm level idx hlev1

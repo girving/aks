@@ -10,8 +10,9 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 | `Invariant.lean` | `stranger_fringe_bound` maintenance | sorry (needs item conservation, see S2a) |
 | `Invariant.lean` | `small_cap_even` maintenance | sorry (needs subtree counting / item conservation, see S1) |
 | `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | **PROVED** |
-| `SplitStranger.lean` | `below_boundary_deviation` | sorry (factored from `cnative_bound`, 75% confidence) |
-| `SplitStranger.lean` | `concreteSplit_cnative_bound` level≥1 | sorry (depends on `below_boundary_deviation`) |
+| `SplitStranger.lean` | `siblingNative_le_deviation` | **PROVED** (Sub-lemma A: rank structure) |
+| `SplitStranger.lean` | `below_boundary_deviation` | sorry (Sub-lemma B: deviation bound, 75% confidence) |
+| `SplitStranger.lean` | `concreteSplit_cnative_bound` level≥1 | sorry (assembly proved, chains A + B) |
 | `TreeSort.lean` | `separatorSortingNetwork_sorts` | sorry (65% confidence) |
 
 **Proved** (this session and prior):
@@ -225,7 +226,7 @@ I3 and I4 are **fully independent** of each other:
 | Instance | Task | Status |
 |----------|------|--------|
 | **I2** | S2: Prove `concreteSplit_fromParent_filtered` | **DONE** |
-| **I3** | S3: Prove `concreteSplit_cnative_bound` | In progress (level=0 done) |
+| **I3** | S3: Prove `concreteSplit_cnative_bound` | Sub-lemma A proved, Sub-lemma B sorry'd |
 | **I4** | S1+S2a: Item conservation + subtree counting | NEXT UP |
 
 **Conflict risks:** I4 adds new clauses to `SeifInvariant` and modifies
@@ -415,7 +416,7 @@ This is the HARD sub-lemma. Proof strategy (Seiferas Section 5, p.5):
     λ/2 + (B2a) + (B2b) ≤ cnativeCoeff = ε/2 + 2λεA²/(1-(2εA)²) + 1/(8A²-2).
     Since λ = ε in Seiferas's parameters, λ/2 ≤ ε/2. ✓
 
-**Risk assessment:** Sub-lemma A is MEDIUM (standard Finset combinatorics).
+**Risk assessment:** Sub-lemma A is ~~MEDIUM~~ **DONE** (standard Finset combinatorics, proved).
 Sub-lemma B is HIGH — the benchmark distribution argument requires multi-level
 tree accounting. B2a and B2b each need geometric series summing stranger
 bounds across levels. This is the hardest single proof in the entire Bags
@@ -434,11 +435,11 @@ but requires modifying the invariant (interaction with S1 work).
 
 1. ~~Prove level=0 case (trivial: fromParent = ∅)~~ **DONE**
 2. ~~Factor into `below_boundary_deviation` sub-lemma~~ **DONE**
-3. Prove Sub-lemma A (rank structure → `siblingNativeCount_fromParent_le_deviation`) — 1-2 weeks
+3. ~~Prove Sub-lemma A (rank structure → `siblingNative_le_deviation`)~~ **DONE**
 4. Prove Sub-lemma B (`below_boundary_deviation`) — factor into B1 + B2a + B2b — 2-4 weeks
-5. Assemble level≥1 case of `concreteSplit_cnative_bound` — 1 day
+5. ~~Assemble level≥1 case of `concreteSplit_cnative_bound`~~ **DONE** (chains A + B)
 
-**Total remaining estimate:** 3-6 weeks (1-2 if B2 is sorry'd).
+**Total remaining estimate:** 2-4 weeks (Sub-lemma B only).
 
 **Shared infrastructure with I2:** Both need rank-perm ordering lemmas
 from `Split.lean`. If I2 and I3 run in parallel, coordinate so that shared
