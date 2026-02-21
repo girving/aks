@@ -7,8 +7,8 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 
 | File | Theorem | Status |
 |------|---------|--------|
-| `Invariant.lean` | `stranger_fringe_bound` maintenance | sorry (needs item conservation, see S2a) |
-| `Invariant.lean` | `small_cap_even` maintenance | sorry (needs subtree counting / item conservation, see S1) |
+| `SplitProof.lean` | `stranger_fringe_bound` for concreteSplit | sorry (needs item conservation, see S2a) |
+| `SplitProof.lean` | `small_cap_even` for concreteSplit | sorry (needs subtree counting / item conservation, see S1) |
 | `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | **PROVED** |
 | `SplitStranger.lean` | `below_boundary_deviation` | sorry (factored from `cnative_bound`, 75% confidence) |
 | `SplitStranger.lean` | `concreteSplit_cnative_bound` level≥1 | sorry (depends on `below_boundary_deviation`) |
@@ -27,7 +27,8 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 - `kick_stranger_bound` -- fringe strangers at parent level
 - `parent_stranger_bound` -- parent strangers for j >= 2 (abstract, depends on `hfilter`)
 - `parent_1stranger_from_inv` -- parent 1-strangers (abstract, depends on `hfilter` + `hcnative`)
-- `concreteSplit_maintains_invariant` -- full invariant maintenance (assembly, in `SplitProof.lean`)
+- `invariant_maintained` -- abstract invariant maintenance (zero sorry, `Invariant.lean`)
+- `concreteSplit_maintains_invariant` -- concrete invariant maintenance (assembly, `SplitProof.lean`)
 - `separatorSortingNetwork_depth_le` -- depth bound `O(log n)`
 - `separatorSortingNetwork_converges` -- convergence when bags <= 1 item
 - `seiferas_sorting_networks_exist` -- top-level theorem (modulo `separatorSortingNetwork_sorts`)

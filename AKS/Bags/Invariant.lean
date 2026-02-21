@@ -773,7 +773,15 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       i₁ < 2 ^ level → i₂ < 2 ^ level →
       (rebag split level i₁).card = (rebag split level i₂).card)
     (hrebag_disjoint : ∀ l₁ l₂ i₁ i₂,
-      (l₁, i₁) ≠ (l₂, i₂) → Disjoint (rebag split l₁ i₁) (rebag split l₂ i₂)) :
+      (l₁, i₁) ≠ (l₂, i₂) → Disjoint (rebag split l₁ i₁) (rebag split l₂ i₂))
+    -- Stranger fringe bound on rebag (requires item conservation)
+    (hrebag_stranger_fringe : ∀ level idx,
+      (jStrangerCount n perm (rebag split level idx) level idx 1 : ℝ) ≤
+      lam * (rebag split level idx).card)
+    -- Even size at small cap on rebag (requires subtree counting)
+    (hrebag_small_cap_even : ∀ level idx,
+      bagCapacity n A ν (t + 1) level < A →
+      Even (rebag split (level + 1) idx).card) :
     SeifInvariant n A ν lam ε (t + 1) perm (rebag split) := by
   obtain ⟨hA, hν, _, hlam_pos, _, hε_pos, hC3, hC4_gt1, hC4_eq1⟩ := hparams
   have hA_pos : (0 : ℝ) < A := by linarith
@@ -840,12 +848,7 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
             (inv.bounded_depth _ _ (by omega))).1,
           hfp]
       simp
-    stranger_fringe_bound := by
-      intro level idx
-      -- Requires item conservation (∑ card = n at every stage) to prove card ≈ cap.
-      -- Without it, stranger_bound gives stranger ≤ lam * cap but we need ≤ lam * card,
-      -- and cap ≥ card (wrong direction). See I1 plan in seiferas-plan.md.
-      sorry
+    stranger_fringe_bound := hrebag_stranger_fringe
     idx_bound := by
       intro level idx hidx
       have hempty_l : bags (level + 1) (2 * idx) = ∅ :=
@@ -866,8 +869,7 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
       rw [(split_empty_of_bags_empty hsplit_sub hempty_l).1,
           (split_empty_of_bags_empty hsplit_sub hempty_r).1, hfp]
       simp
-    small_cap_even := by
-      sorry
+    small_cap_even := hrebag_small_cap_even
   }
 
 /-! **Convergence** -/
