@@ -4,15 +4,16 @@
   Defines the invariant maintained by the bag-tree sorting network
   (Seiferas 2009, Sections 4–5) and states the maintenance theorems.
 
-  The invariant has eight clauses:
+  The invariant has nine clauses:
   1. Alternating levels empty: `(t + level) % 2 ≠ 0 → empty`
   2. Uniform size: all bags at an active level have equal size
   3. Capacity: items ≤ n · ν^t · A^level
   4. Strangers: j-strangers ≤ lam * eps^(j-1) * capacity
   5. Partition: distinct (level, idx) pairs have disjoint register sets
   6. Bounded depth: bags beyond maxLevel are empty
-  7. Index bound: bags at out-of-range indices are empty
-  8. Even size at small cap: when cap(l) < A, bags at level l+1 have even card
+  7. Strangers fit in fringe: 1-stranger count ≤ lam * card
+  8. Index bound: bags at out-of-range indices are empty
+  9. Even size at small cap: when cap(l) < A, bags at level l+1 have even card
 
   All definitions validated by Rust simulation (`rust/test-bags.rs`):
   - Invariant holds with adversarial separator for n = 8..16384
@@ -117,9 +118,14 @@ structure SeifInvariant (n : ℕ) (A ν lam ε : ℝ) (t : ℕ)
     (l₁, i₁) ≠ (l₂, i₂) → Disjoint (bags l₁ i₁) (bags l₂ i₂)
   /-- (6) Bounded depth: bags beyond maxLevel are empty. -/
   bounded_depth : ∀ level idx, maxLevel n < level → bags level idx = ∅
-  /-- (7) Index bound: bags at out-of-range indices are empty. -/
+  /-- (7) Strangers fit in fringe: 1-stranger count ≤ `lam * card`.
+      This is stronger than `stranger_bound` at `j = 1` (which uses `cap` instead of `card`).
+      Ensures the rank-based fringe captures all strangers in the concrete split. -/
+  stranger_fringe_bound : ∀ level idx,
+    (jStrangerCount n perm (bags level idx) level idx 1 : ℝ) ≤ lam * (bags level idx).card
+  /-- (8) Index bound: bags at out-of-range indices are empty. -/
   idx_bound : ∀ level idx, 2 ^ level ≤ idx → bags level idx = ∅
-  /-- (8) Even size at small capacity: when cap(l) < A, bags at level l+1 have even card. -/
+  /-- (9) Even size at small capacity: when cap(l) < A, bags at level l+1 have even card. -/
   small_cap_even : ∀ level idx,
     bagCapacity n A ν t level < A → Even (bags (level + 1) idx).card
 
@@ -259,13 +265,24 @@ theorem initialInvariant (n : ℕ) (A ν lam ε : ℝ)
     split_ifs with h
     · obtain ⟨rfl, _⟩ := h; omega
     · rfl
-  · -- Clause 7: idx bound
+  · -- Clause 7: strangers fit in fringe
+    intro level idx
+    simp only [initialBags]
+    split_ifs with h
+    · obtain ⟨rfl, _⟩ := h
+      -- At root (level 0), no items are 1-strange
+      rw [jStrangerCount_zero_gt_level perm _ (by omega : 0 < 1)]
+      simp only [Nat.cast_zero]
+      exact mul_nonneg (le_of_lt hlam) (Nat.cast_nonneg _)
+    · rw [jStrangerCount_empty]
+      simp only [Nat.cast_zero, card_empty, Nat.cast_zero, mul_zero, le_refl]
+  · -- Clause 8: idx bound
     intro level idx hidx
     simp only [initialBags]
     split_ifs with h
     · obtain ⟨rfl, rfl⟩ := h; simp at hidx
     · rfl
-  · -- Clause 8: small_cap_even (vacuously true at t=0: all bags at level ≥ 1 are empty)
+  · -- Clause 9: small_cap_even (vacuously true at t=0: all bags at level ≥ 1 are empty)
     intro level idx hcap
     simp only [initialBags]
     have : ¬(level + 1 = 0 ∧ idx = 0) := by omega
@@ -823,6 +840,12 @@ theorem invariant_maintained {n : ℕ} {A ν lam ε : ℝ} {t : ℕ}
             (inv.bounded_depth _ _ (by omega))).1,
           hfp]
       simp
+    stranger_fringe_bound := by
+      intro level idx
+      -- Requires item conservation (∑ card = n at every stage) to prove card ≈ cap.
+      -- Without it, stranger_bound gives stranger ≤ lam * cap but we need ≤ lam * card,
+      -- and cap ≥ card (wrong direction). See I1 plan in seiferas-plan.md.
+      sorry
     idx_bound := by
       intro level idx hidx
       have hempty_l : bags (level + 1) (2 * idx) = ∅ :=

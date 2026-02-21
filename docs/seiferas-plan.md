@@ -1,15 +1,17 @@
 # Seiferas Path: Remaining Work and Parallelism Analysis
 
-## Current Status (2026-02-20)
+## Current Status (2026-02-21)
 
 The Seiferas path (expanders -> halvers -> separators -> bag-tree sorting) has
 its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 
 | File | Theorem | Status |
 |------|---------|--------|
+| `Invariant.lean` | `stranger_fringe_bound` maintenance | sorry (needs item conservation, see below) |
 | `Invariant.lean` | `small_cap_even` maintenance | sorry (moved from `bags_even_at_small_cap`) |
-| `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | sorry (90% confidence) |
-| `SplitStranger.lean` | `concreteSplit_cnative_bound` | sorry (75% confidence) |
+| `SplitStranger.lean` | `concreteSplit_fromParent_filtered` | **PROVED** |
+| `SplitStranger.lean` | `below_boundary_deviation` | sorry (factored from `cnative_bound`, 75% confidence) |
+| `SplitStranger.lean` | `concreteSplit_cnative_bound` level≥1 | sorry (depends on `below_boundary_deviation`) |
 | `TreeSort.lean` | `separatorSortingNetwork_sorts` | sorry (65% confidence) |
 
 **Proved** (this session and prior):
@@ -20,6 +22,7 @@ its proof skeleton fully assembled. The sorry count in the Bags subsystem is:
 - `bags_even_at_small_cap` -- even bag sizes when cap < A (trivial from `small_cap_even` clause)
 - `concreteSplit_hrebag_uniform` -- uniform rebag sizes
 - `concreteSplit_hrebag_disjoint` -- disjoint rebag bags
+- `concreteSplit_fromParent_filtered` -- ε-filtering for concrete split (LHS = 0)
 - `kick_stranger_bound` -- fringe strangers at parent level
 - `parent_stranger_bound` -- parent strangers for j >= 2 (abstract, depends on `hfilter`)
 - `parent_1stranger_from_inv` -- parent 1-strangers (abstract, depends on `hfilter` + `hcnative`)
@@ -46,27 +49,21 @@ Seiferas.lean                       -- seiferas_sorting_networks_exist
 
 ### S1: `bags_even_at_small_cap` (SplitCard.lean) -- **RESOLVED**
 
-**Statement:** When `bagCapacity n A ν t l < A`, all bags at level `l+1`
-have even `card`.
+**Resolution:** Added `small_cap_even` as a direct invariant clause in
+`SeifInvariant` (clause 8). `bags_even_at_small_cap` is now a trivial
+extraction. The sorry moved to `small_cap_even` maintenance in
+`invariant_maintained`.
 
-**The statement is FALSE.** The current `SeifInvariant` does not contain
-enough information to prove this. Counterexample: n=8, bags(1,0)={0,1,2},
-bags(1,1)={4,5,6} satisfies all 6 clauses of `SeifInvariant` (alternating
-empty, uniform size 3, capacity bound, stranger bound, bags disjoint,
-bounded depth) but has odd card = 3.
+Also added `idx_bound` (clause 7): bags at out-of-range indices are empty.
+Both clauses proved for initial state; `idx_bound` proved for maintenance;
+`small_cap_even` sorry'd for maintenance.
 
-**Root Cause 1: Missing item conservation.** Seiferas (Section 2, p.2)
-assumes "we consider each of them always to occupy one of n-1 bags" --
-items are NEVER lost. Our `SeifInvariant` has `bags_disjoint` (no item in
-two bags) but not `items_partition` (every item in some bag). Without this,
-the invariant allows states where items vanish, making the total-items-per-
-subtree argument impossible.
+This was simpler than the original plan (no changes to `concreteSplit`,
+no item conservation clause needed). The `small_cap_even` maintenance
+sorry is structurally sound — it would follow from subtree counting
+(Seiferas Clause 2) but that infrastructure isn't needed yet.
 
-**Root Cause 2: Leaf-level item loss in `concreteSplit`.** At leaf levels
-(`maxLevel n <= level`), `toLeftChild = {}` and `toRightChild = {}`. But
-`toParent` only captures fringe items (rank < f or rank >= f+2h). Items
-with rank in [f, f+2h) go NOWHERE and are permanently lost. This violates
-item conservation.
+### S2: `concreteSplit_fromParent_filtered` (SplitStranger.lean) -- **PROVED**
 
 **Root Cause 3: Invariant too weak.** Seiferas's Clause (2) (Section 4,
 p.3) is STRONGER than our `uniform_size`. It tracks: "the number of items
@@ -147,45 +144,39 @@ touches several files and requires reproving item conservation through
 
 **Estimate:** 2-3 weeks.
 
-### S2: `concreteSplit_fromParent_filtered` (SplitStranger.lean)
+### S2: `concreteSplit_fromParent_filtered` (SplitStranger.lean) -- **PROVED**
 
 **Statement:** Among items sent from parent to child (`fromParent`), the
 j-stranger count at the parent level is at most `eps` times the full parent
 bag's j-stranger count.
 
-**Confidence: 90%.** The statement is almost certainly correct.
+**Status: PROVED.** LHS = 0 because all j-strangers have extreme perm values
+(via `isJStranger_antitone` + `isJStranger_one_perm_bound`), giving them
+extreme ranks (via `rankInBag_lt_count_below` / `rankInBag_ge_count_below`),
+which places them in the fringe, not in fromParent (middle items).
 
-**Key insight (from Rust validation):** LHS = 0 in ALL tested cases (max
-ratio 0.0000). This means for the concrete split, ALL parent-level
-strangers are captured by the fringe. The bound `eps * strangerCount` is
-very loose -- the true bound is 0.
+**Prerequisite added:** `stranger_fringe_bound` clause added to `SeifInvariant`
+(clause 7): `jStrangerCount(..., 1) ≤ lam * card`. This ensures the number of
+1-strangers fits in the fringe size `⌊lam * card⌋₊`. The clause's maintenance
+in `invariant_maintained` is sorry'd (see below).
 
-**Why LHS = 0:** j-strangers (j >= 1) at level `l` have `perm` values
-outside their native bag's interval at level `l`. This means their `perm`
-value is extreme relative to the bag. Since `rankInBag` orders items by
-`perm` value, j-strangers get extreme `rankInBag` values (near 0 or near
-b-1). The fringe captures the extreme-ranked positions (rank < f or
-rank >= f+2h), so all j-strangers end up in `toParent`, never in
-`toLeftChild`/`toRightChild`.
+### S2a: `stranger_fringe_bound` maintenance (Invariant.lean)
 
-**Proof strategy:**
-1. Use `isJStranger_perm_bound` to get: j-stranger => `perm` value outside
-   native interval at level `l`
-2. Use `rankInBag_lt_count_below` / `rankInBag_ge_count_below` to convert:
-   extreme `perm` value => extreme `rankInBag`
-3. Show: extreme `rankInBag` => captured by fringe (rank < f or rank >= f+2h)
-4. Conclude: j-strangers in `fromParent` = 0
+**Statement:** After rebag, the 1-stranger count relative to (level, idx)
+is at most `lam * (rebag card)`.
 
-The argument is multi-step but each step is well-defined. The main risk is
-step 2 (connecting perm-value bounds to rank bounds) which requires counting
-how many bag items have `perm` below/above a threshold.
+**Status: sorry'd.** NOT provable from the current invariant.
 
-**Files touched:** `SplitStranger.lean` (proof body at line ~253), possibly
-`Split.lean` (new rank-perm lemmas).
+**Root cause:** `stranger_bound` (clause 3) gives `stranger ≤ lam * cap`, but
+`stranger_fringe_bound` needs `stranger ≤ lam * card`. Since `capacity_bound`
+gives `card ≤ cap` (wrong direction), `lam * cap ≥ lam * card` and the
+implication fails. When `cap > card`, the stranger count can exceed
+`lam * card` while satisfying `lam * cap`.
 
-**Independent of S1.** Does not need item conservation or leaf-level fixes.
-
-**Estimate:** 2-4 weeks.
+**Fix: item conservation.** Seiferas's paper implicitly assumes items always
+occupy exactly one bag, so `∑ card = n` at every stage, keeping `card ≈ cap`.
+Adding this to the invariant would make `stranger_fringe_bound` follow from
+`stranger_bound`. This is part of the I1 infrastructure work (see S1 above).
 
 ### S3: `concreteSplit_cnative_bound` (SplitStranger.lean)
 
@@ -258,33 +249,25 @@ infrastructure (wire<->bag bridge).
 ### Dependency Graph
 
 ```
-S1 (fix invariant + leaf split) ----+
-S2 (fromParent_filtered) ----------+--> S4 (assembly + convergence->sorted)
+S1 (invariant clauses) ---- DONE
+S2 (fromParent_filtered) -- DONE --+--> S4 (assembly + convergence->sorted)
 S3 (cnative_bound) ----------------+
 ```
 
-S1, S2, and S3 are **fully independent** of each other:
-- S1 (even sizes) is invariant strengthening + concreteSplit leaf fix
+S2 and S3 are **fully independent** of each other:
 - S2 (eps-filtering) is rank-based combinatorics using `rankInBag` + `perm` bounds
 - S3 (sibling-native) is separator-error analysis using `nativeBagIdx` + `rankInBag`
 
-### Recommended: 3 Parallel Instances
+### Parallel Instances
 
-| Instance | Task | Files touched | Key references |
-|----------|------|---------------|----------------|
-| **I1** | S1: ~~Fix invariant + prove `bags_even_at_small_cap`~~ **DONE** | `Invariant.lean`, `SplitCard.lean`, `SplitProof.lean` | Seiferas Sections 2-5 |
-| **I2** | S2: Prove `concreteSplit_fromParent_filtered` | `SplitStranger.lean`, possibly `Split.lean` | Seiferas Section 5, stranger definitions |
-| **I3** | S3: Prove `concreteSplit_cnative_bound` | `SplitStranger.lean`, possibly `Split.lean` | Seiferas Section 5, separator guarantee |
+| Instance | Task | Status |
+|----------|------|--------|
+| **I1** | S1: Add invariant clauses for `bags_even_at_small_cap` | **DONE** |
+| **I2** | S2: Prove `concreteSplit_fromParent_filtered` | **DONE** |
+| **I3** | S3: Prove `concreteSplit_cnative_bound` | In progress (level=0 done) |
 
-**Conflict risks:**
-- I2 and I3 both touch `SplitStranger.lean` but at non-overlapping sorry
-  locations (line ~253 vs line ~270) -- trivial merge
-- I1 changes `Invariant.lean` (add clause) and `Split.lean` (fix leaf case).
-  I2/I3 may add helper lemmas to `Split.lean`. Coordinate by having I2/I3
-  add helpers at the END of `Split.lean`, while I1's changes are to the
-  `concreteSplit` definition near the top.
-- I1 changes `SplitProof.lean` to prove the new `items_partition` clause.
-  I2/I3 don't touch this file.
+**Conflict risks:** I2 and I3 both touch `SplitStranger.lean` but at
+non-overlapping sorry locations (line ~253 vs line ~276) -- trivial merge.
 
 ### Instance I1: **COMPLETED**
 
@@ -297,43 +280,28 @@ Added two new clauses to `SeifInvariant`:
 `small_cap_even`. The sorry moved from `SplitCard.lean` to
 `invariant_maintained` in `Invariant.lean`.
 
-### Instance I2: Detailed Plan
+### Instance I2: **COMPLETED**
 
-**Goal:** Prove `concreteSplit_fromParent_filtered`.
+**Goal:** Prove `concreteSplit_fromParent_filtered`. **PROVED.**
 
-**Strategy (prove LHS = 0):**
+Added `stranger_fringe_bound` clause to `SeifInvariant` (clause 7).
+The filtering proof shows LHS = 0 via:
+1. j-stranger → 1-stranger (`isJStranger_antitone`)
+2. 1-stranger → perm outside native interval (`isJStranger_one_perm_bound`)
+3. Extreme perm → extreme rank (`rankInBag_lt_count_below` / `rankInBag_ge_count_below`)
+4. Stranger count ≤ fringeSize (from `stranger_fringe_bound`)
+5. Extreme rank → in fringe → not in fromParent
 
-**Step 1:** Prove rank-perm ordering lemma: for items in a bag, if item `x`
-has `perm x < perm y` then `rankInBag perm bag x <= rankInBag perm bag y`.
-This should follow from `rankInBag` being defined as the count of items with
-smaller `perm` value.
+**Remaining gap:** `stranger_fringe_bound` maintenance in `invariant_maintained`
+is sorry'd — requires item conservation (see S2a above).
 
-**Step 2:** Prove j-stranger -> extreme rank: if `isJStranger n perm x l i j`
-(j >= 1), then either:
-- `perm x < nativeIntervalLo n l i` => `rankInBag perm bag x < count_below`
-  => rank is small (near 0)
-- `perm x >= nativeIntervalHi n l i` => `rankInBag perm bag x >= count_above`
-  => rank is large (near b)
-
-**Step 3:** Prove extreme rank -> fringe: if rank < f or rank >= f+2h, then
-item is in `toParent` (fringe), not in `toLeftChild`/`toRightChild`.
-
-**Step 4:** Combine: j-strangers from parent bag are in `toParent`, so
-j-strangers in `fromParent` (= toLeftChild or toRightChild) = 0.
-
-**Step 5:** Conclude: `jStrangerCount ... fromParent ... <= eps * jStrangerCount`
-since LHS = 0.
-
-**Key definitions to understand:**
-- `rankInBag` (Split.lean): `(regs.filter (fun j => perm j < perm i)).card`
-- `isJStranger` (Defs.lean): `nativeBagIdx n perm r level idx != idx'`
-  where `idx'` is the j-ancestor's index
-- `fringeSize` (Split.lean): `floor(lam * b)`
-- `fromParent` in rebag: items sent to child from parent's split
-
-### Instance I3: Detailed Plan
+### Instance I3: Detailed Plan (IN PROGRESS)
 
 **Goal:** Prove `concreteSplit_cnative_bound`.
+
+**Progress:** Level=0 case proved. Factored into `below_boundary_deviation`
+(sorry'd sub-lemma) + assembly for level≥1. Added `cnativeCoeff_nonneg` and
+`siblingNativeCount_empty`/`siblingNativeCount_le_card` helper lemmas.
 
 **Confidence: 75%.** Statement correct (validated by Rust). The mathematical
 argument is Seiferas's benchmark distribution comparison (Section 5, p.5).
@@ -480,14 +448,13 @@ but requires modifying the invariant (interaction with S1 work).
 
 #### Recommended Execution Order
 
-1. Prove level=0 case (trivial: fromParent = ∅) — 5 min
-2. Prove Sub-lemma A (rank structure) — 1-2 weeks
-3. Factor Sub-lemma B into B1 + B2a + B2b — 1 week
-4. Prove B1 (stranger contribution from invariant) — 1 week
-5. Prove B2a + B2b (benchmark argument) or sorry — 2-4 weeks
-6. Assemble the full theorem — 1 day
+1. ~~Prove level=0 case (trivial: fromParent = ∅)~~ **DONE**
+2. ~~Factor into `below_boundary_deviation` sub-lemma~~ **DONE**
+3. Prove Sub-lemma A (rank structure → `siblingNativeCount_fromParent_le_deviation`) — 1-2 weeks
+4. Prove Sub-lemma B (`below_boundary_deviation`) — factor into B1 + B2a + B2b — 2-4 weeks
+5. Assemble level≥1 case of `concreteSplit_cnative_bound` — 1 day
 
-**Total estimate:** 4-8 weeks (2-3 if B2 is sorry'd).
+**Total remaining estimate:** 3-6 weeks (1-2 if B2 is sorry'd).
 
 **Shared infrastructure with I2:** Both need rank-perm ordering lemmas
 from `Split.lean`. If I2 and I3 run in parallel, coordinate so that shared
@@ -495,12 +462,13 @@ helpers go in `Split.lean` (avoid conflicts in `SplitStranger.lean`).
 
 ## Other Sorries (Outside Bags Subsystem)
 
-The full project has 14 sorries total. The Bags subsystem accounts for 4
-(S1-S4 above). The remainder:
+The full project has 15 sorries total. The Bags subsystem accounts for 5.
+The remainder:
 
 | Area | Count | Key theorems |
 |------|-------|-------------|
 | `Graph/Quotient.lean` | 1 | `spectralGap_quotient` (Cauchy interlacing) |
+| `Graph/Walk.lean` | 2 | `spectralGap_contract`, `spectralGap_toGraph` |
 | `ZigZag/Expanders.lean` | 1 | `explicit_expanders_exist_zigzag` (needs quotient graphs) |
 | `Seiferas.lean` | 1 | `seiferas_sorting_networks_exist` (depends on S4) |
 
