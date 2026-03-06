@@ -23,6 +23,7 @@ public import AKS.Halver.Quotient
 public import AKS.Halver.Empty
 public import AKS.MGG.Spectral
 public import AKS.Graph.Square
+public import AKS.Misc.Log
 
 @[expose] public section
 
@@ -81,14 +82,33 @@ theorem mgg_gap_le_mggBeta (n : ℕ) (hn : 3 ≤ n) :
 /-! **Number of Squarings (MGG)** -/
 
 /-- Number of MGG graph squarings needed for spectral gap `≤ ε`.
-    The smallest `p` such that `(89/100)^(2^p) ≤ ε`. -/
-def mggNumSquarings (ε : ℚ) (hε : 0 < ε) : ℕ :=
-  Nat.find (iterSq_eventually_le' mggBeta ε mggBeta_nn mggBeta_lt_one hε)
+    Computes `⌈log₂(⌈log_{1/β}(1/ε)⌉)⌉` where `β = 89/100`.
+    Kernel-reducible via `Rat.ceilLog` + `Nat.clog` (no `Nat.find`). -/
+def mggNumSquarings (ε : ℚ) (_hε : 0 < ε) : ℕ :=
+  Nat.clog 2 (Rat.ceilLog (1 / mggBeta) (1 / ε))
 
 /-- `mggNumSquarings` satisfies its spec. -/
 lemma mggNumSquarings_spec (ε : ℚ) (hε : 0 < ε) :
-    iterSq mggBeta (mggNumSquarings ε hε) ≤ ε :=
-  Nat.find_spec (iterSq_eventually_le' mggBeta ε mggBeta_nn mggBeta_lt_one hε)
+    iterSq mggBeta (mggNumSquarings ε hε) ≤ ε := by
+  set c := Rat.ceilLog (1 / mggBeta) (1 / ε)
+  set p := Nat.clog 2 c
+  -- Step 1: 1/ε ≤ (1/β)^c
+  have h_inv_base : (1 : ℚ) < 1 / mggBeta := by unfold mggBeta; norm_num
+  have h_inv_x : (0 : ℚ) < 1 / ε := by positivity
+  have hle : 1 / ε ≤ (1 / mggBeta) ^ c := Rat.ceilLog_le _ _ h_inv_base h_inv_x
+  -- Step 2: c ≤ 2^p
+  have hcp : c ≤ 2 ^ p := Nat.le_pow_clog (by omega) c
+  -- Step 3: β^(2^p) ≤ β^c (decreasing since 0 ≤ β ≤ 1)
+  have h_mono : mggBeta ^ (2 ^ p) ≤ mggBeta ^ c :=
+    pow_le_pow_of_le_one mggBeta_nn mggBeta_lt_one.le hcp
+  -- Step 4: β^c ≤ ε (from 1/ε ≤ (1/β)^c)
+  have hβc_pos : (0 : ℚ) < mggBeta ^ c := pow_pos (by unfold mggBeta; norm_num) c
+  have h_beta_c : mggBeta ^ c ≤ ε := by
+    rw [div_pow, one_pow] at hle
+    rwa [div_le_div_iff₀ hε hβc_pos, one_mul, one_mul] at hle
+  -- Combine: iterSq β p = β^(2^p) ≤ β^c ≤ ε
+  rw [iterSq_eq_pow]
+  exact le_trans h_mono h_beta_c
 
 
 /-! **Algebraic Condition Infrastructure** -/
@@ -160,26 +180,23 @@ lemma mggCondA_pos (ε : ℚ) (hε : 0 < ε) : 0 < mggCondA ε hε := by
     rw [iterSq_eq_pow]; exact pow_lt_one₀ mggBeta_nn mggBeta_lt_one (by positivity)
   exact epsCondA_pos ε _ hε hβ_nn hβε hβ1
 
-/-- The Q₀ value for the MGG construction: the smallest `Q₀` such that `Q₀ * A > 3ε`.
-    Uses `Nat.find` to keep the definition computable. -/
+/-- The Q₀ value for the MGG construction: the smallest `Q₀ ≥ 1` such that `Q₀ * A > 3ε`.
+    Computed as `⌊3ε/A⌋₊ + 1`, kernel-reducible (no `Nat.find`). -/
 def mggQ0 (ε : ℚ) (hε : 0 < ε) : ℕ :=
-  max 1 (Nat.find (mggQ0_exists' ε (mggCondA ε hε) (mggCondA_pos ε hε)))
+  ⌊3 * ε / mggCondA ε hε⌋₊ + 1
 
 /-- `mggQ0 ≥ 1`. -/
-lemma mggQ0_pos (ε : ℚ) (hε : 0 < ε) : 1 ≤ mggQ0 ε hε := le_max_left _ _
+lemma mggQ0_pos (ε : ℚ) (hε : 0 < ε) : 1 ≤ mggQ0 ε hε := by
+  unfold mggQ0; omega
 
 /-- `mggQ0` satisfies the sufficient condition: `Q₀ * A > 3ε`. -/
 lemma mggQ0_spec (ε : ℚ) (hε : 0 < ε) :
     (mggQ0 ε hε : ℚ) * mggCondA ε hε > 3 * ε := by
   unfold mggQ0
-  have hfind := Nat.find_spec (mggQ0_exists' ε (mggCondA ε hε) (mggCondA_pos ε hε))
   have hA_pos := mggCondA_pos ε hε
-  set k := Nat.find (mggQ0_exists' ε (mggCondA ε hε) (mggCondA_pos ε hε))
-  calc (↑(max 1 k) : ℚ) * mggCondA ε hε
-      ≥ ↑k * mggCondA ε hε := by
-        apply mul_le_mul_of_nonneg_right _ hA_pos.le
-        exact_mod_cast le_max_right 1 k
-    _ > 3 * ε := hfind
+  have h := Nat.lt_floor_add_one (3 * ε / mggCondA ε hε)
+  rw [gt_iff_lt, ← div_lt_iff₀ hA_pos]
+  exact_mod_cast h
 
 
 /-! **Side Length** -/
@@ -400,7 +417,11 @@ private theorem iterSquareDeg_mono_p {d : ℕ} (hd : 1 ≤ d) {p₁ p₂ : ℕ} 
 theorem mggNumSquarings_antitone {ε₁ ε₂ : ℚ} (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (h : ε₁ ≤ ε₂) :
     mggNumSquarings ε₂ hε₂ ≤ mggNumSquarings ε₁ hε₁ := by
   unfold mggNumSquarings
-  exact Nat.find_min' _ ((mggNumSquarings_spec ε₁ hε₁).trans h)
+  apply Nat.clog_mono_right 2
+  apply Rat.ceilLog_mono_right
+  · rw [one_div]; exact one_lt_inv_iff₀.mpr ⟨by unfold mggBeta; norm_num, by unfold mggBeta; norm_num⟩
+  · positivity
+  · exact div_le_div_of_nonneg_left (by norm_num : (0:ℚ) ≤ 1) hε₁ h
 
 /-- Cross-bound: `ε₂ * A(ε₁,β) ≤ ε₁ * A(ε₂,β)` when `ε₁ ≤ ε₂` and `β < 1`. -/
 private theorem epsCondA_cross {ε₁ ε₂ β : ℚ} (hε₁ : 0 < ε₁) (h : ε₁ ≤ ε₂)
@@ -428,25 +449,17 @@ private theorem epsCondA_ge_eps_mul_sq {ε β : ℚ} (hε : 0 < ε) (hβ : 0 ≤
       nlinarith [sq_nonneg (1 - β), sq_nonneg ε, sq_nonneg (ε * (1 - β))]
     nlinarith
 
-/-- Upper bound on `mggQ0`: `Q₀ · A ≤ 3ε + A` (from predecessor minimality of `Nat.find`). -/
+/-- Upper bound on `mggQ0`: `Q₀ · A ≤ 3ε + A`. -/
 private theorem mggQ0_mul_le (ε : ℚ) (hε : 0 < ε) :
     (mggQ0 ε hε : ℚ) * mggCondA ε hε ≤ 3 * ε + mggCondA ε hε := by
-  set A := mggCondA ε hε with hA_def
-  set hex := mggQ0_exists' ε A (mggCondA_pos ε hε)
-  set F := Nat.find hex with hF_def
+  unfold mggQ0
   have hA_pos := mggCondA_pos ε hε
-  have hF_ge : 1 ≤ F := by
-    by_contra h; push_neg at h
-    have hF0 : F = 0 := by omega
-    have h1 := Nat.find_spec hex
-    rw [hF_def] at hF0; simp [hF0] at h1; linarith
-  have hpred : ¬((F - 1 : ℕ) : ℚ) * A > 3 * ε :=
-    Nat.find_min hex (by omega)
-  push_neg at hpred
-  have hmgg : mggQ0 ε hε = F := by show max 1 F = F; exact max_eq_right hF_ge
-  rw [hmgg]
-  have hF_eq : (F : ℚ) = ↑(F - 1 : ℕ) + 1 := by rw [Nat.cast_sub hF_ge]; ring
-  rw [hF_eq]; nlinarith
+  set A := mggCondA ε hε
+  -- ⌊3ε/A⌋₊ ≤ 3ε/A, so (⌊3ε/A⌋₊ + 1) * A ≤ 3ε + A
+  have hfloor := Nat.floor_le (div_nonneg (by linarith) hA_pos.le : (0:ℚ) ≤ 3 * ε / A)
+  -- (↑⌊3ε/A⌋₊ + 1) * A = ↑⌊3ε/A⌋₊ * A + A
+  push_cast
+  nlinarith [mul_div_cancel₀ (3 * ε) (ne_of_gt hA_pos)]
 
 /-- `21 ≤ 17·(d-1)·β²` where `d = iterSq 8 p`, `β² = iterSq(7921/10000, p)`.
     The key exponential bound ensuring `mggDepthFactor Q₀ ≤ 17·d`. -/
@@ -521,50 +534,56 @@ private theorem mggQ0_depth_bound (ε : ℚ) (hε : 0 < ε) :
     so `halverDepth ε₂ ≤ 17·d₂² ≤ 17·d₁ ≤ halverDepth ε₁`. -/
 theorem halverDepth_antitone {ε₁ ε₂ : ℚ} (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂) (h : ε₁ ≤ ε₂) :
     halverDepth ε₂ hε₂ ≤ halverDepth ε₁ hε₁ := by
-  have hp : mggNumSquarings ε₂ hε₂ ≤ mggNumSquarings ε₁ hε₁ :=
-    mggNumSquarings_antitone hε₁ hε₂ h
   unfold halverDepth
-  by_cases heq : mggNumSquarings ε₁ hε₁ = mggNumSquarings ε₂ hε₂
-  · -- Case 1: same squarings → same d, show Q₂ ≤ Q₁
-    rw [← heq]; apply Nat.mul_le_mul_left
-    unfold mggDepthFactor
-    suffices mggQ0 ε₂ hε₂ ≤ mggQ0 ε₁ hε₁ by omega
-    -- mggQ0 ε₁ satisfies the ε₂ predicate (by epsCondA_cross), so find₂ ≤ mggQ0 ε₁
-    unfold mggQ0
-    apply max_le (le_max_left 1 _)
-    apply Nat.find_min'
-    -- Goal: (max 1 (Nat.find ...)) * mggCondA ε₂ hε₂ > 3 * ε₂
-    -- i.e., mggQ0 ε₁ hε₁ * A₂ > 3ε₂
-    set β := iterSq mggBeta (mggNumSquarings ε₁ hε₁)
-    have hβ_nn : 0 ≤ β := by
-      show 0 ≤ iterSq mggBeta _; rw [iterSq_eq_pow]; exact pow_nonneg mggBeta_nn _
-    have hβ1 : β < 1 := by
-      show iterSq mggBeta _ < 1; rw [iterSq_eq_pow]
-      exact pow_lt_one₀ mggBeta_nn mggBeta_lt_one (by positivity)
-    -- Both A values use the same β since p₁ = p₂
-    have hA₁ : mggCondA ε₁ hε₁ = epsCondA ε₁ β := rfl
-    have hA₂ : mggCondA ε₂ hε₂ = epsCondA ε₂ β := by
-      show epsCondA ε₂ (iterSq mggBeta (mggNumSquarings ε₂ hε₂)) = epsCondA ε₂ β
-      rw [← heq]
-    have hspec := mggQ0_spec ε₁ hε₁  -- Q₁ * A₁ > 3ε₁
-    rw [hA₁] at hspec; rw [hA₂]
+  set p₁ := mggNumSquarings ε₁ hε₁
+  set p₂ := mggNumSquarings ε₂ hε₂
+  set d₁ := iterSquareDeg 8 p₁
+  set d₂ := iterSquareDeg 8 p₂
+  have hp : p₂ ≤ p₁ := mggNumSquarings_antitone hε₁ hε₂ h
+  have hd₁_pos : 0 < d₁ := iterSquareDeg_pos (by omega) p₁
+  rcases Nat.eq_or_lt_of_le hp with heq | hlt
+  · -- Case p₂ = p₁: same β, show Q₂ ≤ Q₁ via epsCondA_cross
+    have hd_eq : d₂ = d₁ := by show iterSquareDeg 8 p₂ = iterSquareDeg 8 p₁; rw [heq]
+    set β := iterSq mggBeta p₁
+    have hβ_nn : 0 ≤ β := by show 0 ≤ iterSq mggBeta p₁; rw [iterSq_eq_pow]; exact pow_nonneg mggBeta_nn _
+    have hβ1 : β < 1 := by show iterSq mggBeta p₁ < 1; rw [iterSq_eq_pow]; exact pow_lt_one₀ mggBeta_nn mggBeta_lt_one (by positivity)
+    have hA₁_pos := mggCondA_pos ε₁ hε₁
+    have hA₂_pos := mggCondA_pos ε₂ hε₂
+    -- mggCondA ε₁ hε₁ = epsCondA ε₁ β since p₁ = p₂ → same β
+    have hA₁_eq : mggCondA ε₁ hε₁ = epsCondA ε₁ β := rfl
+    have hA₂_eq : mggCondA ε₂ hε₂ = epsCondA ε₂ (iterSq mggBeta p₂) := rfl
+    have hβ_eq : iterSq mggBeta p₂ = β := by rw [heq]
+    rw [hβ_eq] at hA₂_eq
+    -- epsCondA_cross: ε₂ * epsCondA ε₁ β ≤ ε₁ * epsCondA ε₂ β
     have hcross := epsCondA_cross hε₁ h hβ_nn hβ1
-    -- Q₁ * A₂ * ε₁ ≥ Q₁ * A₁ * ε₂ > 3ε₁ * ε₂ > 0, so Q₁ * A₂ > 3ε₂
-    -- The goal has `max 1 (Nat.find ...)` which is mggQ0 ε₁ hε₁
-    change (mggQ0 ε₁ hε₁ : ℚ) * epsCondA ε₂ β > 3 * ε₂
-    nlinarith [mul_pos (show (0 : ℚ) < mggQ0 ε₁ hε₁ from by exact_mod_cast mggQ0_pos ε₁ hε₁)
-      (epsCondA_pos ε₁ β hε₁ hβ_nn (mggNumSquarings_spec ε₁ hε₁) hβ1)]
-  · -- Case 2: p₂ < p₁ → use mggQ0_depth_bound
-    have hlt : mggNumSquarings ε₂ hε₂ + 1 ≤ mggNumSquarings ε₁ hε₁ := by omega
-    have hdfb := mggQ0_depth_bound ε₂ hε₂
-    calc iterSquareDeg 8 (mggNumSquarings ε₂ hε₂) * mggDepthFactor (mggQ0 ε₂ hε₂)
-        ≤ iterSquareDeg 8 (mggNumSquarings ε₂ hε₂) * (17 * iterSquareDeg 8 (mggNumSquarings ε₂ hε₂)) :=
-          Nat.mul_le_mul_left _ hdfb
-      _ = 17 * iterSquareDeg 8 (mggNumSquarings ε₂ hε₂ + 1) := by
-          simp [iterSquareDeg]; ring
-      _ ≤ 17 * iterSquareDeg 8 (mggNumSquarings ε₁ hε₁) :=
-          Nat.mul_le_mul_left _ (iterSquareDeg_mono_p (by norm_num) hlt)
-      _ ≤ iterSquareDeg 8 (mggNumSquarings ε₁ hε₁) * mggDepthFactor (mggQ0 ε₁ hε₁) := by
-          unfold mggDepthFactor; nlinarith [mggQ0_pos ε₁ hε₁]
+    -- 3ε₂/A₂ ≤ 3ε₁/A₁
+    have hQ : mggQ0 ε₂ hε₂ ≤ mggQ0 ε₁ hε₁ := by
+      unfold mggQ0
+      apply Nat.add_le_add_right
+      apply Nat.floor_le_floor
+      rw [hA₁_eq, hA₂_eq]
+      have hA₁ : (0 : ℚ) < epsCondA ε₁ β := by rw [← hA₁_eq]; exact hA₁_pos
+      have hA₂ : (0 : ℚ) < epsCondA ε₂ β := by rw [← hA₂_eq]; exact hA₂_pos
+      rw [div_le_div_iff₀ hA₂ hA₁]
+      linarith
+    calc d₂ * mggDepthFactor (mggQ0 ε₂ hε₂)
+        ≤ d₁ * mggDepthFactor (mggQ0 ε₂ hε₂) :=
+          Nat.mul_le_mul_right _ (by omega)
+      _ ≤ d₁ * mggDepthFactor (mggQ0 ε₁ hε₁) := by
+          apply Nat.mul_le_mul_left; unfold mggDepthFactor; omega
+  · -- Case p₂ < p₁: F(Q₂) ≤ 17·d₂, so d₂·F(Q₂) ≤ 17·d₂² ≤ 17·d₁ ≤ d₁·F(Q₁)
+    have hF := mggQ0_depth_bound ε₂ hε₂
+    have hd₂_pos : 0 < d₂ := iterSquareDeg_pos (by omega) p₂
+    have h_sq : d₂ * d₂ ≤ d₁ := by
+      show iterSquareDeg 8 p₂ * iterSquareDeg 8 p₂ ≤ iterSquareDeg 8 p₁
+      change iterSquareDeg 8 (p₂ + 1) ≤ iterSquareDeg 8 p₁
+      exact iterSquareDeg_mono_p (by omega) hlt
+    have hQ₁ := mggQ0_pos ε₁ hε₁
+    calc d₂ * mggDepthFactor (mggQ0 ε₂ hε₂)
+        ≤ d₂ * (17 * d₂) := Nat.mul_le_mul_left _ hF
+      _ = 17 * (d₂ * d₂) := by ring
+      _ ≤ 17 * d₁ := Nat.mul_le_mul_left _ h_sq
+      _ ≤ d₁ * mggDepthFactor (mggQ0 ε₁ hε₁) := by
+          unfold mggDepthFactor; nlinarith
 
 end

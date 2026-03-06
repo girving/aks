@@ -22,6 +22,7 @@ import AKS.Bitonic.Correctness
 import AKS.Bitonic.Shrink
 import AKS.Misc.Fin
 import AKS.Misc.Floor
+import AKS.Misc.Log
 import AKS.Halver.Defs
 import AKS.Halver.Empty
 import AKS.Halver.Mono

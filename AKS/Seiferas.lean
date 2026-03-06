@@ -10,8 +10,8 @@
 
   Three results:
   1. `network_sorts`: the network sorts all inputs
-  2. `network_depth_le`: depth ≤ `seiferasParams.depth * ⌈log₂ n⌉`  (O(log n))
-  3. `network_size_le`: 2 * size ≤ `n * seiferasParams.depth * ⌈log₂ n⌉`  (O(n log n))
+  2. `network_depth_le`: `depth ≤ 2 ^ 214 * ⌈log₂ n⌉`  (O(log n))
+  3. `network_size_le`: `size ≤ 2 ^ 213 * n * ⌈log₂ n⌉`  (O(n log n))
 -/
 
 import AKS.Bags.Depth
@@ -42,28 +42,36 @@ theorem network_sorts (n : ℕ) : (network n).Sorts := by
 /-! **Depth** -/
 
 theorem network_depth_le (n : ℕ) :
-    (network n).depth ≤ seiferasParams.depth * Nat.clog 2 n := by
+    (network n).depth ≤ 2 ^ 214 * Nat.clog 2 n := by
   unfold network; split
   case isTrue h =>
     have hk : 10 ≤ Nat.clog 2 n :=
       (show (10 : ℕ) = Nat.clog 2 1024 by decide +kernel) ▸ Nat.clog_mono_right 2 h
-    exact (restrictWires_depth_le _ _ _).trans (seiferasNetwork_depth_le _ _ hk)
+    exact (restrictWires_depth_le _ _ _).trans
+      ((seiferasNetwork_depth_le _ _ hk).trans
+        (Nat.mul_le_mul_right _ seiferasParams_depth_le))
   case isFalse h =>
     set k := Nat.clog 2 n
     calc (bitonicNetwork n).depth
         ≤ k ^ 2 := bitonicNetwork_depth_le n
       _ = k * k := by ring
-      _ ≤ seiferasParams.depth * k := by
+      _ ≤ 2 ^ 214 * k := by
           apply Nat.mul_le_mul_right
           calc k ≤ Nat.clog 2 1023 := Nat.clog_mono_right 2 (by omega)
-            _ ≤ seiferasParams.depth := by
+            _ ≤ 2 ^ 214 := by
                 set_option maxRecDepth 100000 in decide +kernel
 
 /-! **Size** -/
 
 theorem network_size_le (n : ℕ) :
-    2 * (network n).size ≤ n * (seiferasParams.depth * Nat.clog 2 n) :=
-  (size_le_half_n_mul_depth _).trans (Nat.mul_le_mul_left _ (network_depth_le n))
+    (network n).size ≤ 2 ^ 213 * n * Nat.clog 2 n := by
+  have h := (size_le_half_n_mul_depth (network n)).trans
+    (Nat.mul_le_mul_left _ (network_depth_le n))
+  set k := Nat.clog 2 n
+  -- h : 2 * size ≤ n * (2^214 * k)
+  -- Goal: size ≤ 2^213 * n * k
+  have h2 : n * (2 ^ 214 * k) = 2 * (2 ^ 213 * n * k) := by ring
+  linarith
 
 /-! **Axiom audit** -/
 

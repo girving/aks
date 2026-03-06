@@ -44,33 +44,30 @@ def stageDepth (p : Params) : ℕ :=
     Since `ν^c · 2A < 1` (by `stagesFactor_spec`), we get `(2 · ν^c · A)^k < 1`,
     so `capacity(ck, k-2) < 1/A^2`, and `γ · capacity < γ/A^2 ≤ 1/2 < 1`. -/
 theorem numStages_le (p : Params) (k : ℕ) : numStages p k ≤ p.stagesFactor * k := by
-  apply Nat.find_le
-  show p.γ * capacity p k (p.stagesFactor * k) (k - 2) < 1
-  unfold capacity
-  set c := p.stagesFactor
-  have hνc := p.stagesFactor_spec  -- ν^c · 2A < 1
-  have hA_pos : (0:ℚ) < p.A := by linarith [p.hA]
-  -- Key: (2 · ν^c · A) < 1, so its powers are ≤ 1
-  have h2νcA : 2 * p.ν ^ c * p.A < 1 := by linarith
-  -- γ · 2^k · ν^(ck) · A^(k-2) = γ · (2·ν^c·A)^k / A^2  [for k ≥ 2]
-  -- ≤ γ / A^2 ≤ 1/(2A^2) < 1
-  -- For all k, bound more directly:
-  -- 2^k · ν^(ck) · A^(k-2) ≤ 2^k · ν^(ck) · A^k = (2·ν^c·A)^k ≤ 1
-  -- So γ · (...) ≤ γ ≤ 1/2 < 1
-  rw [show p.ν ^ (c * k) = (p.ν ^ c) ^ k from by rw [pow_mul]]
-  have hν_pos := pow_pos p.hν_pos c
-  have hAk2 : p.A ^ (k - 2) ≤ p.A ^ k :=
-    pow_le_pow_right₀ (by linarith [p.hA]) (by omega)
-  have h2νcA_nn : 0 ≤ 2 * p.ν ^ c * p.A := by positivity
-  calc p.γ * ((2:ℚ) ^ k * (p.ν ^ c) ^ k * p.A ^ (k - 2))
-      ≤ p.γ * ((2:ℚ) ^ k * (p.ν ^ c) ^ k * p.A ^ k) := by
-        apply mul_le_mul_of_nonneg_left _ p.hγ_pos.le
-        exact mul_le_mul_of_nonneg_left hAk2 (mul_nonneg (pow_nonneg (by positivity) _) (pow_nonneg hν_pos.le _))
-    _ = p.γ * (2 * p.ν ^ c * p.A) ^ k := by ring
-    _ ≤ (1/2) * 1 := by
-        apply mul_le_mul p.hγ_half (pow_le_one₀ h2νcA_nn h2νcA.le)
-          (pow_nonneg h2νcA_nn _) (by norm_num)
-    _ < 1 := by norm_num
+  by_contra h; push_neg at h
+  have h1 := numStages_pre p k (p.stagesFactor * k) h
+  -- But γ * capacity(c*k, k-2) < 1, contradiction
+  have h2 : p.γ * capacity p k (p.stagesFactor * k) (k - 2) < 1 := by
+    unfold capacity
+    set c := p.stagesFactor
+    have hνc := p.stagesFactor_spec  -- ν^c · 2A ≤ 1
+    have h2νcA : 2 * p.ν ^ c * p.A ≤ 1 := by linarith
+    rw [show p.ν ^ (c * k) = (p.ν ^ c) ^ k from by rw [pow_mul]]
+    have hν_pos := pow_pos p.hν_pos c
+    have hAk2 : p.A ^ (k - 2) ≤ p.A ^ k :=
+      pow_le_pow_right₀ (by linarith [p.hA]) (by omega)
+    have h2νcA_nn : 0 ≤ 2 * p.ν ^ c * p.A :=
+      mul_nonneg (mul_nonneg (by norm_num) (pow_nonneg p.hν_pos.le _)) (by linarith [p.hA])
+    calc p.γ * ((2:ℚ) ^ k * (p.ν ^ c) ^ k * p.A ^ (k - 2))
+        ≤ p.γ * ((2:ℚ) ^ k * (p.ν ^ c) ^ k * p.A ^ k) := by
+          apply mul_le_mul_of_nonneg_left _ p.hγ_pos.le
+          exact mul_le_mul_of_nonneg_left hAk2 (mul_nonneg (pow_nonneg (by positivity) _) (pow_nonneg hν_pos.le _))
+      _ = p.γ * (2 * p.ν ^ c * p.A) ^ k := by ring
+      _ ≤ (1/2) * 1 := by
+          apply mul_le_mul p.hγ_half (pow_le_one₀ h2νcA_nn h2νcA)
+            (pow_nonneg h2νcA_nn _) (by norm_num)
+      _ < 1 := by norm_num
+  linarith
 
 /-! **Depth Bound Constant** -/
 
@@ -449,5 +446,10 @@ theorem seiferasNetwork_depth_le (p : Params) (k : ℕ) (hk : 10 ≤ k) :
     _ ≤ p.stagesFactor * (k' + 1) * stageDepth p + 9 * (k' + 1) := by omega
     _ = (p.stagesFactor * stageDepth p + 9) * (k' + 1) := by ring
     _ = p.depth * (k' + 1) := by unfold Params.depth; ring
+
+/-! **Concrete Depth Bound** -/
+
+/-- `seiferasParams.depth ≤ 2^214`, proved by kernel evaluation. -/
+theorem seiferasParams_depth_le : seiferasParams.depth ≤ 2 ^ 214 := by decide +kernel
 
 end

@@ -16,6 +16,7 @@ module
 -/
 
 public import AKS.Sort.Defs
+public import AKS.Misc.Log
 
 @[expose] public section
 
@@ -168,10 +169,12 @@ theorem convergence_exists (p : Params) (k : ℕ) :
 /-- The number of separator stages to run before finishing.
 
     The smallest `t` such that `γ · capacity(t, k-2) < 1`, i.e.,
-    convergence at the convergence level. Since `ν < 1`, capacity decays
-    geometrically and convergence is guaranteed (no fuel needed). -/
+    convergence at the convergence level.
+    Kernel-reducible: uses `Rat.ceilLog` (no `Nat.find`), with a decidable
+    check for whether `ceilLog` already gives strict inequality. -/
 def numStages (p : Params) (k : ℕ) : ℕ :=
-  Nat.find (convergence_exists p k)
+  let t := Rat.ceilLog (1 / p.ν) (p.γ * ↑(2 ^ k) * p.A ^ (k - 2))
+  if p.γ * capacity p k t (k - 2) < 1 then t else t + 1
 
 /-! **Capacity base condition** -/
 
@@ -187,8 +190,43 @@ theorem Params.hbase (p : Params) {k : ℕ} (hk : 10 ≤ k) :
 
 /-- Convergence at the convergence level `k - 2`. -/
 theorem numStages_hconv_cl (p : Params) (k : ℕ) :
-    p.γ * capacity p k (numStages p k) (k - 2) < 1 :=
-  Nat.find_spec (convergence_exists p k)
+    p.γ * capacity p k (numStages p k) (k - 2) < 1 := by
+  show p.γ * capacity p k (if p.γ * capacity p k
+    (Rat.ceilLog (1 / p.ν) (p.γ * ↑(2 ^ k) * p.A ^ (k - 2))) (k - 2) < 1
+    then _ else _) (k - 2) < 1
+  set t := Rat.ceilLog (1 / p.ν) (p.γ * ↑(2 ^ k) * p.A ^ (k - 2))
+  split
+  · assumption
+  · -- ¬(γ * cap(t) < 1), i.e., γ * cap(t) ≥ 1
+    -- But ceilLog gives (1/ν)^t ≥ x, so γ * cap(t) ≤ 1.
+    -- Combined: γ * cap(t) = 1. Then γ * cap(t+1) = ν · γ * cap(t) = ν < 1.
+    next h_not_lt =>
+    push_neg at h_not_lt
+    have hbase : (1:ℚ) < 1 / p.ν := by
+      rw [one_div]; exact one_lt_inv_iff₀.mpr ⟨p.hν_pos, p.hν_lt⟩
+    set x := p.γ * ↑(2 ^ k) * p.A ^ (k - 2)
+    have hx_pos : (0:ℚ) < x :=
+      mul_pos (mul_pos p.hγ_pos (show (0:ℚ) < ↑(2 ^ k) by exact_mod_cast Nat.two_pow_pos k))
+        (pow_pos (by linarith [p.hA]) _)
+    have h_le : x ≤ (1 / p.ν) ^ t := Rat.ceilLog_le _ _ hbase hx_pos
+    have hνt_pos : (0:ℚ) < p.ν ^ t := pow_pos p.hν_pos _
+    -- (1/ν)^t = (ν^t)⁻¹
+    have h_inv : (1 / p.ν) ^ t = (p.ν ^ t)⁻¹ := by rw [one_div, inv_pow]
+    rw [h_inv] at h_le
+    -- x * ν^t ≤ 1
+    have h_le1 : x * p.ν ^ t ≤ 1 :=
+      calc x * p.ν ^ t ≤ (p.ν ^ t)⁻¹ * p.ν ^ t :=
+            mul_le_mul_of_nonneg_right h_le hνt_pos.le
+        _ = 1 := inv_mul_cancel₀ (ne_of_gt hνt_pos)
+    -- γ * cap(t) = x * ν^t, so γ * cap(t) = 1
+    have h_cap_eq : p.γ * capacity p k t (k - 2) = x * p.ν ^ t := by
+      unfold capacity; ring
+    have h_eq1 : x * p.ν ^ t = 1 := le_antisymm h_le1 (by linarith [h_cap_eq])
+    -- cap(t+1) = x * ν^(t+1) = ν < 1
+    have h_cap_succ : p.γ * capacity p k (t + 1) (k - 2) = x * p.ν ^ (t + 1) := by
+      unfold capacity; ring
+    rw [h_cap_succ, pow_succ, ← mul_assoc, h_eq1, one_mul]
+    exact p.hν_lt
 
 /-- Convergence at the finish level `k - 3` (follows from convergence at `k - 2`
     since capacity is monotone in level). -/
@@ -207,11 +245,48 @@ theorem numStages_hconv (p : Params) (k : ℕ) :
         mul_le_mul_of_nonneg_left hcap_le p.hγ_pos.le
     _ < 1 := h
 
+/-- Helper: `γ * cap(t) ≥ 1` when `(1/ν)^t < γ * 2^k * A^(k-2)`. -/
+private theorem cap_ge_one_of_ceilLog_gt (p : Params) (k t : ℕ)
+    (h_gt : (1 / p.ν) ^ t < p.γ * ↑(2 ^ k) * p.A ^ (k - 2)) :
+    1 < p.γ * capacity p k t (k - 2) := by
+  set x := p.γ * ↑(2 ^ k) * p.A ^ (k - 2)
+  have hνt_pos : (0:ℚ) < p.ν ^ t := pow_pos p.hν_pos _
+  rw [one_div, inv_pow] at h_gt
+  -- (ν^t)⁻¹ < x, multiply both sides by ν^t
+  have h1 : 1 < x * p.ν ^ t :=
+    calc (1:ℚ) = (p.ν ^ t)⁻¹ * p.ν ^ t := (inv_mul_cancel₀ (ne_of_gt hνt_pos)).symm
+      _ < x * p.ν ^ t := mul_lt_mul_of_pos_right h_gt hνt_pos
+  have h_cap_eq : p.γ * capacity p k t (k - 2) = x * p.ν ^ t := by
+    unfold capacity; ring
+  linarith
+
 /-- Pre-convergence: for `t < numStages`, capacity at the convergence level
     hasn't yet dropped below `1/γ`. -/
 theorem numStages_pre (p : Params) (k : ℕ) (t : ℕ) (ht : t < numStages p k) :
-    1 ≤ p.γ * capacity p k t (k - 2) :=
-  not_lt.mp (Nat.find_min (convergence_exists p k) ht)
+    1 ≤ p.γ * capacity p k t (k - 2) := by
+  set n := Rat.ceilLog (1 / p.ν) (p.γ * ↑(2 ^ k) * p.A ^ (k - 2)) with hn_def
+  have hbase : (1:ℚ) < 1 / p.ν := by
+    rw [one_div]; exact one_lt_inv_iff₀.mpr ⟨p.hν_pos, p.hν_lt⟩
+  have hx_pos : (0:ℚ) < p.γ * ↑(2 ^ k) * p.A ^ (k - 2) :=
+    mul_pos (mul_pos p.hγ_pos (show (0:ℚ) < ↑(2 ^ k) by exact_mod_cast Nat.two_pow_pos k))
+      (pow_pos (by linarith [p.hA]) _)
+  -- Extract t ≤ n from the numStages definition
+  have ht_le_n : t ≤ n := by
+    by_contra h; push_neg at h
+    -- t > n, but numStages ≤ n + 1
+    have : numStages p k ≤ n + 1 := by
+      show (if p.γ * capacity p k n (k - 2) < 1 then n else n + 1) ≤ n + 1
+      split <;> omega
+    omega
+  rcases Nat.eq_or_lt_of_le ht_le_n with rfl | hlt
+  · -- t = n, and numStages = n + 1 (else branch), so ¬(γ * cap(n) < 1)
+    have : ¬ (p.γ * capacity p k n (k - 2) < 1) := by
+      intro h_lt
+      have : numStages p k = n := by show (if p.γ * capacity p k n (k - 2) < 1 then n else n + 1) = n; rw [if_pos h_lt]
+      omega
+    push_neg at this; exact this
+  · -- t < n: ceilLog_gt gives (1/ν)^t < x, so γ * cap(t) > 1
+    exact le_of_lt (cap_ge_one_of_ceilLog_gt p k t (Rat.ceilLog_gt _ _ hbase hx_pos hlt))
 
 /-- For `t ≤ numStages`, capacity at `numStages` ≤ capacity at `t`.
     Since `ν < 1`, capacity decreases with stage number. -/
@@ -255,13 +330,23 @@ theorem Params.exists_stagesFactor (p : Params) :
       mul_lt_mul_of_pos_right hc hA_pos
     _ = 1 := div_mul_cancel₀ 1 (ne_of_gt hA_pos)
 
-/-- The smallest `c` such that `ν^c · 2A < 1`. Controls the ratio
-    `numStages / k`: we have `numStages p k ≤ stagesFactor * k`. -/
+/-- The smallest `c` such that `(1/ν)^c ≥ 2A`, i.e., `ν^c · 2A ≤ 1`.
+    Controls the ratio `numStages / k`: we have `numStages p k ≤ stagesFactor * k`.
+    Kernel-reducible via `Rat.ceilLog` (no `Nat.find`). -/
 def Params.stagesFactor (p : Params) : ℕ :=
-  Nat.find p.exists_stagesFactor
+  Rat.ceilLog (1 / p.ν) (2 * p.A)
 
 theorem Params.stagesFactor_spec (p : Params) :
-    p.ν ^ p.stagesFactor * (2 * p.A) < 1 :=
-  Nat.find_spec p.exists_stagesFactor
+    p.ν ^ p.stagesFactor * (2 * p.A) ≤ 1 := by
+  have hνc : (0 : ℚ) < p.ν ^ p.stagesFactor := pow_pos p.hν_pos p.stagesFactor
+  have hle : 2 * p.A ≤ (1 / p.ν) ^ p.stagesFactor :=
+    Rat.ceilLog_le (1 / p.ν) (2 * p.A)
+      (by rw [one_div]; exact one_lt_inv_iff₀.mpr ⟨p.hν_pos, p.hν_lt⟩)
+      (by linarith [p.hA])
+  have h1 : p.ν ^ p.stagesFactor * (2 * p.A) ≤ p.ν ^ p.stagesFactor * (1 / p.ν) ^ p.stagesFactor :=
+    mul_le_mul_of_nonneg_left hle hνc.le
+  have h2 : p.ν ^ p.stagesFactor * (1 / p.ν) ^ p.stagesFactor = 1 := by
+    rw [← mul_pow, mul_one_div_cancel (ne_of_gt p.hν_pos), one_pow]
+  linarith
 
 end
