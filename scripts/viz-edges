@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Generate PROOF_DATA edges from Lean dependency data + regex fallback.
+
+Reads deps.txt (from Lean metaprogramming) for precise edges, then uses
+regex body-matching for NOT_FOUND entries (module-private names, Random/).
+
+Usage:
+  # First generate deps.txt via Lean:
+  lake env lean tmp/deps.lean 2>/dev/null > tmp/deps.txt
+  # Then run this script:
+  python3 scripts/viz-edges
+"""
+
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def extract_nodes(html_path: str) -> list[dict]:
+    """Parse PROOF_DATA nodes from index.html."""
+    with open(html_path) as f:
+        content = f.read()
+    nodes = []
+    for m in re.finditer(
+        r'\{\s*id:\s*"([^"]+)"\s*,\s*file:\s*"([^"]+)"\s*,\s*line:\s*(\d+)\s*,'
+        r'\s*status:\s*"([^"]+)"\s*,\s*kind:\s*"([^"]+)"',
+        content,
+    ):
+        nodes.append({
+            "id": m.group(1),
+            "file": m.group(2),
+            "line": int(m.group(3)),
+            "status": m.group(4),
+            "kind": m.group(5),
+        })
+    return nodes
+
+
+def load_lean_deps(deps_path: str) -> dict[str, list[str]]:
+    """Load deps from Lean metaprogramming output (name|dep1,dep2,...)."""
+    deps = {}
+    if not os.path.exists(deps_path):
+        return deps
+    with open(deps_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            name, rest = line.split("|", 1)
+            if rest == "NOT_FOUND" or not rest:
+                deps[name] = None  # sentinel: needs regex fallback
+            else:
+                deps[name] = [d.strip() for d in rest.split(",") if d.strip()]
+    return deps
+
+
+def extract_body(file_path: str, start_line: int) -> str:
+    """Extract proof/def body starting at start_line, stripping comments."""
+    full_path = os.path.join(ROOT, file_path)
+    if not os.path.exists(full_path):
+        return ""
+
+    with open(full_path) as f:
+        lines = f.readlines()
+
+    if start_line < 1 or start_line > len(lines):
+        return ""
+
+    # Top-level declaration starters (at column 0)
+    top_level = re.compile(
+        r'^(theorem|def|lemma|structure|class|instance|private theorem|'
+        r'private def|private lemma|noncomputable def|noncomputable theorem|'
+        r'@\[|/-!|end\b|section\b|namespace\b|#)'
+    )
+
+    body_lines = []
+    in_sig = True  # skip until := or :=by
+    for i in range(start_line - 1, len(lines)):
+        line = lines[i]
+        # Stop at next top-level declaration (not counting first line)
+        if i > start_line - 1 and top_level.match(line):
+            break
+        # Track when we pass the signature into the body
+        if in_sig:
+            if ':= by' in line or ':=' in line or 'where' in line:
+                in_sig = False
+                # Include from := onwards
+                idx = line.find(':= by')
+                if idx < 0:
+                    idx = line.find(':=')
+                if idx < 0:
+                    idx = line.find('where')
+                body_lines.append(line[idx:])
+                continue
+        else:
+            body_lines.append(line)
+
+    body = "".join(body_lines)
+    # Strip line comments
+    body = re.sub(r'--[^\n]*', '', body)
+    # Strip block comments (simple heuristic, not nested)
+    body = re.sub(r'/-.*?-/', '', body, flags=re.DOTALL)
+    return body
+
+
+def find_refs(body: str, all_ids: set[str], own_id: str) -> set[str]:
+    """Find which node IDs are referenced in a declaration body."""
+    refs = set()
+    for nid in all_ids:
+        if nid == own_id:
+            continue
+        # Match as a whole identifier
+        pattern = r'(?<![.\w])' + re.escape(nid) + r"(?!['\w])"
+        if re.search(pattern, body):
+            refs.add(nid)
+    return refs
+
+
+def main():
+    html_path = os.path.join(ROOT, "docs", "index.html")
+    nodes = extract_nodes(html_path)
+    all_ids = {n["id"] for n in nodes}
+
+    # Load Lean-derived deps
+    deps_path = os.path.join(ROOT, "tmp", "deps.txt")
+    lean_deps = load_lean_deps(deps_path)
+
+    edges: set[tuple[str, str]] = set()
+    regex_used = 0
+
+    for node in nodes:
+        nid = node["id"]
+
+        if nid in lean_deps and lean_deps[nid] is not None:
+            # Use Lean-derived deps (accurate, from Expr.getUsedConstants)
+            for dep in lean_deps[nid]:
+                if dep in all_ids and dep != nid:
+                    edges.add((dep, nid))
+        else:
+            # Regex fallback for module-private or Random/ names
+            body = extract_body(node["file"], node["line"])
+            if body.strip():
+                refs = find_refs(body, all_ids, nid)
+                for ref in refs:
+                    edges.add((ref, nid))
+                regex_used += 1
+
+    # Remove edges to/from definition nodes that are just type mentions
+    # Keep: def→def (construction deps), theorem→theorem (proof deps),
+    #        def→theorem (theorem uses def), theorem→def (rare but valid)
+    # Filter: type-only edges where a definition like ComparatorNetwork appears
+    # in every theorem just because it's in the type signature
+    # We don't filter these since Lean deps already exclude type-only refs
+
+    # Filter: remove edges from pure type/structure definitions
+    # that appear everywhere just because the type is mentioned in proofs.
+    # These are "definition" kind nodes with very high fan-out.
+    # Threshold: >12 targets from a definition node.
+    from collections import Counter
+    node_kind = {n["id"]: n["kind"] for n in nodes}
+    src_counts = Counter(src for src, _ in edges)
+    type_noise = {
+        name for name, count in src_counts.items()
+        if count > 12 and node_kind.get(name) in ("structure", "def", "definition")
+    }
+    filtered = {(s, t) for s, t in edges if s not in type_noise}
+
+    # Output in PROOF_DATA format
+    for src, tgt in sorted(filtered):
+        print(f'    ["{src}", "{tgt}"],')
+
+    print(f"\n// {len(filtered)} edges ({len(edges)} before filter) from {len(nodes)} nodes",
+          file=sys.stderr)
+    print(f"// {regex_used} nodes used regex fallback", file=sys.stderr)
+    if type_noise:
+        print(f"// Filtered high-fan-out type nodes: {sorted(type_noise)}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,425 @@
+#!/usr/bin/env python3
+"""Find dead code in AKS/ — declarations not reachable from root declarations.
+
+Usage:
+  scripts/dead-code                # Report unreachable declarations
+  scripts/dead-code --dump         # Regenerate tmp/deps.tsv from Lean environment
+  scripts/dead-code --roots        # Show auto-detected roots (no dependents)
+  scripts/dead-code --stats        # Summary statistics
+  scripts/dead-code --why NAME     # Show why NAME is alive (path to entry point)
+
+Two phases:
+  1. Lean phase (--dump): import AKS, walk the environment, dump the exact
+     dependency graph to tmp/deps.tsv via `lake env lean --stdin`.
+  2. Python phase: load tmp/deps.tsv, do reachability from entry points,
+     report dead code.
+
+Run --dump once after code changes; subsequent runs reuse the cached TSV.
+"""
+
+import re
+import subprocess
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+# ── Configuration ──────────────────────────────────────────────
+
+# Top-level entry points — everything reachable from these is alive.
+ENTRY_POINTS = {
+    # AKS/Seiferas.lean — the four top-level results
+    "network",
+    "network_sorts",
+    "network_depth_le",
+    "network_size_le",
+    # AKS/ZigZag/Expanders.lean — zig-zag product pipeline culmination
+    "explicit_expanders_graph",
+    # Standalone proved results — nice theorems worth keeping
+    "spectralGap_complete",           # AKS/Graph/Complete.lean
+    "spectralGap_contractDivisible",  # AKS/Graph/Contract.lean
+    "spectralGap_kronecker",          # AKS/Graph/Kronecker.lean
+    "expander_mixing_lemma",          # AKS/Halver/Mixing.lean
+    # Bag API lemmas — may be needed for future proofs
+    "Bag.hi_eq_lo_add_size", "Bag.hi_left_le", "Bag.hi_right_eq",
+    "Bag.lo_left_eq", "Bag.lo_right_ge", "Bag.native_root",
+    "Bag.sibling_native_is_one_strange", "Bag.sibling_ne",
+    "Bag.sibling_of_left", "Bag.sibling_of_right",
+    "Bag.size_left", "Bag.size_right", "Bag.size_root",
+    "Bag.strangers_le_card",
+    "div_pow_pred_div_two",
+}
+
+# Declarations hidden from reports but kept in the graph for connectivity.
+# These are auto-generated or internal — they create noise in dead code reports
+# but must remain as graph nodes so edges through private helpers aren't lost.
+HIDDEN_SUFFIXES = [
+    ".noConfusion", ".noConfusionType", ".casesOn", ".recOn", ".rec",
+    ".brecOn", ".below", ".ibelow", ".binductionOn",
+    ".sizeOf_spec", ".sizeOf", ".decEq",
+    ".instBEq", ".instDecidableEq", ".instRepr", ".instToString",
+    ".instInhabited", ".instHashable",
+    # Auto-generated equation/congruence lemmas
+    ".congr_simp", ".eq_1", ".eq_2", ".eq_3", ".eq_4",
+    ".mk.inj", ".mk.injEq", ".ctorIdx",
+    # Structure boilerplate
+    ".mk._flat_ctor", ".ext_iff",
+]
+
+HIDDEN_INFIXES = [
+    "._proof_", "._simp_", ".eq_def", "._sunfold", "._sizeOf", "._auto_",
+]
+
+
+def is_hidden(name: str, name_flags: set[str] | None = None) -> bool:
+    """True for auto-generated/internal names hidden from reports.
+
+    rfl-proved theorems (simp lemmas proved by `rfl`) are hidden because
+    `simp` uses them for rewriting but the kernel proof term references
+    the underlying definition directly, so they have zero Expr-level users.
+    """
+    if name.startswith("_private"):
+        return True
+    if any(name.endswith(s) for s in HIDDEN_SUFFIXES):
+        return True
+    if any(s in name for s in HIDDEN_INFIXES):
+        return True
+    if name_flags and "rfl" in name_flags:
+        return True
+    return False
+
+DEPS_FILE = ROOT / "tmp" / "deps.tsv"
+
+# ── Lean dump ──────────────────────────────────────────────────
+
+LEAN_SCRIPT = r'''
+import AKS
+
+open Lean in
+#eval show MetaM Unit from do
+  let env ← getEnv
+  let mut ourNames : Std.HashSet Name := {}
+  for (name, _) in env.constants.map₁.toList do
+    if let some mod := env.getModuleFor? name then
+      if mod.toString.startsWith "AKS" then
+        let ns := name.toString
+        if !ns.containsSubstr "._unsafe" && !ns.containsSubstr ".match_"
+           && !ns.containsSubstr "#" then
+          ourNames := ourNames.insert name
+
+  -- Output format: NAME\tMODULE\tFLAGS\tDEP1,DEP2,...
+  -- FLAGS: comma-separated tags (e.g., "rfl" for rfl-proved theorems)
+  let mut lines : Array String := #[]
+  for name in ourNames.toList do
+    if let some info := env.constants.find? name then
+      let collectDeps (init : Std.HashSet Name) (e : Expr) : Std.HashSet Name :=
+        e.foldConsts init (fun (n : Name) (acc : Std.HashSet Name) =>
+          if ourNames.contains n && n != name then acc.insert n else acc)
+      let deps := collectDeps {} info.type
+      let deps := match info.value? with
+        | some val => collectDeps deps val
+        | none => deps
+      let mod := env.getModuleFor? name |>.map toString |>.getD "?"
+      -- Detect rfl-proved: value is lambdas wrapping Eq.refl/rfl
+      let rec peelLambdas : Expr → Expr
+        | .lam _ _ b _ => peelLambdas b
+        | e => e
+      let isRfl := match info.value? with
+        | some val =>
+          let body := peelLambdas val
+          body.isAppOf ``Eq.refl || body.isAppOf ``rfl
+        | none => false
+      let flags := if isRfl then "rfl" else ""
+      let depStr := ",".intercalate (deps.toList.map toString)
+      lines := lines.push s!"{name}\t{mod}\t{flags}\t{depStr}"
+
+  IO.FS.writeFile "tmp/deps.tsv" (("\n".intercalate lines.toList) ++ "\n")
+  IO.println s!"Wrote {lines.size} declarations to tmp/deps.tsv"
+'''
+
+
+def run_dump():
+    """Run the Lean script to regenerate tmp/deps.tsv."""
+    print("Generating dependency graph from Lean environment...")
+    (ROOT / "tmp").mkdir(exist_ok=True)
+    result = subprocess.run(
+        ["lake", "env", "lean", "--stdin"],
+        input=LEAN_SCRIPT,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        print("LEAN ERROR:", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+    print(result.stdout.strip())
+
+
+# ── Graph loading ──────────────────────────────────────────────
+
+def load_graph():
+    """Load tmp/deps.tsv.
+
+    Returns:
+      modules: {name -> module}
+      uses: {name -> set of names it depends on}
+      used_by: {name -> set of names that depend on it}
+      flags: {name -> set of flags}
+    """
+    if not DEPS_FILE.exists():
+        print(f"No {DEPS_FILE} found. Run: scripts/dead --dump", file=sys.stderr)
+        sys.exit(1)
+
+    modules: dict[str, str] = {}
+    uses: dict[str, set[str]] = defaultdict(set)
+    used_by: dict[str, set[str]] = defaultdict(set)
+    flags: dict[str, set[str]] = {}
+
+    for line in DEPS_FILE.read_text().strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("\t")
+        # Format: NAME\tMODULE\tFLAGS\tDEPS  (new) or NAME\tMODULE\tDEPS (old)
+        if len(parts) == 4:
+            name, mod, flag_str, deps_str = parts
+        elif len(parts) == 3:
+            name, mod, deps_str = parts
+            flag_str = ""
+        elif len(parts) == 2:
+            name, deps_str = parts
+            mod, flag_str = "?", ""
+        else:
+            continue
+
+        modules[name] = mod
+        flags[name] = set(f for f in flag_str.split(",") if f)
+        uses[name] = set()
+        if deps_str:
+            for dep in deps_str.split(","):
+                dep = dep.strip()
+                if dep:
+                    uses[name].add(dep)
+                    used_by[dep].add(name)
+
+    return modules, dict(uses), dict(used_by), flags
+
+
+# ── Analysis ───────────────────────────────────────────────────
+
+def reachable_from(seeds: set[str], uses: dict[str, set[str]]) -> set[str]:
+    """BFS forward through 'uses' edges from seeds."""
+    visited: set[str] = set()
+    queue = list(seeds)
+    while queue:
+        n = queue.pop()
+        if n in visited:
+            continue
+        visited.add(n)
+        for dep in uses.get(n, set()):
+            if dep not in visited:
+                queue.append(dep)
+    return visited
+
+
+def find_path(start: str, targets: set[str], used_by: dict[str, set[str]]) -> list[str] | None:
+    """BFS from start through used_by to find path to any target (entry point)."""
+    from collections import deque
+    if start in targets:
+        return [start]
+    visited: set[str] = {start}
+    queue: deque[list[str]] = deque([[start]])
+    while queue:
+        path = queue.popleft()
+        curr = path[-1]
+        for user in used_by.get(curr, set()):
+            if user in visited:
+                continue
+            visited.add(user)
+            new_path = path + [user]
+            if user in targets:
+                return new_path
+            queue.append(new_path)
+    return None
+
+
+# ── Commands ───────────────────────────────────────────────────
+
+_flags: dict[str, set[str]] = {}  # set by main() after load_graph()
+
+
+def visible(names):
+    """Filter to non-hidden names for display."""
+    return {n for n in names if not is_hidden(n, _flags.get(n))}
+
+
+def cmd_roots(modules, uses, used_by):
+    all_names = visible(uses.keys())
+    roots = sorted(
+        [n for n in all_names if not (visible(used_by.get(n, set())))],
+        key=lambda n: (modules.get(n, "?"), n),
+    )
+    alive = reachable_from(ENTRY_POINTS & set(uses.keys()), uses)
+
+    print(f"Roots: {len(roots)} declarations with no visible dependents\n")
+    current_mod = None
+    for name in roots:
+        mod = modules.get(name, "?")
+        if mod != current_mod:
+            current_mod = mod
+            print(f"\n  {mod}:")
+        is_entry = " [ENTRY]" if name in ENTRY_POINTS else ""
+        is_alive = " (alive)" if name in alive else " (DEAD)"
+        print(f"    {name}{is_entry}{is_alive}")
+
+
+def cmd_stats(modules, uses, used_by):
+    all_graph = set(uses.keys())
+    all_names = visible(all_graph)
+    entry_found = ENTRY_POINTS & all_graph
+    alive_all = reachable_from(entry_found, uses)
+    alive = alive_all & all_names
+    dead = all_names - alive
+    roots = {n for n in all_names if not visible(used_by.get(n, set()))}
+
+    print(f"Total declarations:      {len(all_names)}  ({len(all_graph)} incl. hidden)")
+    print(f"Entry points found:      {len(entry_found)}")
+    print(f"Roots (no dependents):   {len(roots)}")
+    print(f"  - alive roots:         {len(roots & alive)}")
+    print(f"  - dead roots:          {len(roots - alive)}")
+    print(f"Alive (reachable):       {len(alive)}")
+    print(f"Dead (unreachable):      {len(dead)}")
+
+    # Dead by module
+    dead_by_mod: dict[str, int] = defaultdict(int)
+    for n in dead:
+        dead_by_mod[modules.get(n, "?")] += 1
+    if dead_by_mod:
+        print(f"\nDead by module:")
+        for mod, count in sorted(dead_by_mod.items(), key=lambda x: -x[1]):
+            total_in_mod = sum(1 for n in all_names if modules.get(n) == mod)
+            print(f"  {count:4d}/{total_in_mod:<4d}  {mod}")
+
+
+def cmd_why(name, modules, uses, used_by):
+    all_names = set(uses.keys())
+    entry_found = ENTRY_POINTS & all_names
+    alive = reachable_from(entry_found, uses)
+
+    if name not in all_names:
+        # Try fuzzy match
+        matches = [n for n in all_names if name in n]
+        if matches:
+            print(f"'{name}' not found. Did you mean:")
+            for m in sorted(matches)[:10]:
+                print(f"  {m}")
+        else:
+            print(f"'{name}' not found in dependency graph.")
+        return
+
+    hidden = is_hidden(name, _flags.get(name))
+    hidden_reason = ""
+    if hidden:
+        f = _flags.get(name, set())
+        if "rfl" in f:
+            hidden_reason = " (rfl-proved simp lemma — hidden from reports)"
+        elif name.startswith("_private"):
+            hidden_reason = " (private — hidden from reports)"
+        else:
+            hidden_reason = " (auto-generated — hidden from reports)"
+
+    if name not in alive:
+        print(f"'{name}' is DEAD{hidden_reason} — no path to any entry point.")
+        users = used_by.get(name, set())
+        if users:
+            print(f"  Used by (all dead): {', '.join(sorted(users))}")
+        else:
+            print(f"  Nothing depends on it (dead root).")
+        return
+
+    path = find_path(name, entry_found, used_by)
+    if path:
+        print(f"'{name}' is ALIVE. Path to entry point:")
+        for i, step in enumerate(path):
+            indent = "  " * i
+            marker = " [ENTRY]" if step in ENTRY_POINTS else ""
+            mod = modules.get(step, "?")
+            print(f"  {indent}{step}  ({mod}){marker}")
+    else:
+        print(f"'{name}' is alive (is an entry point)")
+
+
+def cmd_report(modules, uses, used_by):
+    all_graph = set(uses.keys())
+    all_names = visible(all_graph)
+    entry_found = ENTRY_POINTS & all_graph
+    alive_all = reachable_from(entry_found, uses)
+    dead = all_names - alive_all
+
+    if not dead:
+        print("No dead code found.")
+        return
+
+    roots_set = {n for n in all_names if not visible(used_by.get(n, set()))}
+    dead_roots = dead & roots_set
+    dead_interior = dead - dead_roots
+
+    print(f"Dead code: {len(dead)} / {len(all_names)} declarations unreachable from entry points")
+    print(f"  Dead roots (nothing depends on them): {len(dead_roots)}")
+    print(f"  Dead interior (used only by dead code): {len(dead_interior)}")
+    print()
+
+    # Group by module
+    dead_by_mod: dict[str, list[str]] = defaultdict(list)
+    for n in dead:
+        dead_by_mod[modules.get(n, "?")].append(n)
+
+    for mod in sorted(dead_by_mod.keys()):
+        names = sorted(dead_by_mod[mod])
+        total_in_mod = sum(1 for n in all_names if modules.get(n) == mod)
+        print(f"{mod}  ({len(names)}/{total_in_mod} dead):")
+        for name in names:
+            kind = "ROOT" if name in dead_roots else "    "
+            users = visible(used_by.get(name, set())) & dead
+            dep_info = ""
+            if users:
+                dep_info = f"  <- {', '.join(sorted(users)[:3])}"
+                if len(users) > 3:
+                    dep_info += f", ... ({len(users)} total)"
+            print(f"  {kind}  {name}{dep_info}")
+        print()
+
+
+# ── Main ───────────────────────────────────────────────────────
+
+def main():
+    args = sys.argv[1:]
+
+    if "--dump" in args:
+        run_dump()
+        if len(args) == 1:
+            return
+
+    if not DEPS_FILE.exists():
+        run_dump()
+
+    global _flags
+    modules, uses, used_by, _flags = load_graph()
+
+    if "--roots" in args:
+        cmd_roots(modules, uses, used_by)
+    elif "--stats" in args:
+        cmd_stats(modules, uses, used_by)
+    elif "--why" in args:
+        idx = args.index("--why")
+        if idx + 1 >= len(args):
+            print("Usage: scripts/dead-code --why NAME", file=sys.stderr)
+            sys.exit(1)
+        cmd_why(args[idx + 1], modules, uses, used_by)
+    else:
+        cmd_report(modules, uses, used_by)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,24 @@
+.lake/
+build/
+.claude/*
+!.claude/settings.json
+!.claude/mcp/
+data/
+rust/*/target/
+tmp/
+
+# Sandbox artifacts
+.bash_profile
+.bashrc
+.gitconfig
+.gitmodules
+.idea
+.profile
+.ripgreprc
+.zprofile
+.zshrc
+HEAD
+config
+hooks
+objects
+refs

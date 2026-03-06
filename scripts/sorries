@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Audit sorry, #exit, native_decide, and axiom across the Lean codebase.
+
+Prints each hit with one line of context (usually the theorem/def name) and a
+summary count.  Informational only — always exits 0.
+"""
+
+import glob
+import os
+import re
+import sys
+
+MARKERS = ["sorry", "#exit", "native_decide", "axiom"]
+
+# Patterns: match markers as whole words / tokens.
+# For "sorry" and "axiom", require word boundaries so we skip comments that
+# mention them in prose.  For "#exit" and "native_decide" the tokens are
+# unambiguous enough already.
+PATTERN = re.compile(
+    r"(?<![`\w])(?P<marker>sorry|#exit|native_decide|axiom)\b"
+)
+
+# Prefix where native_decide is expected and should not be flagged.
+NATIVE_DECIDE_ALLOWED_PREFIX = "Random/"
+
+
+def block_comment_depth_at(lines: list[str], lineno: int, col: int) -> int:
+    """Track /- -/ nesting depth at a specific (lineno, col) position."""
+    depth = 0
+    for i in range(lineno + 1):
+        j = 0
+        text = lines[i]
+        end = col if i == lineno else len(text)
+        while j < end:
+            # Skip line comments (only outside block comments)
+            if text[j:j+2] == "--" and depth == 0:
+                break
+            if text[j:j+2] == "/-":
+                depth += 1
+                j += 2
+            elif text[j:j+2] == "-/":
+                depth = max(depth - 1, 0)
+                j += 2
+            else:
+                j += 1
+    return depth
+
+
+def is_in_comment(lines: list[str], lineno: int, line: str, marker: str,
+                  col: int) -> bool:
+    """Skip markers that appear inside comments."""
+    if marker in ("sorry", "axiom", "native_decide", "#exit"):
+        stripped = line.lstrip()
+        if stripped.startswith("--"):
+            return True
+        # Check if inside a multi-line /- -/ block comment
+        if block_comment_depth_at(lines, lineno, col) > 0:
+            return True
+        # Also skip if the marker is inside a backtick-quoted identifier
+        idx = line.find(marker)
+        if idx > 0 and line[idx - 1] == "`":
+            return True
+    return False
+
+
+def supports_color() -> bool:
+    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+
+def main() -> None:
+    use_color = supports_color()
+    RED = "\033[31m" if use_color else ""
+    PURPLE = "\033[35m" if use_color else ""
+    RESET = "\033[0m" if use_color else ""
+    MARKER_COLOR = {
+        "sorry": RED, "#exit": RED, "axiom": RED,
+        "native_decide": PURPLE,
+    }
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # Collect all .lean files under AKS/ plus the top-level AKS.lean
+    lean_files = sorted(f for pat in ["AKS/**/*.lean", "Random/**/*.lean", "AKS.lean"]
+                        for f in glob.glob(f"{root}/{pat}", recursive=True))
+
+    counts = {m: 0 for m in MARKERS}
+    any_hit = False
+
+    for filepath in lean_files:
+        relpath = os.path.relpath(filepath, root)
+        with open(filepath) as f:
+            lines = f.readlines()
+
+        file_hits = []
+        for i, line in enumerate(lines):
+            for m in PATTERN.finditer(line):
+                marker = m.group("marker")
+                if is_in_comment(lines, i, line, marker, m.start()):
+                    continue
+                if marker == "native_decide" and relpath.startswith(NATIVE_DECIDE_ALLOWED_PREFIX):
+                    continue
+                file_hits.append((i, marker))
+                counts[marker] += 1
+
+        if not file_hits:
+            continue
+
+        if any_hit:
+            print()
+        any_hit = True
+        print(f"{relpath}")
+
+        for lineno, marker in file_hits:
+            # Print one line of context before (if available)
+            if lineno > 0:
+                prev = lines[lineno - 1].rstrip()
+                print(f"  {lineno:>4}  {prev}")
+            hit_line = lines[lineno].rstrip()
+            color = MARKER_COLOR.get(marker, RED)
+            colored_line = hit_line.replace(marker, f"{color}{marker}{RESET}", 1)
+            print(f"  {lineno + 1:>4}  {colored_line}")
+
+    # Summary
+    print()
+    parts = [f"{counts[m]} {m}" for m in MARKERS]
+    print(f"Summary: {', '.join(parts)}")
+
+
+if __name__ == "__main__":
+    main()

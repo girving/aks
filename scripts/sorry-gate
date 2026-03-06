@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Enforce marker-free guarantees on protected files.
+
+Rules (defined in DENY_ALL / DENY_MARKER / ALLOW_MARKER below):
+  AKS/              — deny sorry, #exit, native_decide, axiom (noncomputable allowed per-subdir)
+  AKS/Seiferas.lean — additionally deny noncomputable
+  Random/           — deny sorry, #exit, axiom (native_decide allowed)
+
+Usage:
+  scripts/sorry-gate              # check all protected files
+  scripts/sorry-gate file1 file2  # check only specified files
+
+Exits 0 if clean, 1 if violations found.
+"""
+
+import glob
+import os
+import re
+import sys
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+MARKERS = ["sorry", "#exit", "native_decide", "axiom", "noncomputable"]
+
+# Same regex as scripts/sorries — match markers as whole tokens, skip
+# backtick-quoted identifiers.
+PATTERN = re.compile(
+    r"(?<![`\w])(?P<marker>sorry|#exit|native_decide|axiom|noncomputable)\b"
+)
+
+# Paths where ALL markers are denied (relative to repo root).
+# Entries ending with "/" are treated as directory prefixes; others are exact files.
+DENY_ALL = ["AKS/"]
+
+# Per-marker deny rules: marker -> list of (prefix, suffix) pairs.
+# A file matches if it starts with prefix and ends with suffix.
+DENY_MARKER = {
+    "native_decide": [("AKS/", ".lean")],
+    "sorry": [("Random/", ".lean")],
+    "#exit": [("Random/", ".lean")],
+    "axiom": [("Random/", ".lean")],
+    "noncomputable": [("AKS/Seiferas.lean", "")],  # only Seiferas.lean bans noncomputable
+}
+
+# Per-marker allowlists (override DENY_MARKER): marker -> set of path prefixes.
+ALLOW_MARKER: dict[str, frozenset[str]] = {
+    "native_decide": frozenset(),
+    "sorry": frozenset(),
+    "#exit": frozenset(),
+    "noncomputable": frozenset({"AKS/Graph/", "AKS/Halver/", "AKS/Konig/", "AKS/MGG/", "AKS/Sort/", "AKS/Separator/", "AKS/Misc/", "AKS/ZigZag/"}),
+}
+
+# ---------------------------------------------------------------------------
+# Helpers (shared logic with scripts/sorries)
+# ---------------------------------------------------------------------------
+
+def block_comment_depth_at(lines: list[str], lineno: int, col: int) -> int:
+    """Track /- -/ nesting depth at a specific (lineno, col) position."""
+    depth = 0
+    for i in range(lineno + 1):
+        j = 0
+        text = lines[i]
+        end = col if i == lineno else len(text)
+        while j < end:
+            if text[j:j+2] == "--" and depth == 0:
+                break
+            if text[j:j+2] == "/-":
+                depth += 1
+                j += 2
+            elif text[j:j+2] == "-/":
+                depth = max(depth - 1, 0)
+                j += 2
+            else:
+                j += 1
+    return depth
+
+
+def is_in_comment(lines: list[str], lineno: int, line: str, marker: str,
+                  col: int) -> bool:
+    """Skip markers that appear inside comments (line or block) or backtick-quoted names."""
+    stripped = line.lstrip()
+    if stripped.startswith("--"):
+        return True
+    if block_comment_depth_at(lines, lineno, col) > 0:
+        return True
+    if col > 0 and line[col - 1] == "`":
+        return True
+    return False
+
+
+def is_allowed(relpath: str, marker: str) -> bool:
+    """Return True if *marker* is explicitly allowed in *relpath* via ALLOW_MARKER."""
+    for apfx in ALLOW_MARKER.get(marker, frozenset()):
+        if relpath.startswith(apfx):
+            return True
+    return False
+
+
+def is_denied(relpath: str, marker: str) -> bool:
+    """Return True if *marker* is forbidden in *relpath*."""
+    for entry in DENY_ALL:
+        if entry.endswith("/"):
+            if relpath.startswith(entry):
+                return not is_allowed(relpath, marker)
+        else:
+            if relpath == entry:
+                return not is_allowed(relpath, marker)
+    rules = DENY_MARKER.get(marker)
+    if rules:
+        for prefix, suffix in rules:
+            if relpath.startswith(prefix) and relpath.endswith(suffix):
+                return not is_allowed(relpath, marker)
+    return False
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    if len(sys.argv) > 1:
+        # Check specific files (pre-commit hook mode).
+        relpaths = [os.path.relpath(os.path.join(os.getcwd(), f), root)
+                     if not os.path.isabs(f) else os.path.relpath(f, root)
+                     for f in sys.argv[1:]]
+    else:
+        # Check all protected files.
+        files = sorted(f for pat in ["AKS/**/*.lean", "Random/**/*.lean"]
+                       for f in glob.glob(f"{root}/{pat}", recursive=True))
+        relpaths = [os.path.relpath(f, root) for f in files]
+
+    # Normalize to forward slashes for consistent matching.
+    relpaths = [p.replace(os.sep, "/") for p in relpaths]
+
+    violations: list[tuple[str, int, str, str]] = []
+
+    for relpath in relpaths:
+        filepath = os.path.join(root, relpath)
+        if not os.path.isfile(filepath):
+            continue
+        with open(filepath) as f:
+            lines = f.readlines()
+        for i, line in enumerate(lines):
+            for m in PATTERN.finditer(line):
+                marker = m.group("marker")
+                if is_in_comment(lines, i, line, marker, m.start()):
+                    continue
+                if is_denied(relpath, marker):
+                    violations.append((relpath, i + 1, marker, line.rstrip()))
+
+    if violations:
+        use_color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+        RED = "\033[31m" if use_color else ""
+        BOLD = "\033[1m" if use_color else ""
+        RESET = "\033[0m" if use_color else ""
+
+        print(f"{RED}{BOLD}sorry-gate: {len(violations)} violation(s) found{RESET}",
+              file=sys.stderr)
+        for relpath, lineno, marker, line in violations:
+            print(f"  {relpath}:{lineno}: {RED}{marker}{RESET}  {line}",
+                  file=sys.stderr)
+        sys.exit(1)
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

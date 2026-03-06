@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AKS dependencies</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+#controls { position: fixed; top: 12px; left: 12px; z-index: 10; display: flex; gap: 8px; align-items: center; }
+#controls button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#controls button:hover { background: #30363d; }
+#title { position: fixed; top: 12px; right: 16px; z-index: 10; text-align: right; }
+#title h1 { font-size: 18px; font-weight: 600; color: #e6edf3; }
+#title p { font-size: 12px; color: #7d8590; margin-top: 2px; }
+#legend { position: fixed; bottom: 16px; left: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; line-height: 1.5; }
+#legend .section { margin-bottom: 8px; }
+#legend .section:last-child { margin-bottom: 0; }
+#legend .section-title { color: #484f58; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+#legend .item { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+#legend .dot { border-radius: 50%; flex-shrink: 0; }
+#legend .size-dot { background: #484f58; }
+#legend-toggle { display: none; }
+#stats { position: fixed; bottom: 16px; right: 16px; z-index: 10; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; font-size: 12px; text-align: right; }
+#stats .num { font-size: 20px; font-weight: 700; }
+#tooltip { position: fixed; pointer-events: none; background: #1c2128; border: 1px solid #444c56; border-radius: 8px; padding: 12px 16px; font-size: 13px; max-width: 480px; z-index: 100; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+#tooltip .tt-name { font-weight: 700; font-size: 15px; color: #e6edf3; margin-bottom: 4px; }
+#tooltip .tt-file { font-size: 11px; color: #7d8590; margin-bottom: 6px; }
+#tooltip .tt-sig { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; color: #a5d6ff; background: #0d1117; padding: 6px 8px; border-radius: 4px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
+#tooltip .tt-desc { color: #c9d1d9; line-height: 1.4; }
+#tooltip .tt-diff { margin-top: 4px; font-size: 11px; color: #7d8590; font-style: italic; }
+#graph { width: 100vw; height: 100vh; touch-action: none; }
+.group-rect { rx: 12; ry: 12; }
+.group-label { font-size: 11px; font-weight: 600; fill: #484f58; pointer-events: none; }
+.link { fill: none; }
+.node-circle { cursor: pointer; stroke-width: 1.5; }
+.node-circle:hover { filter: brightness(1.3); }
+.node-label { font-size: 10px; fill: #8b949e; pointer-events: none; text-anchor: middle; }
+
+
+/* ── Mobile / narrow screens ── */
+@media (max-width: 600px) {
+  /* Row 1: buttons */
+  #controls { top: 8px; left: 8px; gap: 4px; }
+  #controls button { padding: 8px 10px; font-size: 12px; min-height: 36px; }
+
+  /* Row 2: title below buttons, subtitle hidden */
+  #title { top: 50px; left: 8px; right: auto; text-align: left; }
+  #title h1 { font-size: 14px; }
+  #title p { display: none; }
+
+  /* Legend: collapse behind a toggle button, below title */
+  #legend { display: none; bottom: auto; top: 76px; left: 8px; padding: 10px 12px; font-size: 11px; }
+  #legend.open { display: block; }
+  #legend-toggle { display: block; }
+
+  /* Stats: compact at bottom-right */
+  #stats { bottom: 8px; right: 8px; padding: 8px 10px; font-size: 11px; }
+  #stats .num { font-size: 16px; }
+
+  /* Tooltip: fit within viewport */
+  #tooltip { max-width: calc(100vw - 32px); left: 16px !important; right: 16px; font-size: 12px; padding: 10px 12px; pointer-events: auto; }
+  #tooltip .tt-name { font-size: 14px; }
+  #tooltip .tt-sig { font-size: 10px; max-height: 80px; }
+
+
+}
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <button onclick="resetZoom()">Reset View</button>
+  <button onclick="toggleLabels()">Toggle Labels</button>
+  <button id="legend-toggle" onclick="toggleLegend()">Legend</button>
+</div>
+
+<div id="title">
+  <h1>AKS Sorting Network</h1>
+  <p>Lean Proof Dependency Graph</p>
+</div>
+
+<div id="legend">
+  <div class="section">
+    <div class="section-title">Status</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#3fb950;"></div> Proved</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#d29922;"></div> Sorry</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#f85149;"></div> Axiom</div>
+    <div class="item"><div class="dot" style="width:12px;height:12px;background:#58a6ff;"></div> Definition</div>
+  </div>
+  <div class="section">
+    <div class="section-title">Est. duration</div>
+    <div class="item"><div class="dot size-dot" style="width:8px;height:8px;"></div> done / n/a</div>
+    <div class="item"><div class="dot size-dot" style="width:12px;height:12px;"></div> days</div>
+    <div class="item"><div class="dot size-dot" style="width:16px;height:16px;"></div> weeks</div>
+    <div class="item"><div class="dot size-dot" style="width:22px;height:22px;"></div> months</div>
+  </div>
+  <div class="section">
+    <div class="section-title">Edges</div>
+    <div class="item">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#3fb950" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#3fb950"/></svg>
+      all proved below
+    </div>
+    <div class="item">
+      <svg width="32" height="12"><line x1="0" y1="6" x2="24" y2="6" stroke="#d29922" stroke-width="1.5"/><polygon points="24,3 30,6 24,9" fill="#d29922"/></svg>
+      sorry/axiom below
+    </div>
+  </div>
+</div>
+
+<div id="stats"></div>
+<div id="tooltip"></div>
+
+
+<svg id="graph"></svg>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// PROOF_DATA — update this block to refresh the visualization
+// ═══════════════════════════════════════════════════════
+const PROOF_DATA = {
+  repo: "https://github.com/girving/aks",
+  nodes: [
+    // ── Misc/Fin.lean ──
+    { id: "Fin.pair_lt", file: "AKS/Misc/Fin.lean", line: 19, status: "proved", kind: "theorem",
+      sig: "Fin.pair_lt : j.val * d + i.val < n * d",
+      desc: "Product encoding bound for Fin n x Fin d." },
+    { id: "rank_fin_val", file: "AKS/Misc/Fin.lean", line: 96, status: "proved", kind: "lemma",
+      sig: "rank_fin_val {n : ℕ} (i : Fin n) : rank i = i.val",
+      desc: "The rank of a Fin n element equals its value. Unfolds rank and uses Fin.card_Iio." },
+
+    // ── Graph/Regular.lean ──
+    { id: "RegularGraph", file: "AKS/Graph/Regular.lean", line: 39, status: "definition", kind: "structure",
+      sig: "structure RegularGraph (n d : ℕ) where\n  rot : Fin n × Fin d → Fin n × Fin d\n  rot_involution : ...",
+      desc: "D-regular graph on n vertices, represented by an involutory rotation map on vertex-port pairs." },
+    { id: "walkCLM", file: "AKS/Graph/Regular.lean", line: 134, status: "definition", kind: "def",
+      sig: "RegularGraph.walkCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Walk operator as a continuous linear map: averages a function over neighbors." },
+    { id: "meanCLM", file: "AKS/Graph/Regular.lean", line: 167, status: "definition", kind: "def",
+      sig: "meanCLM (n : ℕ) : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Mean projection CLM: projects onto the constant-function subspace." },
+    { id: "meanCLM_idempotent", file: "AKS/Graph/Regular.lean", line: 177, status: "proved", kind: "theorem",
+      sig: "meanCLM_idempotent : meanCLM n * meanCLM n = meanCLM n",
+      desc: "Mean projection is idempotent (P² = P)." },
+    { id: "meanCLM_isSelfAdjoint", file: "AKS/Graph/Regular.lean", line: 188, status: "proved", kind: "theorem",
+      sig: "meanCLM_isSelfAdjoint : IsSelfAdjoint (meanCLM n)",
+      desc: "Mean projection is self-adjoint." },
+    { id: "spectralGap", file: "AKS/Graph/Regular.lean", line: 270, status: "definition", kind: "def",
+      sig: "spectralGap (G : RegularGraph n d) : ℝ := ‖G.walkCLM - meanCLM n‖",
+      desc: "Spectral gap: operator norm of walk minus mean projection." },
+    { id: "spectralGap_nonneg", file: "AKS/Graph/Regular.lean", line: 279, status: "proved", kind: "theorem",
+      sig: "spectralGap_nonneg : 0 ≤ spectralGap G",
+      desc: "Spectral gap is non-negative (norm is non-negative)." },
+
+    // ── Graph/Square.lean ──
+    { id: "RegularGraph.square", file: "AKS/Graph/Square.lean", line: 43, status: "definition", kind: "def",
+      sig: "RegularGraph.square : RegularGraph n (d * d)",
+      desc: "Squared graph: two-step walks become single edges. Degree goes from d to d*d." },
+    { id: "spectralGap_square", file: "AKS/Graph/Square.lean", line: 227, status: "proved", kind: "theorem",
+      sig: "spectralGap_square : spectralGap G.square = (spectralGap G) ^ 2",
+      desc: "Squaring a graph squares its spectral gap. Key CLM identity: (W-P)^2 = W^2 - P." },
+
+    // ── Graph/Kronecker.lean ──
+
+    // ── Graph/Complete.lean ──
+
+    // ── MGG/Defs.lean ──
+    { id: "mggNbr", file: "AKS/MGG/Defs.lean", line: 42, status: "definition", kind: "def",
+      sig: "def mggNbr (n x y port : ℕ) : ℕ × ℕ × ℕ",
+      desc: "Neighbor computation for MGG graph on (Z/nZ)². Returns (x', y', reverse_port)." },
+    { id: "mggNbr_invol", file: "AKS/MGG/Defs.lean", line: 129, status: "proved", kind: "theorem",
+      sig: "mggNbr_invol : mggNbr n r.1 r.2.1 r.2.2 = (x, y, port)",
+      desc: "Double application of mggNbr returns to original coordinates and port. Proved for all 8 ports." },
+    { id: "mgg_rot", file: "AKS/MGG/Defs.lean", line: 181, status: "definition", kind: "def",
+      sig: "def mgg_rot (n : ℕ) (p : Fin (n * n) × Fin 8) : Fin (n * n) × Fin 8",
+      desc: "Rotation map for MGG graph: decode vertex, apply shear map, re-encode." },
+    { id: "mgg_rot_involution", file: "AKS/MGG/Defs.lean", line: 197, status: "proved", kind: "theorem",
+      sig: "mgg_rot_involution : mgg_rot n (mgg_rot n p) = p",
+      desc: "MGG rotation is an involution. Proved via encode/decode + mggNbr_invol." },
+    { id: "mgg", file: "AKS/MGG/Defs.lean", line: 233, status: "definition", kind: "def",
+      sig: "def mgg (n : ℕ) : RegularGraph (n * n) 8",
+      desc: "The Margulis-Gabber-Galil 8-regular expander graph on n² vertices." },
+
+    // ── MGG/Spectral.lean ──
+    { id: "spectralGap_mgg", file: "AKS/MGG/Spectral.lean", line: 458, status: "proved", kind: "theorem",
+      sig: "spectralGap_mgg : spectralGap (mgg n) ≤ 5 * √2 / 8",
+      desc: "Gabber-Galil (1981) spectral gap bound for the MGG expander. Fully proved via 2D DFT on (Z/nZ)².", difficulty: 4 },
+    { id: "mgg_rayleigh_bound", file: "AKS/MGG/Spectral.lean", line: 372, status: "proved", kind: "theorem",
+      sig: "mgg_rayleigh_bound : |⟨f, W f⟩| ≤ 5√2/8 for mean-zero f",
+      desc: "Core Rayleigh quotient bound via 2D DFT + Young's inequality + diamond case analysis (Boppana-simplified Jimbo-Maruoka)." },
+
+    // ── Graph/Graph.lean ──
+    { id: "Graph", file: "AKS/Graph/Graph.lean", line: 36, status: "definition", kind: "structure",
+      sig: "structure Graph (n : ℕ) where\n  halfs : ℕ\n  src : Fin halfs → Fin n\n  rot : Fin halfs → Fin halfs\n  rot_involution : ...",
+      desc: "General graph on n vertices via half-edges with pairing involution. Allows irregular degree." },
+    { id: "Graph.contract", file: "AKS/Graph/Graph.lean", line: 73, status: "definition", kind: "def",
+      sig: "Graph.contract (G : Graph n) (s : Fin n → Fin m) : Graph m",
+      desc: "Contract a graph by relabeling vertices via a surjection. Self-loops/multi-edges arise." },
+    { id: "RegularGraph.toGraph", file: "AKS/Graph/Graph.lean", line: 150, status: "definition", kind: "def",
+      sig: "RegularGraph.toGraph (G : RegularGraph n d) : Graph n",
+      desc: "Embed a RegularGraph into the general Graph type." },
+
+    // ── Graph/Walk.lean ──
+    { id: "Graph.normalizedWalkCLM", file: "AKS/Graph/Walk.lean", line: 56, status: "definition", kind: "def",
+      sig: "Graph.normalizedWalkCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Normalized walk operator D^{-1/2} A D^{-1/2} for general (irregular) graphs." },
+    { id: "Graph.degreeMeanCLM", file: "AKS/Graph/Walk.lean", line: 95, status: "definition", kind: "def",
+      sig: "Graph.degreeMeanCLM : EuclideanSpace ℝ (Fin n) →L[ℝ] EuclideanSpace ℝ (Fin n)",
+      desc: "Degree-weighted mean projection onto √deg direction for general graphs." },
+    { id: "Graph.spectralGap", file: "AKS/Graph/Walk.lean", line: 112, status: "definition", kind: "def",
+      sig: "Graph.spectralGap (G : Graph n) : ℝ := ‖G.normalizedWalkCLM - G.degreeMeanCLM‖",
+      desc: "Spectral gap of a general graph: operator norm of normalized walk minus mean projection." },
+    { id: "Graph.spectralGap_nonneg", file: "AKS/Graph/Walk.lean", line: 318, status: "proved", kind: "theorem",
+      sig: "Graph.spectralGap_nonneg : 0 ≤ G.spectralGap",
+      desc: "Spectral gap is nonneg (norm is nonneg)." },
+    { id: "Graph.spectralGap_contract", file: "AKS/Graph/Walk.lean", line: 596, status: "proved", kind: "theorem",
+      sig: "Graph.spectralGap_contract : (G.contract s).spectralGap ≤ G.spectralGap",
+      desc: "Spectral gap can only decrease under vertex contraction, via lift + Cauchy-Schwarz." },
+    { id: "spectralGap_toGraph", file: "AKS/Graph/Walk.lean", line: 640, status: "proved", kind: "theorem",
+      sig: "spectralGap_toGraph : G.toGraph.spectralGap = spectralGap G",
+      desc: "For regular graphs, Graph.spectralGap agrees with RegularGraph spectralGap. Proved via bijection between half-edge fibers and ports, showing normalizedWalkCLM = walkCLM and degreeMeanCLM = meanCLM." },
+
+    // ── Graph/Contract.lean ──
+    { id: "mod_fiber_card_exact", file: "AKS/Graph/Contract.lean", line: 81, status: "proved", kind: "theorem",
+      sig: "mod_fiber_card_exact {N n : ℕ} (hn : 0 < n) (hdvd : n ∣ N) (u : Fin n) :\n  (univ.filter (fun v : Fin N ↦ v.val % n = u.val)).card = N / n",
+      desc: "When n|N, mod-n fiber has exactly N/n elements." },
+    { id: "RegularGraph.contractDivisible", file: "AKS/Graph/Contract.lean", line: 300, status: "proved", kind: "def",
+      sig: "RegularGraph.contractDivisible (G : RegularGraph N d)\n  (m : ℕ) (hm : 0 < m) (hdvd : m ∣ N) :\n  RegularGraph m ((N / m) * d)",
+      desc: "Equal-fiber contraction to regular graph. Rotation encodes (fiber_position, port) pairs; involution proved." },
+    { id: "spectralGap_contractDivisible", file: "AKS/Graph/Contract.lean", line: 365, status: "proved", kind: "theorem",
+      sig: "spectralGap_contractDivisible (G : RegularGraph N d)\n  (m : ℕ) (hm : 0 < m) (hdvd : m ∣ N) (hd : 0 < d) (hq : 0 < N / m) :\n  spectralGap (G.contractDivisible m hm hdvd) ≤ spectralGap G",
+      desc: "Spectral gap of equal-fiber contraction ≤ original. Proved via fiber lift, Jensen's inequality, and norm reindexing." },
+    { id: "contractDivisible_rot_involution", file: "AKS/Graph/Contract.lean", line: 258, status: "proved", kind: "theorem",
+      sig: "contractDivisible_rot_involution (G : RegularGraph N d)\n  (hm : 0 < m) (hdvd : m ∣ N) (x : Fin m × Fin ((N / m) * d)) :\n  contractDivisible_rot G hm hdvd (contractDivisible_rot G hm hdvd x) = x",
+      desc: "Rotation map for equal-fiber contraction is involution. Uses fiberVertex_reconstruct and G.rot_involution." },
+
+    // ── Mixing.lean ──
+    { id: "indicatorVec", file: "AKS/Halver/Mixing.lean", line: 28, status: "definition", kind: "def",
+      sig: "indicatorVec (S : Finset (Fin n)) : EuclideanSpace ℝ (Fin n)",
+      desc: "Indicator vector: 1 on vertices in S, 0 elsewhere." },
+    { id: "expander_mixing_lemma", file: "AKS/Halver/Mixing.lean", line: 128, status: "proved", kind: "theorem",
+      sig: "expander_mixing_lemma : |edges(S,T)/d - |S||T|/n| ≤ λ · √(|S|·|T|)",
+      desc: "Expander mixing lemma: edge distribution between sets S,T is close to uniform, controlled by spectral gap." },
+
+    // ── Sort/ — Sorting Networks ──
+    { id: "Comparator", file: "AKS/Sort/Defs.lean", line: 26, status: "definition", kind: "structure",
+      sig: "structure Comparator (n : ℕ) where\n  i : Fin n\n  j : Fin n",
+      desc: "A comparator: swaps elements at positions i and j if out of order." },
+    { id: "ComparatorNetwork", file: "AKS/Sort/Defs.lean", line: 44, status: "definition", kind: "structure",
+      sig: "structure ComparatorNetwork (n : ℕ) where\n  comparators : List (Comparator n)",
+      desc: "A comparator network: a sequence of comparators applied in order." },
+    { id: "ComparatorNetwork.Sorts", file: "AKS/Sort/Monotone.lean", line: 176, status: "definition", kind: "def",
+      sig: "ComparatorNetwork.Sorts (net : ComparatorNetwork n) : Prop",
+      desc: "Predicate: the network sorts every input." },
+    { id: "zero_one_principle", file: "AKS/Sort/ZeroOne.lean", line: 20, status: "proved", kind: "theorem",
+      sig: "zero_one_principle : (∀ v : Fin n → Bool, Monotone (net.exec v)) → net.Sorts",
+      desc: "The 0-1 principle: if a comparator network sorts all Boolean inputs, it sorts everything." },
+    { id: "Comparator.apply_injective", file: "AKS/Sort/Defs.lean", line: 75, status: "proved", kind: "theorem",
+      sig: "Comparator.apply_injective (c : Comparator n) {v : Fin n → α} (hv : Function.Injective v) :\n  Function.Injective (c.apply v)",
+      desc: "A single comparator preserves injectivity: either no swap (identity) or a transposition." },
+    { id: "exec_injective", file: "AKS/Sort/Defs.lean", line: 101, status: "proved", kind: "theorem",
+      sig: "ComparatorNetwork.exec_injective (net : ComparatorNetwork n) {v : Fin n → α}\n  (hv : Function.Injective v) : Function.Injective (net.exec v)",
+      desc: "Executing a comparator network preserves injectivity. Induction on comparator list." },
+    // ── Halver.lean ──
+    { id: "IsEpsilonHalver", file: "AKS/Halver/Defs.lean", line: 207, status: "definition", kind: "def",
+      sig: "IsEpsilonHalver (net : ComparatorNetwork n) (ε : ℝ) : Prop",
+      desc: "ε-halver (AKS Section 3, permutation-based): for every permutation input, output is ε-halved — segment-wise bounds on displaced elements using rank." },
+    { id: "expanderHalver", file: "AKS/Halver/FromExpander.lean", line: 57, status: "proved", kind: "definition",
+      sig: "expanderHalver (G : RegularGraph m d) : ComparatorNetwork (2 * m)",
+      desc: "The bipartite halver comparator network from a d-regular expander. For each vertex v and port p, compares wire v with wire m + G.neighbor v p." },
+    { id: "expanderHalver_isEpsilonHalver", file: "AKS/Halver/FromExpander.lean", line: 446, status: "proved", kind: "theorem",
+      sig: "expanderHalver_isEpsilonHalver (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  IsEpsilonHalver (expanderHalver G) β",
+      desc: "The expander halver is a β-halver. Proved via Tanner's vertex expansion bound + edge monotonicity + permutation counting." },
+    { id: "expanderHalver_size", file: "AKS/Halver/FromExpander.lean", line: 453, status: "proved", kind: "theorem",
+      sig: "expanderHalver_size (G : RegularGraph m d) : (expanderHalver G).size = m * d",
+      desc: "The expander halver has exactly m·d comparators (linear in m since d is constant)." },
+    { id: "RegBipartite", file: "AKS/Konig/Defs.lean", line: 30, status: "definition", kind: "def",
+      sig: "structure RegBipartite (m d : ℕ) where\n  edges : Fin m → Fin d → Fin m\n  bot_regular : ∀ u, ((univ ×ˢ univ).filter ...).card = d",
+      desc: "Bottom-regular bipartite multigraph: m top vertices, m bottom vertices, d ports per top vertex, each bottom vertex has exactly d incoming edges." },
+    { id: "hall_condition", file: "AKS/Konig/Hall.lean", line: 30, status: "proved", kind: "theorem",
+      sig: "RegBipartite.hall_condition (B : RegBipartite m d) (hd : 0 < d)\n  (S : Finset (Fin m)) : S.card ≤ (S.biUnion (fun v ↦ univ.image (B.edges v))).card",
+      desc: "Hall's condition for d-regular bipartite multigraphs via double counting: d·|S| edges leave S, each bottom vertex absorbs ≤ d." },
+    { id: "konigMatchings_bijective", file: "AKS/Konig/Coloring.lean", line: 201, status: "proved", kind: "theorem",
+      sig: "RegBipartite.konigMatchings_bijective (B : RegBipartite m d) (hd : 0 < d) (v : Fin m) :\n  Function.Bijective (fun k ↦ (B.konigMatchings hd k).portOf v)",
+      desc: "König's edge coloring: d-regular bipartite multigraph decomposes into d perfect matchings that partition all ports at each vertex." },
+    { id: "exists_halver_depth_le", file: "AKS/Halver/FromExpander.lean", line: 492, status: "proved", kind: "theorem",
+      sig: "exists_halver_depth_le (G : RegularGraph m d) (β : ℝ) (hβ : spectralGap G ≤ β) :\n  ∃ net, IsEpsilonHalver net β ∧ net.size ≤ m * d ∧ net.depth ≤ d",
+      desc: "A depth-d halver exists from any d-regular expander. Proved via König's edge coloring: decompose bipartite comparators into d parallel matching layers." },
+    { id: "HalverFamily", file: "AKS/Halver/Defs.lean", line: 395, status: "definition", kind: "def",
+      sig: "structure HalverFamily (ε : ℝ) (d : ℕ) where\n  net : (m : ℕ) → ComparatorNetwork (2 * m)\n  isHalver : ∀ m, IsEpsilonHalver (net m) ε\n  depth_le : ∀ m, (net m).depth ≤ d",
+      desc: "Family of ε-halver networks at all even sizes (0, 2, 4, 6, ...). Index m gives network on 2*m wires. m=0 is trivially halved (0 wires)." },
+    { id: "emptyNet_isEpsilonHalver", file: "AKS/Halver/Empty.lean", line: 15, status: "proved", kind: "theorem",
+      sig: "emptyNet_isEpsilonHalver (ε : ℝ) :\n  IsEpsilonHalver (⟨[]⟩ : ComparatorNetwork 0) ε",
+      desc: "The empty network on 0 wires is an ε-halver for any ε. With 0 wires, all quantifiers are vacuous." },
+    { id: "size_le_half_n_mul_depth", file: "AKS/Sort/Depth.lean", line: 267, status: "proved", kind: "theorem",
+      sig: "size_le_half_n_mul_depth (net : ComparatorNetwork n) :\n  2 * net.size ≤ n * net.depth",
+      desc: "Each comparator increases total wire-time sum by ≥ 2; the sum is ≤ n * depth. So 2 * size ≤ n * depth." },
+    { id: "halverDepth", file: "AKS/Halver/General.lean", line: 336, status: "proved", kind: "def",
+      sig: "halverDepth (ε : ℚ) (hε : 0 < ε) : ℕ",
+      desc: "m-independent depth bound for MGG-based halvers. Computed from mggNumSquarings and mggDepthFactor." },
+    { id: "halvers", file: "AKS/Halver/General.lean", line: 348, status: "proved", kind: "def",
+      sig: "halvers (ε : ℚ) (hε : 0 < ε) : HalverFamily ε",
+      desc: "Concrete halver family using the MGG expander (8-regular on n² vertices). Fully proved — no native_decide." },
+    { id: "mggHalverNet", file: "AKS/Halver/General.lean", line: 258, status: "proved", kind: "def",
+      sig: "mggHalverNet (p Q0 m : ℕ) (hm : 0 < m) : ComparatorNetwork (2 * m)",
+      desc: "Halver network for target size m using MGG graph. Squares mgg(n) p times, then applies konigQuotientHalver." },
+    { id: "mggHalverNet_isEpsilonHalver", file: "AKS/Halver/General.lean", line: 272, status: "proved", kind: "theorem",
+      sig: "mggHalverNet_isEpsilonHalver : IsEpsilonHalver (mggHalverNet p Q0 m hm) ↑ε",
+      desc: "The MGG halver network is an ε-halver. Proved via sufficient_epsCond + konigQuotientHalver_isEpsilonHalver." },
+    { id: "mggHalverNet_depth_le", file: "AKS/Halver/General.lean", line: 319, status: "proved", kind: "theorem",
+      sig: "mggHalverNet_depth_le : (mggHalverNet p Q0 m hm).depth ≤ iterSquareDeg 8 p * mggDepthFactor Q0",
+      desc: "m-independent depth bound for MGG halver. Proved via konigQuotientHalver depth bound." },
+    { id: "tanner_bound", file: "AKS/Halver/Tanner.lean", line: 221, status: "proved", kind: "theorem",
+      sig: "tanner_bound (G : RegularGraph n d) (β : ℝ) (hβ : spectralGap G ≤ β) (T : Finset (Fin n)) :\n  |T|·n ≤ |N(T)|·(|T| + β²(n-|T|))",
+      desc: "Tanner's vertex expansion bound: for any T in a d-regular graph with spectral gap ≤ β, |N(T)| ≥ |T|·n/(|T| + β²(n-|T|)). Proved via Cauchy-Schwarz on codegree distribution + orthogonal decomposition." },
+    // ── ZigZag/Operators.lean ──
+
+    // ── ZigZag/Spectral.lean ──
+
+    // ── ZigZag/RVWBound.lean ──
+
+    // ── Cert/WalkBound.lean ──
+
+    // ── Cert/SpectralMatrix.lean ──
+
+    // ── Cert/DiagDominant.lean ──
+
+    // ── Cert/Bridge.lean ──
+
+    // ── Cert/FastProof.lean ──
+
+    // ── Random/Random16.lean ──
+
+    // ── Random/Random1728.lean ──
+
+    // ── Random/Random20736.lean ──
+
+    // ── ZigZag/Expanders.lean ──
+    // ── Seiferas.lean (Seiferas-path assembly) ──
+
+    // ── Graph-based halver infrastructure (WP-C: FromExpander.lean) ──
+    { id: "graphBipartiteComparators", file: "AKS/Halver/FromExpander.lean", line: 595, status: "proved", kind: "def",
+      sig: "graphBipartiteComparators (G : Graph m) : List (Comparator (2 * m))",
+      desc: "Bipartite comparators from an irregular graph. One comparator per half-edge: compare src(e) (top) with m + target(e) (bottom)." },
+    // ── Seiferas.lean (Power-of-2 contraction path) ──
+    { id: "iterSquareDeg", file: "AKS/Graph/Square.lean", line: 195, status: "proved", kind: "def",
+      sig: "iterSquareDeg (d p : ℕ) : ℕ",
+      desc: "Degree after p iterated graph squarings. Computes d^(2^p)." },
+    { id: "RegularGraph.iterSquare", file: "AKS/Graph/Square.lean", line: 201, status: "proved", kind: "def",
+      sig: "RegularGraph.iterSquare (G : RegularGraph n d) (p : ℕ) : RegularGraph n (iterSquareDeg d p)",
+      desc: "Apply graph squaring p times, reducing spectral gap from λ to λ^(2^p)." },
+    { id: "spectralGap_iterSquare", file: "AKS/Graph/Square.lean", line: 263, status: "proved", kind: "theorem",
+      sig: "spectralGap_iterSquare G p : spectralGap (G.iterSquare p) = (spectralGap G) ^ (2 ^ p)",
+      desc: "Iterated squaring exponentiates the spectral gap. Proved by induction using spectralGap_square." },
+    { id: "separators", file: "AKS/Separator/SepProof.lean", line: 929, status: "proved", kind: "def",
+      sig: "separators (γ ε : ℚ) (hγ : 0 < γ) (hε : 0 < ε) :\n  SeparatorFamily γ ε",
+      desc: "Separator family for general γ ≤ 1/2. Prefix-doubling construction (Seiferas 2009 §6 Lemma 2): initial halver + K levels of prefix/suffix halvers." },
+    { id: "seiferasNetwork", file: "AKS/Bags/Network.lean", line: 485, status: "proved", kind: "def", milestone: true,
+      sig: "seiferasNetwork (p : Params) (k : ℕ) : ComparatorNetwork (2 ^ k)",
+      desc: "Seiferas sorting network at power-of-2 sizes. Runs stages + finishAt to sort bags." },
+    { id: "seiferasNetwork_depth_le", file: "AKS/Bags/Depth.lean", line: 427, status: "proved", kind: "theorem",
+      sig: "seiferasNetwork_depth_le (p : Params) (k : ℕ) (hk : 10 ≤ k) :\n  (seiferasNetwork p k).depth ≤ p.depth * k",
+      desc: "Depth bound: O(log n) with constant p.depth." },
+    { id: "seiferasNetwork_sorts", file: "AKS/Bags/Sorts.lean", line: 841, status: "proved", kind: "theorem",
+      sig: "seiferasNetwork_sorts (p : Params) (k : ℕ) (hk : 10 ≤ k) :\n  ∀ (α : Type*) [LinearOrder α] (v : Fin (2 ^ k) → α),\n  Monotone ((seiferasNetwork p k).exec v)",
+      desc: "The Seiferas network sorts all inputs. Proved via stranger_bound + finishAt." },
+    { id: "restrictWires", file: "AKS/Sort/Shrink.lean", line: 35, status: "proved", kind: "def",
+      sig: "ComparatorNetwork.restrictWires (net : ComparatorNetwork n)\n  (m : ℕ) (hm : m ≤ n) : ComparatorNetwork m",
+      desc: "Restrict a network from n wires to m ≤ n by keeping only comparators with both endpoints in [0, m)." },
+    { id: "restrictWires_depth_le", file: "AKS/Sort/Shrink.lean", line: 129, status: "proved", kind: "theorem",
+      sig: "restrictWires_depth_le (net : ComparatorNetwork n)\n  (m : ℕ) (hm : m ≤ n) :\n  (net.restrictWires m hm).depth ≤ net.depth",
+      desc: "Wire restriction cannot increase depth. Proved via induction on comparator list maintaining wire time invariant." },
+    { id: "restrictWires_sorts", file: "AKS/Sort/Shrink.lean", line: 402, status: "proved", kind: "theorem",
+      sig: "restrictWires_sorts (net : ComparatorNetwork n)\n  (m : ℕ) (hm : m ≤ n)\n  (hsort : ∀ v, Monotone (net.exec v)) :\n  (net.restrictWires m hm).Sorts",
+      desc: "Wire restriction preserves sorting. Pads m-wire 0-1 input with 1s; comparators touching ≥m are no-ops on sorted suffix." },
+    { id: "network", file: "AKS/Seiferas.lean", line: 25, status: "proved", kind: "def", milestone: true,
+      sig: "network (n : ℕ) : ComparatorNetwork n",
+      desc: "O(log n)-depth sorting network for any n. Seiferas for n ≥ 1024, bitonic for smaller." },
+    { id: "network_sorts", file: "AKS/Seiferas.lean", line: 34, status: "proved", kind: "theorem",
+      sig: "network_sorts (n : ℕ) : (network n).Sorts",
+      desc: "The network sorts all inputs. Proved via seiferasNetwork_sorts for n ≥ 1024, bitonicNetwork_sorts for smaller." },
+    { id: "network_depth_le", file: "AKS/Seiferas.lean", line: 44, status: "proved", kind: "theorem",
+      sig: "network_depth_le (n : ℕ) :\n  (network n).depth ≤ seiferasParams.depth * Nat.clog 2 n",
+      desc: "Depth bound: O(log n) with constant seiferasParams.depth." },
+    { id: "network_size_le", file: "AKS/Seiferas.lean", line: 64, status: "proved", kind: "theorem",
+      sig: "network_size_le (n : ℕ) :\n  2 * (network n).size ≤ n * (seiferasParams.depth * Nat.clog 2 n)",
+      desc: "Size bound: O(n log n) derived from depth bound via size_le_half_n_mul_depth." },
+
+    // ── Separator/Defs.lean (Paterson/Seiferas path, parallel to Tree/) ──
+    { id: "SepInitial", file: "AKS/Separator/Defs.lean", line: 33, status: "definition", kind: "def",
+      sig: "SepInitial {α : Type*} [Fintype α] [LinearOrder α]\n  (w : α → α) (γ ε : ℝ) : Prop",
+      desc: "ε-approximate γ-separation, initial direction (Seiferas 2009, Section 6). For each γ' ≤ γ, at most ε·γ'·n of the ⌊γ'n⌋ smallest values are outside the first ⌊γn⌋ positions." },
+    { id: "IsSeparator", file: "AKS/Separator/Defs.lean", line: 52, status: "definition", kind: "def",
+      sig: "IsSeparator {n : ℕ} (net : ComparatorNetwork n)\n  (γ ε : ℝ) : Prop",
+      desc: "Network-level (γ, ε)-separator: for every permutation input, the output satisfies ε-approximate γ-separation (both directions). For γ = 1/2, equivalent to IsEpsilonHalver." },
+
+    // ── Separator/Family.lean ──
+    { id: "SeparatorFamily", file: "AKS/Separator/Family.lean", line: 33, status: "definition", kind: "structure",
+      sig: "SeparatorFamily (d : ℕ) (size : ℕ → ℕ)",
+      desc: "Family of separator networks indexed by input size, with depth bounded by d. Separation property (γ, ε) is a separate IsSepFamily predicate for computability." },
+
+    // ── Separator/FromHalver.lean ──
+    { id: "halverToSeparator", file: "AKS/Separator/FromHalverDefs.lean", line: 69, status: "definition", kind: "def",
+      sig: "halverToSeparator (n : ℕ) (family : HalverFamily ε d) (t : ℕ) : ComparatorNetwork n",
+      desc: "Computable construction: iterate halver family t levels to build a separator network. Reuses halverNetwork." },
+    { id: "halver_isSeparator_half", file: "AKS/Separator/FromHalverDefs.lean", line: 127, status: "proved", kind: "theorem",
+      sig: "halver_isSeparator_half (net : ComparatorNetwork n) (ε : ℝ) :\n  IsEpsilonHalver net ε → IsSeparator net (1/2) ε",
+      desc: "PROVED. Base case: ε-halver is (1/2, ε)-separator (Seiferas Lemma 1 base). Bridge via ⌊(1/2)n⌋₊ = n/2 and floor monotonicity." },
+    { id: "far_outsider_count_preserved", file: "AKS/Separator/FromHalverDefs.lean", line: 804, status: "proved", kind: "lemma",
+      sig: "far_outsider_count_preserved (t : ℕ) (w₁ : Fin n → Fin n) (hw₁ : Injective w₁) (k : ℕ) :\n  |{pos ≥ C : w₂(pos) < k}| = |{pos ≥ C : w₁(pos) < k}|",
+      desc: "PROVED. Count of values < k at positions outside chunk 0 is preserved by halverAtLevel. Key step: within-chunk comparators preserve the chunk-0 multiset, and bijection totals force far-outsider counts to match." },
+    { id: "separator_halving_step_initial", file: "AKS/Separator/FromHalver.lean", line: 491, status: "proved", kind: "lemma",
+      sig: "separator_halving_step_initial (t : ℕ) (hsep : IsSeparator net (1/2^t) ε') :\n  SepInitial (net ++ halverAtLevel).exec v (1/2^(t+1)) (ε'+ε₁)",
+      desc: "PROVED. SepInitial direction of the halving step: near outsiders bounded by ε₁·a (via halver), far outsiders bounded by ε'·γ'·n (via inductive hypothesis). Total: (ε'+ε₁)·γ'·n." },
+    { id: "separator_halving_step_final", file: "AKS/Separator/FromHalver.lean", line: 346, status: "proved", kind: "lemma",
+      sig: "separator_halving_step_final (t : ℕ) (hsep : IsSeparator net (1/2^t) ε') :\n  SepFinal (net ++ halverAtLevel).exec v (1/2^(t+1)) (ε'+ε₁)",
+      desc: "PROVED. SepFinal direction of the halving step: symmetric to SepInitial via order dual. Uses halverAtLevel_local_eq_last + offset bijection to reduce to halver ε-bound on last chunk." },
+    { id: "separator_halving_step", file: "AKS/Separator/FromHalver.lean", line: 606, status: "proved", kind: "theorem",
+      sig: "separator_halving_step (t : ℕ) (h_even : 2 ∣ n/2^t) (h_pow_div : 2^t ∣ n) :\n  IsSeparator net (1/2^t) ε' → IsSeparator (net ++ halverAtLevel) (1/2^(t+1)) (ε'+ε₁)",
+      desc: "PROVED. Induction step: halving refines (1/2^t, ε')-separation to (1/2^(t+1), ε'+ε₁)-separation. Both SepInitial and SepFinal directions proved via offset bijections + halver ε-bound." },
+    { id: "halverToSeparator_isSeparator", file: "AKS/Separator/FromHalver.lean", line: 668, status: "proved", kind: "theorem",
+      sig: "halverToSeparator_isSeparator (h_div : 2^t ∣ n) :\n  IsSeparator (halverToSeparator n family t) (1/2^t) (t*ε)",
+      desc: "PROVED. Induction on t: base case (empty network at γ=1) + step via separator_halving_step. t levels of iterated ε-halving give (tε)-approximate (1/2^t)-separation (Seiferas Section 6, Lemma 1)." },
+
+    // ── Bags/Defs.lean ──
+    { id: "bagSize", file: "AKS/Bags/Defs.lean", line: 43, status: "definition", kind: "def",
+      sig: "bagSize (n level : ℕ) : ℕ",
+      desc: "Size of each bag's native interval at level: n / 2^level. At root: n, at leaves: 2." },
+    { id: "nativeBagIdx", file: "AKS/Bags/Defs.lean", line: 47, status: "definition", kind: "def",
+      sig: "nativeBagIdx (n level : ℕ) (r : ℕ) : ℕ",
+      desc: "Bag index native to rank r at given level: r / bagSize. Maps sorted ranks to bag tree positions." },
+    { id: "Bag.Strange", file: "AKS/Bags/Defs.lean", line: 142, status: "definition", kind: "def",
+      sig: "def Bag.Strange (b : Bag k) (j : ℕ) (r : Fin (2 ^ k)) (perm : ...) : Prop",
+      desc: "Item is j-strange at bag b: native path diverges at ancestor level." },
+    { id: "Bag.strangers", file: "AKS/Bags/Defs.lean", line: 154, status: "definition", kind: "def",
+      sig: "def Bag.strangers (b : Bag k) (j : ℕ) (perm : ...) (regs : Finset ...) : ℕ",
+      desc: "Count of j-strangers among items in a bag." },
+    { id: "Bag.strangers_mono", file: "AKS/Bags/Defs.lean", line: 159, status: "proved", kind: "theorem",
+      sig: "Bag.strangers_mono : strangers subset ≤ strangers superset",
+      desc: "Stranger count is monotone in the register set." },
+
+    // ── Bags/Split.lean ──
+    { id: "BagSplit", file: "AKS/Bags/Network.lean", line: 37, status: "definition", kind: "def",
+      sig: "structure BagSplit (k : ℕ)",
+      desc: "Result of splitting a bag: parent fringe, left child, right child registers." },
+
+    // ── Sort/Defs.lean (scatter embedding) ──
+    { id: "scatterEmbed", file: "AKS/Sort/Defs.lean", line: 248, status: "definition", kind: "def",
+      sig: "ComparatorNetwork.scatterEmbed (net : ComparatorNetwork m)\n  (n : ℕ) (f : Fin m ↪o Fin n) : ComparatorNetwork n",
+      desc: "Embed network onto scattered wire positions via order embedding. Generalizes shiftEmbed to non-contiguous wires." },
+    { id: "depth_scatterEmbed_le", file: "AKS/Sort/Depth.lean", line: 457, status: "proved", kind: "theorem",
+      sig: "depth_scatterEmbed_le :\n  (net.scatterEmbed n f).depth ≤ net.depth",
+      desc: "PROVED. Depth preserved by scatter embedding. Wire times at mapped positions correspond to originals." },
+
+    // Bags/Strange.lean — stranger bound (4th invariant condition, new Bag API)
+    { id: "stranger_bound", file: "AKS/Bags/Strange.lean", line: 360, status: "proved", kind: "theorem",
+      sig: "stranger_bound : ∀ t b j, 1 ≤ j →\n  b.strangers j perm (regs b) ≤ γ·ε^(j-1)·capacity(k,t,l)",
+      desc: "Main stranger bound via induction on t. Base case proved; inductive step via separator bridge. Uses paper-exact 1/(8A³-2A) coefficient." },
+    { id: "separator_filter_strangers", file: "AKS/Bags/SepBridge.lean", line: 475, status: "proved", kind: "theorem",
+      sig: "separator_filter_strangers : strangers(j, perm_t1, S) ≤ ε·strangers(j, perm_t, regs)",
+      desc: "Separator quality bridge: per-bag separator at effectiveGamma reduces strangers by factor ε. Uses separator_injective_initial/final + scatterEmbed." },
+    { id: "parent_stranger_j2_le", file: "AKS/Bags/SepBridge.lean", line: 817, status: "proved", kind: "theorem",
+      sig: "parent_stranger_j2_le : j≥2 parent stranger bound",
+      desc: "Parent stranger bound for j ≥ 2: combines separator_filter_strangers with IH." },
+    { id: "parent_stranger_eq1_le", file: "AKS/Bags/Source3.lean", line: 37, status: "proved", kind: "theorem",
+      sig: "parent_stranger_eq1_le : j=1 parent stranger bound",
+      desc: "Parent stranger bound for j = 1: explicit counting of source3 (equidistribution). Proved except for h_deficit subgoal." },
+    { id: "stranger_bound_succ", file: "AKS/Bags/Strange.lean", line: 169, status: "proved", kind: "theorem",
+      sig: "stranger_bound_succ : IH at t → bound at t+1",
+      desc: "Inductive step: combines parent_stranger_j2_le (j≥2) and parent_stranger_eq1_le (j=1) with arithmetic lemmas." },
+    { id: "stranger_bound_zero", file: "AKS/Bags/Strange.lean", line: 34, status: "proved", kind: "theorem",
+      sig: "stranger_bound_zero : ∀ b j, 1 ≤ j →\n  b.strangers j perm₀ (regs b) ≤ γ·ε^(j-1)·capacity(k,0,l)",
+      desc: "Base case: at stage 0, all items at root, none strange." },
+    { id: "stranger_gt1_arith", file: "AKS/Bags/Strange.lean", line: 80, status: "proved", kind: "theorem",
+      sig: "stranger_gt1_arith : 2·γ·ε^j·A·cap + γ·ε^(j-1)·cap/A ≤ γ·ε^(j-1)·ν·cap",
+      desc: "Core arithmetic for j ≥ 2 stranger bound step, using C4_gt1." },
+    { id: "stranger_eq1_arith", file: "AKS/Bags/Strange.lean", line: 101, status: "proved", kind: "theorem",
+      sig: "stranger_eq1_arith : 2·γ·ε·A·cap + coeff·cap ≤ γ·ν·cap",
+      desc: "Core arithmetic for j = 1 stranger bound step, using C4_eq1 with 1/(8A³-2A)." },
+
+    // Bags/Sizes.lean — bag size recurrence, structural and parametric bounds
+    { id: "bagCard_eq_card", file: "AKS/Bags/Sizes.lean", line: 157, status: "proved", kind: "theorem",
+      sig: "bagCard_eq_card :\n  bagCard p k t l = card(stageRegs p k t b)",
+      desc: "Bag sizes match the abstract recurrence: bagCard at level l equals the cardinality of the bag's register set after t stages." },
+    { id: "bagCard_odd_eq_zero", file: "AKS/Bags/Sizes.lean", line: 291, status: "proved", kind: "theorem",
+      sig: "bagCard_odd_eq_zero :\n  (t + l) % 2 ≠ 0 → bagCard p k t l = 0",
+      desc: "Bags at odd-parity levels are empty: when (t + l) is odd, the bag cardinality is zero." },
+    { id: "bagCard_total", file: "AKS/Bags/Sizes.lean", line: 404, status: "proved", kind: "theorem",
+      sig: "bagCard_total :\n  ∑ x in range (2^l), bagCard p k t l = 2^k",
+      desc: "Conservation: total items across all bags at any level equals 2^k." },
+    { id: "bagCard_le_bagSize", file: "AKS/Bags/Sizes.lean", line: 470, status: "proved", kind: "theorem",
+      sig: "bagCard_le_bagSize :\n  bagCard p k t l ≤ bagSize k l",
+      desc: "Structural bound: each bag has at most bagSize = 2^k/2^l items. Follows from conservation via single_le_sum." },
+    { id: "bagCard_le_capacity", file: "AKS/Bags/Sizes.lean", line: 588, status: "proved", kind: "theorem",
+      sig: "bagCard_le_capacity :\n  (bagCard p k t l : ℚ) ≤ capacity p k t l",
+      desc: "Parametric capacity bound (Seiferas 2009, 3rd invariant condition). Under C3 constraint (ν ≥ 4γA + 5/(2A)) and minimum capacity, bag sizes are bounded by 2^k·ν^t·A^l. Proved by induction on t." },
+
+    // Bags/Sorts.lean — subregs ordering (proved)
+    { id: "stages_subregs_ordered", file: "AKS/Bags/Sorts.lean", line: 793, status: "proved", kind: "theorem",
+      sig: "stages_subregs_ordered :\n  [convergence constraints] → b₁.x < b₂.x → r₁ ∈ subregs b₁ → r₂ ∈ subregs b₂ → r₁.val < r₂.val",
+      desc: "Wire indices in subregs are ordered across finish-level bags. Proved via identity-permutation convergence: net.exec id = id gives r.val ∈ [b.lo, b.hi)." },
+
+    // Bags/Sorts.lean — finishAt proofs and top-level assembly
+    { id: "finishAt_value_in_range", file: "AKS/Bags/Sorts.lean", line: 552, status: "proved", kind: "theorem",
+      sig: "finishAt_value_in_range :\n  r ∈ subregs pl b → b.lo ≤ (finishAt.exec perm r).val ∧ ... < b.hi",
+      desc: "After finishAt, values at positions in each bag's subregs remain in the bag's native interval. Proved via comparator interval preservation + scatter embed disjointness." },
+    { id: "finishAt_locally_sorted", file: "AKS/Bags/Sorts.lean", line: 675, status: "proved", kind: "theorem",
+      sig: "finishAt_locally_sorted :\n  r₁ ≤ r₂ → r₁ ∈ subregs b → r₂ ∈ subregs b → exec r₁ ≤ exec r₂",
+      desc: "After finishAt, each bag is locally sorted. Proved via foldl decomposition of disjoint scatter-embedded bitonic networks + bitonicNetwork_sorts." },
+    { id: "finishAt_sorts_perm", file: "AKS/Bags/Sorts.lean", line: 730, status: "proved", kind: "theorem",
+      sig: "finishAt_sorts_perm :\n  Monotone ((finishAt p pl).net.exec perm)",
+      desc: "Converged placement + finishAt → sorted. Uses value preservation, local sorting, and cross-bag ordering." },
+
+  ],
+
+  // Edges: [source, target] means "target depends on source" (arrow points from source to target)
+    edges: [
+    ["Bag.Strange", "Bag.strangers"],
+    ["Bag.Strange", "Bag.strangers_mono"],
+    ["Bag.Strange", "stranger_bound_succ"],
+    ["Bag.Strange", "stranger_bound_zero"],
+    ["Bag.strangers", "stranger_bound_succ"],
+    ["Bag.strangers", "stranger_bound_zero"],
+    ["Bag.strangers_mono", "parent_stranger_j2_le"],
+    ["BagSplit", "seiferasNetwork"],
+    ["Comparator", "Comparator.apply_injective"],
+    ["Comparator", "ComparatorNetwork"],
+    ["Comparator.apply_injective", "exec_injective"],
+    ["ComparatorNetwork", "ComparatorNetwork.Sorts"],
+    ["ComparatorNetwork", "exec_injective"],
+    ["ComparatorNetwork", "restrictWires"],
+    ["ComparatorNetwork", "scatterEmbed"],
+    ["ComparatorNetwork.Sorts", "network_sorts"],
+    ["ComparatorNetwork.Sorts", "zero_one_principle"],
+    ["Fin.pair_lt", "contractDivisible_rot_involution"],
+    ["Fin.pair_lt", "mgg_rot"],
+    ["Fin.pair_lt", "mgg_rot_involution"],
+    ["Fin.pair_lt", "spectralGap_contractDivisible"],
+    ["Graph", "Graph.contract"],
+    ["Graph", "RegularGraph.toGraph"],
+    ["Graph", "graphBipartiteComparators"],
+    ["Graph.contract", "Graph.spectralGap_contract"],
+    ["Graph.degreeMeanCLM", "Graph.spectralGap"],
+    ["Graph.degreeMeanCLM", "Graph.spectralGap_contract"],
+    ["Graph.degreeMeanCLM", "Graph.spectralGap_nonneg"],
+    ["Graph.degreeMeanCLM", "spectralGap_toGraph"],
+    ["Graph.normalizedWalkCLM", "Graph.spectralGap"],
+    ["Graph.normalizedWalkCLM", "Graph.spectralGap_contract"],
+    ["Graph.normalizedWalkCLM", "Graph.spectralGap_nonneg"],
+    ["Graph.normalizedWalkCLM", "spectralGap_toGraph"],
+    ["Graph.spectralGap", "Graph.spectralGap_contract"],
+    ["Graph.spectralGap", "Graph.spectralGap_nonneg"],
+    ["Graph.spectralGap", "spectralGap_toGraph"],
+    ["Graph.spectralGap_contract", "spectralGap_contractDivisible"],
+    ["Graph.spectralGap_nonneg", "Graph.spectralGap_contract"],
+    ["HalverFamily", "halverToSeparator"],
+    ["HalverFamily", "halverToSeparator_isSeparator"],
+    ["IsEpsilonHalver", "HalverFamily"],
+    ["IsEpsilonHalver", "SeparatorFamily"],
+    ["IsEpsilonHalver", "exists_halver_depth_le"],
+    ["IsEpsilonHalver", "expanderHalver_isEpsilonHalver"],
+    ["IsEpsilonHalver", "halver_isSeparator_half"],
+    ["IsEpsilonHalver", "mggHalverNet_isEpsilonHalver"],
+    ["IsEpsilonHalver", "separator_halving_step"],
+    ["IsSeparator", "SeparatorFamily"],
+    ["IsSeparator", "halverToSeparator_isSeparator"],
+    ["IsSeparator", "halver_isSeparator_half"],
+    ["IsSeparator", "parent_stranger_eq1_le"],
+    ["IsSeparator", "separator_filter_strangers"],
+    ["IsSeparator", "separator_halving_step"],
+    ["RegBipartite", "exists_halver_depth_le"],
+    ["RegBipartite", "hall_condition"],
+    ["RegBipartite", "konigMatchings_bijective"],
+    ["RegularGraph", "RegularGraph.toGraph"],
+    ["RegularGraph", "expanderHalver"],
+    ["RegularGraph", "meanCLM"],
+    ["RegularGraph", "spectralGap"],
+    ["RegularGraph", "walkCLM"],
+    ["RegularGraph.contractDivisible", "mggHalverNet"],
+    ["RegularGraph.contractDivisible", "spectralGap_contractDivisible"],
+    ["RegularGraph.iterSquare", "mggHalverNet"],
+    ["RegularGraph.iterSquare", "mggHalverNet_depth_le"],
+    ["RegularGraph.iterSquare", "mggHalverNet_isEpsilonHalver"],
+    ["RegularGraph.iterSquare", "spectralGap_iterSquare"],
+    ["RegularGraph.square", "RegularGraph.iterSquare"],
+    ["RegularGraph.square", "spectralGap_iterSquare"],
+    ["RegularGraph.square", "spectralGap_square"],
+    ["RegularGraph.toGraph", "spectralGap_toGraph"],
+    ["SepInitial", "halverToSeparator_isSeparator"],
+    ["SepInitial", "halver_isSeparator_half"],
+    ["SepInitial", "separator_halving_step"],
+    ["SepInitial", "separator_halving_step_final"],
+    ["SepInitial", "separator_halving_step_initial"],
+    ["SeparatorFamily", "seiferasNetwork"],
+    ["bagCard_eq_card", "parent_stranger_eq1_le"],
+    ["bagCard_le_bagSize", "bagCard_le_capacity"],
+    ["bagCard_le_capacity", "parent_stranger_eq1_le"],
+    ["bagCard_odd_eq_zero", "bagCard_le_capacity"],
+    ["bagCard_total", "bagCard_le_bagSize"],
+    ["bagSize", "bagCard_le_bagSize"],
+    ["bagSize", "bagCard_le_capacity"],
+    ["bagSize", "finishAt_sorts_perm"],
+    ["bagSize", "nativeBagIdx"],
+    ["bagSize", "parent_stranger_eq1_le"],
+    ["bagSize", "separator_filter_strangers"],
+    ["bagSize", "stages_subregs_ordered"],
+    ["bagSize", "stranger_bound_zero"],
+    ["contractDivisible_rot_involution", "RegularGraph.contractDivisible"],
+    ["depth_scatterEmbed_le", "seiferasNetwork_depth_le"],
+    ["emptyNet_isEpsilonHalver", "halvers"],
+    ["exec_injective", "restrictWires_sorts"],
+    ["exists_halver_depth_le", "mggHalverNet"],
+    ["exists_halver_depth_le", "mggHalverNet_depth_le"],
+    ["expanderHalver", "exists_halver_depth_le"],
+    ["expanderHalver", "expanderHalver_isEpsilonHalver"],
+    ["expanderHalver", "expanderHalver_size"],
+    ["expanderHalver_isEpsilonHalver", "exists_halver_depth_le"],
+    ["expanderHalver_isEpsilonHalver", "mggHalverNet_isEpsilonHalver"],
+    ["expanderHalver_size", "exists_halver_depth_le"],
+    ["expander_mixing_lemma", "tanner_bound"],
+    ["far_outsider_count_preserved", "separator_halving_step_initial"],
+    ["finishAt_locally_sorted", "finishAt_sorts_perm"],
+    ["finishAt_sorts_perm", "seiferasNetwork_sorts"],
+    ["finishAt_value_in_range", "finishAt_sorts_perm"],
+    ["graphBipartiteComparators", "expanderHalver"],
+    ["hall_condition", "exists_halver_depth_le"],
+    ["halverDepth", "halvers"],
+    ["halverToSeparator", "halverToSeparator_isSeparator"],
+    ["halverToSeparator_isSeparator", "separators"],
+    ["halver_isSeparator_half", "parent_stranger_eq1_le"],
+    ["halver_isSeparator_half", "separator_halving_step"],
+    ["halvers", "SeparatorFamily"],
+    ["halvers", "far_outsider_count_preserved"],
+    ["halvers", "separator_halving_step_final"],
+    ["halvers", "separator_halving_step_initial"],
+    ["halvers", "separators"],
+    ["indicatorVec", "expander_mixing_lemma"],
+    ["indicatorVec", "tanner_bound"],
+    ["iterSquareDeg", "RegularGraph.iterSquare"],
+    ["iterSquareDeg", "halverDepth"],
+    ["iterSquareDeg", "mggHalverNet"],
+    ["iterSquareDeg", "mggHalverNet_depth_le"],
+    ["iterSquareDeg", "mggHalverNet_isEpsilonHalver"],
+    ["iterSquareDeg", "spectralGap_iterSquare"],
+    ["konigMatchings_bijective", "exists_halver_depth_le"],
+    ["meanCLM", "expander_mixing_lemma"],
+    ["meanCLM", "meanCLM_idempotent"],
+    ["meanCLM", "meanCLM_isSelfAdjoint"],
+    ["meanCLM", "spectralGap"],
+    ["meanCLM_idempotent", "spectralGap_square"],
+    ["meanCLM_isSelfAdjoint", "spectralGap_square"],
+    ["mgg", "mggHalverNet"],
+    ["mgg", "mggHalverNet_depth_le"],
+    ["mgg", "mggHalverNet_isEpsilonHalver"],
+    ["mgg", "mgg_rayleigh_bound"],
+    ["mgg", "spectralGap_mgg"],
+    ["mggHalverNet", "halvers"],
+    ["mggHalverNet", "mggHalverNet_depth_le"],
+    ["mggHalverNet", "mggHalverNet_isEpsilonHalver"],
+    ["mggHalverNet_depth_le", "halvers"],
+    ["mggHalverNet_isEpsilonHalver", "halvers"],
+    ["mggNbr", "mggNbr_invol"],
+    ["mggNbr", "mgg_rot"],
+    ["mggNbr", "mgg_rot_involution"],
+    ["mggNbr_invol", "mgg_rot_involution"],
+    ["mgg_rayleigh_bound", "spectralGap_mgg"],
+    ["mgg_rot", "mgg"],
+    ["mgg_rot", "mgg_rot_involution"],
+    ["mgg_rot_involution", "mgg"],
+    ["mod_fiber_card_exact", "RegularGraph.contractDivisible"],
+    ["nativeBagIdx", "bagSize"],
+    ["network", "network_depth_le"],
+    ["network", "network_size_le"],
+    ["network", "network_sorts"],
+    ["network_depth_le", "network_size_le"],
+    ["parent_stranger_eq1_le", "stranger_bound_succ"],
+    ["parent_stranger_j2_le", "stranger_bound_succ"],
+    ["rank_fin_val", "separator_halving_step_initial"],
+    ["restrictWires", "restrictWires_depth_le"],
+    ["restrictWires", "restrictWires_sorts"],
+    ["restrictWires_depth_le", "network_depth_le"],
+    ["restrictWires_sorts", "network_sorts"],
+    ["scatterEmbed", "depth_scatterEmbed_le"],
+    ["scatterEmbed", "seiferasNetwork"],
+    ["scatterEmbed", "separator_filter_strangers"],
+    ["seiferasNetwork", "network"],
+    ["seiferasNetwork", "network_depth_le"],
+    ["seiferasNetwork", "network_sorts"],
+    ["seiferasNetwork", "seiferasNetwork_depth_le"],
+    ["seiferasNetwork", "seiferasNetwork_sorts"],
+    ["seiferasNetwork_depth_le", "network_depth_le"],
+    ["seiferasNetwork_sorts", "network_sorts"],
+    ["separator_filter_strangers", "parent_stranger_eq1_le"],
+    ["separator_filter_strangers", "parent_stranger_j2_le"],
+    ["separator_halving_step", "halverToSeparator_isSeparator"],
+    ["separator_halving_step_final", "separator_halving_step"],
+    ["separator_halving_step_initial", "separator_halving_step"],
+    ["separators", "seiferasNetwork"],
+    ["separators", "separator_filter_strangers"],
+    ["size_le_half_n_mul_depth", "network_size_le"],
+    ["spectralGap", "expander_mixing_lemma"],
+    ["spectralGap", "spectralGap_nonneg"],
+    ["spectralGap", "spectralGap_toGraph"],
+    ["spectralGap_contractDivisible", "mggHalverNet_isEpsilonHalver"],
+    ["spectralGap_iterSquare", "mggHalverNet_isEpsilonHalver"],
+    ["spectralGap_mgg", "mggHalverNet_isEpsilonHalver"],
+    ["spectralGap_nonneg", "expanderHalver_isEpsilonHalver"],
+    ["spectralGap_nonneg", "mggHalverNet_isEpsilonHalver"],
+    ["spectralGap_square", "spectralGap_iterSquare"],
+    ["spectralGap_toGraph", "spectralGap_contractDivisible"],
+    ["stages_subregs_ordered", "finishAt_sorts_perm"],
+    ["stages_subregs_ordered", "seiferasNetwork_sorts"],
+    ["stranger_bound", "seiferasNetwork_sorts"],
+    ["stranger_bound_succ", "stranger_bound"],
+    ["stranger_bound_zero", "stranger_bound"],
+    ["stranger_eq1_arith", "stranger_bound_succ"],
+    ["stranger_gt1_arith", "stranger_bound_succ"],
+    ["tanner_bound", "expanderHalver_isEpsilonHalver"],
+    ["walkCLM", "expander_mixing_lemma"],
+    ["walkCLM", "spectralGap"],
+    ["zero_one_principle", "restrictWires_sorts"],
+  ],
+
+  // File groupings with display names
+  groups: [
+    { id: "AKS/Misc/Fin.lean", label: "Misc/Fin.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Regular.lean", label: "Graph/Regular.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Square.lean", label: "Graph/Square.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Contract.lean", label: "Graph/Contract.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Graph.lean", label: "Graph/Graph.lean", color: "#1a1e24" },
+    { id: "AKS/Graph/Walk.lean", label: "Graph/Walk.lean", color: "#1a1e24" },
+    { id: "AKS/MGG/Defs.lean", label: "MGG/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/MGG/Spectral.lean", label: "MGG/Spectral.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/Mixing.lean", label: "Halver/Mixing.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/Defs.lean", label: "Halver/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/Empty.lean", label: "Halver/Empty.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/FromExpander.lean", label: "Halver/FromExpander.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/General.lean", label: "Halver/General.lean", color: "#1a1e24" },
+    { id: "AKS/Halver/Tanner.lean", label: "Halver/Tanner.lean", color: "#1a1e24" },
+    { id: "AKS/Konig/Defs.lean", label: "Konig/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Konig/Hall.lean", label: "Konig/Hall.lean", color: "#1a1e24" },
+    { id: "AKS/Konig/Coloring.lean", label: "Konig/Coloring.lean", color: "#1a1e24" },
+    { id: "AKS/Sort/Defs.lean", label: "Sort/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Sort/Monotone.lean", label: "Sort/Monotone.lean", color: "#1a1e24" },
+    { id: "AKS/Sort/ZeroOne.lean", label: "Sort/ZeroOne.lean", color: "#1a1e24" },
+    { id: "AKS/Sort/Depth.lean", label: "Sort/Depth.lean", color: "#1a1e24" },
+    { id: "AKS/Sort/Shrink.lean", label: "Sort/Shrink.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/Defs.lean", label: "Separator/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/Family.lean", label: "Separator/Family.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/FromHalver.lean", label: "Separator/FromHalver.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/SepProof.lean", label: "Separator/SepProof.lean", color: "#1a1e24" },
+    { id: "AKS/Separator/General.lean", label: "Separator/General.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Defs.lean", label: "Bags/Defs.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Network.lean", label: "Bags/Network.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Sizes.lean", label: "Bags/Sizes.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Strange.lean", label: "Bags/Strange.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Sorts.lean", label: "Bags/Sorts.lean", color: "#1a1e24" },
+    { id: "AKS/Bags/Depth.lean", label: "Bags/Depth.lean", color: "#1a1e24" },
+    { id: "AKS/Seiferas.lean", label: "Seiferas.lean", color: "#1a1e24" }
+  ]
+};
+// ═══════════════════════════════════════════════════════
+
+const statusColor = {
+  proved: "#3fb950",
+  sorry: "#d29922",
+  axiom: "#f85149",
+  definition: "#58a6ff",
+};
+
+// Difficulty → radius mapping
+function difficultyRadius(d, status) {
+  if (!d) return 4;
+  if (d === "days") return 6;
+  if (d === "1-2 weeks" || d === "weeks") return 8;
+  if (d === "2-4 weeks") return 10;
+  if (d === "months") return 12;
+  return 4;
+}
+
+let W = window.innerWidth;
+let H = window.innerHeight;
+
+// Compute stats
+const proved = PROOF_DATA.nodes.filter(n => n.status === "proved").length;
+const sorry = PROOF_DATA.nodes.filter(n => n.status === "sorry").length;
+const axiomCount = PROOF_DATA.nodes.filter(n => n.status === "axiom").length;
+const defs = PROOF_DATA.nodes.filter(n => n.status === "definition").length;
+document.getElementById("stats").innerHTML =
+  `<div class="num" style="color:#3fb950">${proved}</div> proved<br>` +
+  `<div class="num" style="color:#d29922">${sorry}</div> sorry<br>` +
+  `<div class="num" style="color:#f85149">${axiomCount}</div> axiom<br>` +
+  `<div class="num" style="color:#58a6ff">${defs}</div> definitions`;
+
+// ── Compute DAG depth (longest path from roots) ──
+const nodeMap = new Map(PROOF_DATA.nodes.map(n => [n.id, n]));
+const inEdges = new Map();
+const outEdges = new Map();
+PROOF_DATA.nodes.forEach(n => { inEdges.set(n.id, []); outEdges.set(n.id, []); });
+PROOF_DATA.edges.forEach(([s, t]) => {
+  if (inEdges.has(t) && outEdges.has(s)) {
+    inEdges.get(t).push(s);
+    outEdges.get(s).push(t);
+  }
+});
+
+const depth = new Map();
+function getDepth(id) {
+  if (depth.has(id)) return depth.get(id);
+  depth.set(id, -1);
+  const parents = inEdges.get(id) || [];
+  const d = parents.length === 0 ? 0 : 1 + Math.max(...parents.map(getDepth));
+  depth.set(id, d);
+  return d;
+}
+PROOF_DATA.nodes.forEach(n => getDepth(n.id));
+const maxDepth = Math.max(...PROOF_DATA.nodes.map(n => depth.get(n.id)));
+
+// ── Assign radius and initial positions ──
+PROOF_DATA.nodes.forEach(n => {
+  n.depth = depth.get(n.id);
+  n.radius = difficultyRadius(n.difficulty, n.status);
+});
+
+// Group nodes by file for group rectangles
+const fileGroups = new Map();
+PROOF_DATA.nodes.forEach(n => {
+  if (!fileGroups.has(n.file)) fileGroups.set(n.file, []);
+  fileGroups.get(n.file).push(n);
+});
+
+// Layout: Y is INVERTED (big theorems at top, foundations at bottom)
+const LAYER_H = 75;
+const TOP_PAD = 60;
+const GRAPH_W = 1000;
+const CENTER_X = GRAPH_W / 2;
+
+// Seed initial positions: Y by inverted depth, X spread with noise
+const layers = new Map();
+PROOF_DATA.nodes.forEach(n => {
+  if (!layers.has(n.depth)) layers.set(n.depth, []);
+  layers.get(n.depth).push(n);
+});
+layers.forEach((nodesInLayer, d) => {
+  const count = nodesInLayer.length;
+  const layerW = Math.min(GRAPH_W, count * 80);
+  nodesInLayer.forEach((n, i) => {
+    // Inverted: max depth at top
+    n.y = TOP_PAD + (maxDepth - d) * LAYER_H;
+    n.x = CENTER_X - layerW/2 + (i + 0.5) * (layerW / count);
+  });
+});
+
+// ── D3 setup ──
+const svg = d3.select("#graph");
+const g = svg.append("g");
+
+// Arrow markers (green for clean edges, orange for edges with sorry/axiom below)
+const defs2 = svg.append("defs");
+[["arrow-green", "#3fb950"], ["arrow-orange", "#d29922"]].forEach(([id, color]) => {
+  defs2.append("marker")
+    .attr("id", id)
+    .attr("viewBox", "0 0 10 6")
+    .attr("refX", 10)
+    .attr("refY", 3)
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto")
+    .append("polygon")
+    .attr("points", "0,0 10,3 0,6")
+    .attr("fill", color);
+});
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.15, 4])
+  .on("zoom", (e) => g.attr("transform", e.transform));
+svg.call(zoom);
+
+function resetZoom(instant) {
+  const graphH = TOP_PAD + (maxDepth + 1) * LAYER_H + 40;
+  const scaleX = W / (GRAPH_W + 80);
+  const scaleY = (H - 20) / graphH;
+  let s = Math.min(scaleX, scaleY, 1.1) * 0.9;
+  // On mobile the fit-all scale makes nodes sub-pixel; enforce a minimum
+  // so nodes are visible and let the user pan to explore.
+  if (W <= 600) s = Math.max(s, 0.7);
+  const tx = (W - GRAPH_W * s) / 2;
+  const ty = W <= 600 ? -graphH * s * 0.15 : 10;
+  const t = d3.zoomIdentity.translate(tx, ty).scale(s);
+  if (instant) {
+    svg.call(zoom.transform, t);
+  } else {
+    svg.transition().duration(500).call(zoom.transform, t);
+  }
+}
+
+let labelsVisible = true;
+function toggleLabels() {
+  labelsVisible = !labelsVisible;
+  g.selectAll(".node-label").attr("opacity", labelsVisible ? 1 : 0);
+}
+
+// ── Build links ──
+const links = PROOF_DATA.edges
+  .filter(([s, t]) => nodeMap.has(s) && nodeMap.has(t))
+  .map(([s, t]) => ({ source: nodeMap.get(s), target: nodeMap.get(t) }));
+
+// ── Edge color computation ──
+// For each node, compute whether it and all its transitive dependencies are
+// "clean" (proved or definition).  Edge color = green if source is clean,
+// orange if any dependency below is sorry/axiom.
+const depsMap = new Map();
+PROOF_DATA.nodes.forEach(n => depsMap.set(n.id, []));
+links.forEach(l => {
+  const arr = depsMap.get(l.target.id);
+  if (arr) arr.push(l.source.id);
+});
+
+let edgeCleanMap;
+function computeEdgeColors(getStatus) {
+  const clean = new Map();
+  function check(id) {
+    if (clean.has(id)) return clean.get(id);
+    clean.set(id, true); // cycle guard
+    const st = getStatus(id);
+    if (st !== "proved" && st !== "definition") { clean.set(id, false); return false; }
+    for (const dep of (depsMap.get(id) || [])) {
+      if (!check(dep)) { clean.set(id, false); return false; }
+    }
+    return true;
+  }
+  PROOF_DATA.nodes.forEach(n => check(n.id));
+  edgeCleanMap = clean;
+}
+function edgeStroke(l) { return edgeCleanMap.get(l.source.id) ? "#3fb950" : "#d29922"; }
+function edgeMarker(l) { return edgeCleanMap.get(l.source.id) ? "url(#arrow-green)" : "url(#arrow-orange)"; }
+
+// Initial computation from live statuses
+computeEdgeColors(id => nodeMap.get(id)?.status || "sorry");
+
+// ── Force simulation for organic layout ──
+// Strong Y force keeps depth ordering; charge + collision spread nodes apart
+const simulation = d3.forceSimulation(PROOF_DATA.nodes)
+  .force("link", d3.forceLink(links).id(d => d.id).distance(50).strength(0.15))
+  .force("charge", d3.forceManyBody().strength(-120))
+  .force("y", d3.forceY().y(d => TOP_PAD + (maxDepth - d.depth) * LAYER_H).strength(0.85))
+  .force("x", d3.forceX(CENTER_X).strength(0.03))
+  .force("collision", d3.forceCollide().radius(d => d.radius + 14))
+  .alphaDecay(0.025)
+  .alpha(0.8);
+
+// Save layout positions after simulation settles
+let simulationDone = false;
+const groupCentroids = new Map();
+
+simulation.on("end", () => {
+  PROOF_DATA.nodes.forEach(d => { d.liveX = d.x; d.liveY = d.y; });
+  fileGroups.forEach((nodes, fileId) => {
+    groupCentroids.set(fileId, {
+      x: nodes.reduce((s, n) => s + n.liveX, 0) / nodes.length,
+      y: nodes.reduce((s, n) => s + n.liveY, 0) / nodes.length,
+    });
+  });
+  simulationDone = true;
+  // Re-fit after simulation settles (positions are now final)
+  resetZoom(false);
+});
+
+function isNodeVisible(id) {
+  return nodeMap.has(id);
+}
+
+// ── Draw group rects (updated on tick) ──
+const groupRects = g.append("g").selectAll("rect")
+  .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
+  .join("rect")
+  .attr("class", "group-rect")
+  .attr("fill", d => d.color)
+  .attr("stroke", "#21262d")
+  .attr("stroke-width", 1);
+
+const groupLabels = g.append("g").selectAll("text")
+  .data(PROOF_DATA.groups.filter(gr => fileGroups.has(gr.id)))
+  .join("text")
+  .attr("class", "group-label")
+  .text(d => d.label);
+
+// ── Draw edges ──
+const linkSel = g.append("g")
+  .selectAll("path")
+  .data(links)
+  .join("path")
+  .attr("class", "link")
+  .attr("stroke", edgeStroke)
+  .attr("stroke-width", 1.2)
+  .attr("opacity", 0.35)
+  .attr("marker-end", edgeMarker);
+
+// ── Draw nodes ──
+const nodeSel = g.append("g")
+  .selectAll("circle")
+  .data(PROOF_DATA.nodes)
+  .join("circle")
+  .attr("class", "node-circle")
+  .attr("r", d => d.radius)
+  .attr("fill", d => statusColor[d.status])
+  .attr("stroke", d => d3.color(statusColor[d.status]).darker(0.5).formatHex())
+  .call(d3.drag()
+    .on("start", (e, d) => { if (!e.active) simulation.alphaTarget(0.15).restart(); d.fx = d.x; d.fy = d.y; })
+    .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
+    .on("end", (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+  );
+
+// ── Node labels ──
+const labelSel = g.append("g")
+  .selectAll("text")
+  .data(PROOF_DATA.nodes)
+  .join("text")
+  .attr("class", "node-label")
+  .text(d => {
+    let name = d.id;
+    name = name.replace("RegularGraph.", "").replace("CLM", "");
+    if (name.length > 22) name = name.substring(0, 20) + "..";
+    return name;
+  });
+
+// ── Edge path helper ──
+function edgePath(d) {
+  const sx = d.source.x, sy = d.source.y;
+  const tx = d.target.x, ty = d.target.y;
+  const dx = tx - sx, dy = ty - sy;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  // Shorten at both ends by node radii
+  const sr = d.source.radius + 2;
+  const tr = d.target.radius + 5; // extra for arrowhead
+  const bx = sx + (dx/len)*sr, by = sy + (dy/len)*sr;
+  const ex = tx - (dx/len)*tr, ey = ty - (dy/len)*tr;
+  // Gentle curve
+  const mx = (bx + ex) / 2, my = (by + ey) / 2;
+  const offset = (ex - bx) * 0.12;
+  return `M${bx},${by} Q${mx + offset},${my} ${ex},${ey}`;
+}
+
+// ── Tick ──
+simulation.on("tick", () => {
+  linkSel.attr("d", edgePath);
+
+  nodeSel.attr("cx", d => d.x).attr("cy", d => d.y);
+
+  labelSel
+    .attr("x", d => d.x)
+    .attr("y", d => d.y + d.radius + 12);
+
+  // Update group rectangles
+  groupRects.each(function(gr) {
+    const nodes = fileGroups.get(gr.id);
+    if (!nodes || !nodes.length) return;
+    const pad = 24;
+    const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+    d3.select(this)
+      .attr("x", Math.min(...xs) - pad).attr("y", Math.min(...ys) - pad)
+      .attr("width", Math.max(...xs) - Math.min(...xs) + 2*pad)
+      .attr("height", Math.max(...ys) - Math.min(...ys) + 2*pad);
+  });
+  groupLabels.each(function(gr) {
+    const nodes = fileGroups.get(gr.id);
+    if (!nodes || !nodes.length) return;
+    const pad = 24;
+    d3.select(this)
+      .attr("x", Math.min(...nodes.map(n => n.x)) - pad + 6)
+      .attr("y", Math.min(...nodes.map(n => n.y)) - pad + 13);
+  });
+});
+
+// ── Tooltip ──
+const tooltip = document.getElementById("tooltip");
+
+nodeSel.on("mouseover", (e, d) => {
+  tooltip.style.display = "block";
+  let html = `<div class="tt-name">${d.id}</div>`;
+  html += `<div class="tt-file">${d.file}:${d.line} &mdash; <span style="color:${statusColor[d.status]}">${d.status}</span></div>`;
+  html += `<div class="tt-sig">${escHtml(d.sig)}</div>`;
+  html += `<div class="tt-desc">${d.desc}</div>`;
+  if (d.difficulty) html += `<div class="tt-diff">Estimated difficulty: ${d.difficulty}</div>`;
+  tooltip.innerHTML = html;
+})
+.on("mousemove", (e) => {
+  let x = e.clientX + 16, y = e.clientY + 16;
+  if (x + 480 > W) x = e.clientX - 496;
+  if (y + 200 > H) y = e.clientY - 200;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+})
+.on("mouseout", () => { tooltip.style.display = "none"; })
+.on("click", (e, d) => {
+  window.open(`${PROOF_DATA.repo}/blob/main/${d.file}#L${d.line}`, "_blank");
+});
+
+function escHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ── Highlight connected nodes on hover ──
+nodeSel.on("mouseover.highlight", (e, d) => {
+  const connected = new Set([d.id]);
+  links.forEach(l => {
+    if (l.source.id === d.id) connected.add(l.target.id);
+    if (l.target.id === d.id) connected.add(l.source.id);
+  });
+  nodeSel.attr("opacity", n => {
+    if (!isNodeVisible(n.id)) return 0;
+    return connected.has(n.id) ? 1 : 0.15;
+  });
+  labelSel.attr("opacity", n => {
+    if (!isNodeVisible(n.id)) return 0;
+    return (connected.has(n.id) && labelsVisible) ? 1 : 0.05;
+  });
+  linkSel.attr("opacity", l => {
+    if (!isNodeVisible(l.source.id) || !isNodeVisible(l.target.id)) return 0;
+    return (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04;
+  });
+}).on("mouseout.highlight", () => {
+  nodeSel.attr("opacity", 1);
+  labelSel.attr("opacity", labelsVisible ? 1 : 0);
+  linkSel.attr("opacity", 0.35).attr("stroke", edgeStroke).attr("marker-end", edgeMarker);
+});
+
+// ── Initial zoom to fit (instant, no transition) ──
+setTimeout(() => resetZoom(true), 100);
+
+// ═══════════════════════════════════════════════════════
+// MOBILE / RESPONSIVE SUPPORT
+// ═══════════════════════════════════════════════════════
+
+// Resize handler — recompute dimensions and re-fit
+window.addEventListener('resize', () => {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  resetZoom();
+});
+
+// Legend toggle for mobile
+function toggleLegend() {
+  document.getElementById('legend').classList.toggle('open');
+}
+
+// Close legend when tapping elsewhere on mobile
+document.addEventListener('click', (e) => {
+  const legend = document.getElementById('legend');
+  const toggle = document.getElementById('legend-toggle');
+  if (!legend.contains(e.target) && e.target !== toggle) {
+    legend.classList.remove('open');
+  }
+});
+
+// Touch support for tooltips (tap node = show tooltip, tap elsewhere = dismiss)
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let activeTooltipNode = null;
+
+if (isTouchDevice) {
+  // Prevent default touch-drag on nodes so tooltip shows on tap
+  nodeSel.on('touchstart', function(e, d) {
+    // Single-finger tap: show tooltip
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (activeTooltipNode === d) {
+        // Second tap on same node: open link
+        window.open(`${PROOF_DATA.repo}/blob/main/${d.file}#L${d.line}`, '_blank');
+        dismissTooltip();
+        return;
+      }
+
+      activeTooltipNode = d;
+
+      // Show tooltip content
+      let html = `<div class="tt-name">${d.id}</div>`;
+      html += `<div class="tt-file">${d.file}:${d.line} &mdash; <span style="color:${statusColor[d.status]}">${d.status}</span></div>`;
+      html += `<div class="tt-sig">${escHtml(d.sig)}</div>`;
+      html += `<div class="tt-desc">${d.desc}</div>`;
+      if (d.difficulty) html += `<div class="tt-diff">Estimated difficulty: ${d.difficulty}</div>`;
+      html += `<div style="margin-top:8px;font-size:10px;color:#484f58;">Tap again to open on GitHub</div>`;
+      tooltip.innerHTML = html;
+      tooltip.style.display = 'block';
+
+      // Position: on mobile, anchor to bottom of viewport; on desktop, near touch point
+      if (W <= 600) {
+        tooltip.style.left = '16px';
+        tooltip.style.top = '';
+        tooltip.style.bottom = '8px';
+      } else {
+        const touch = e.touches[0];
+        let x = touch.clientX + 16, y = touch.clientY + 16;
+        if (x + 480 > W) x = touch.clientX - 496;
+        if (y + 200 > H) y = touch.clientY - 200;
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+        tooltip.style.bottom = '';
+      }
+
+      // Highlight connected
+      const connected = new Set([d.id]);
+      links.forEach(l => {
+        if (l.source.id === d.id) connected.add(l.target.id);
+        if (l.target.id === d.id) connected.add(l.source.id);
+      });
+      nodeSel.attr('opacity', n => {
+        if (!isNodeVisible(n.id)) return 0;
+        return connected.has(n.id) ? 1 : 0.15;
+      });
+      labelSel.attr('opacity', n => {
+        if (!isNodeVisible(n.id)) return 0;
+        return (connected.has(n.id) && labelsVisible) ? 1 : 0.05;
+      });
+      linkSel.attr('opacity', l => {
+        if (!isNodeVisible(l.source.id) || !isNodeVisible(l.target.id)) return 0;
+        return (l.source.id === d.id || l.target.id === d.id) ? 0.8 : 0.04;
+      });
+    }
+  });
+
+  // Tap on background dismisses tooltip
+  svg.on('touchstart.dismiss', (e) => {
+    if (e.target.tagName === 'svg' || e.target.classList.contains('group-rect')) {
+      dismissTooltip();
+    }
+  });
+
+  // Also dismiss on tap outside the tooltip itself
+  document.addEventListener('touchstart', (e) => {
+    if (activeTooltipNode && !tooltip.contains(e.target) &&
+        !e.target.classList.contains('node-circle')) {
+      dismissTooltip();
+    }
+  });
+}
+
+function dismissTooltip() {
+  activeTooltipNode = null;
+  tooltip.style.display = 'none';
+  tooltip.style.bottom = '';
+  // Restore normal opacity
+  nodeSel.attr('opacity', d => isNodeVisible(d.id) ? 1 : 0);
+  labelSel.attr('opacity', d => (isNodeVisible(d.id) && labelsVisible) ? 1 : 0);
+  linkSel.attr('opacity', 0.35).attr('stroke', edgeStroke).attr('marker-end', edgeMarker);
+}
+</script>
+</body>
+</html>

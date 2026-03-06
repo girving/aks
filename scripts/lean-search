@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Query LeanSearch (https://leansearch.net/) for Mathlib lemmas.
+
+Usage:
+    scripts/leansearch "eigenvalue of 2x2 matrix"
+    scripts/leansearch "determinant equals product of eigenvalues"
+"""
+
+import sys
+import json
+import urllib.request
+import urllib.error
+
+def search_lean(query: str, num_results: int = 10) -> list:
+    """Query LeanSearch API and return results."""
+    url = "https://leansearch.net/search"
+
+    # LeanSearch expects query as a list of words
+    query_words = query.split()
+
+    data = {
+        "query": query_words,
+        "max_results": num_results
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+            'User-Agent': 'lean-search-cli/1.0'
+        }
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except urllib.error.URLError as e:
+        print(f"Error: Failed to connect to LeanSearch: {e}", file=sys.stderr)
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON response: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def format_result(item: dict, index: int) -> str:
+    """Format a single search result for display."""
+    result = item.get('result', {})
+    distance = item.get('distance', 0)
+
+    lines = []
+
+    # Format the name from the list
+    name_parts = result.get('name', [])
+    full_name = '.'.join(name_parts) if name_parts else 'Unknown'
+    lines.append(f"\n[{index}] {full_name}")
+    lines.append(f"    Relevance: {1 - distance:.2%}")
+
+    if 'kind' in result:
+        lines.append(f"    Kind: {result['kind']}")
+
+    if 'signature' in result:
+        sig = result['signature']
+        if len(sig) > 100:
+            sig = sig[:97] + "..."
+        lines.append(f"    Sig: {sig}")
+
+    if 'docstring' in result and result['docstring']:
+        doc = result['docstring']
+        # Handle tuple format
+        if isinstance(doc, tuple) and len(doc) > 0:
+            doc = doc[0]
+        if isinstance(doc, str):
+            if len(doc) > 200:
+                doc = doc[:197] + "..."
+            lines.append(f"    Doc: {doc}")
+
+    if 'module_name' in result:
+        module_parts = result['module_name']
+        module = '.'.join(module_parts) if isinstance(module_parts, list) else module_parts
+        lines.append(f"    Module: {module}")
+
+    return "\n".join(lines)
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: scripts/leansearch <query>", file=sys.stderr)
+        print('Example: scripts/leansearch "eigenvalue 2x2 matrix"', file=sys.stderr)
+        sys.exit(1)
+
+    query = " ".join(sys.argv[1:])
+    print(f"Searching for: {query}")
+
+    raw_results = search_lean(query)
+
+    # Flatten the nested list structure
+    # Response is [[{result: ..., distance: ...}, ...], ...]
+    results = []
+    if raw_results and isinstance(raw_results, list):
+        for group in raw_results:
+            if isinstance(group, list):
+                results.extend(group)
+
+    if not results:
+        print("\nNo results found.")
+        sys.exit(0)
+
+    print(f"\nFound {len(results)} results:")
+    for i, result in enumerate(results, 1):
+        print(format_result(result, i))
+
+    print(f"\n\nTo use in Lean, import the module and use #check @TheoremName")
+
+if __name__ == "__main__":
+    main()

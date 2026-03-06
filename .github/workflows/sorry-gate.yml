@@ -1,0 +1,18 @@
+name: Sorry Gate
+
+on:
+  push:
+    branches: ["main"]
+    paths: ['*.lean', 'AKS/**/*.lean', 'scripts/sorry-gate', '.github/workflows/sorry-gate.yml']
+  pull_request:
+    paths: ['*.lean', 'AKS/**/*.lean', 'scripts/sorry-gate', '.github/workflows/sorry-gate.yml']
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check for forbidden markers
+        run: python3 scripts/sorry-gate

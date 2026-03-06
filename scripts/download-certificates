@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Download prebuilt certificate data from GCS.
+
+Run this instead of rust/certificate.rs to get the data files needed by
+Random/Concrete/Random65536.lean (and other Random/Concrete/ data files). Files are downloaded to data/{n}/.
+
+Large certificates are xz-compressed in GCS and decompressed after download.
+Uses a lock directory (data/.download-lock) so concurrent invocations
+(e.g. parallel lake builds) only download once.
+"""
+
+import hashlib
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+
+def _progress(downloaded: int, total: int, elapsed: float, width: int = 36) -> str:
+    pct = downloaded / total if total else 0
+    filled = int(width * pct)
+    bar = "█" * filled + "░" * (width - filled)
+    mb_done = downloaded / 1e6
+    mb_total = total / 1e6
+    speed = f"  {downloaded/elapsed/1e6:.1f} MB/s" if elapsed > 0.2 else ""
+    return f"  [{bar}] {pct*100:3.0f}%  {mb_done:.1f}/{mb_total:.1f} MB{speed}"
+
+BUCKET = "https://storage.googleapis.com/aks-cert"
+
+# (local_path, remote_name, sha256_of_remote, decompress)
+# Only b128 format certificates; small sizes (n=16, n=1728) generate locally.
+FILES = [
+    ("data/16/rot_map.b85", "rot-n16-d4.b85",
+     "be396c904fb9d2106470e1f5a430bb48b85fa9d20751d01d1d59ab32e1a11c03", False),
+    ("data/1728/rot_map.b85", "rot-n1728-d12.b85",
+     "d93e19249a1ea185e895da69d4494eb0defb79faf9d76b1b386a0589b3ab8ff9", False),
+    ("data/20736/rot_map.b85", "rot-n20736-d12.b85",
+     "907ab28fc0d296e97a5045f5a4fbe93bf52b7f5ccaa319bcc1fdca99d330fd34", False),
+    ("data/20736/cert_z.b128", "cert-n20736-d12-scale2000000000-f64.b128.xz",
+     "667f885173e807a4b83c859b1cc02a3f51262f82f231510cd3542a1efabe25da", True),
+    ("data/38416/rot_map.b85", "rot-n38416-d14.b85",
+     "7ede0657c15b2b07c7a1209fb9a0813d662f5779bd731b36922f8e0483049b14", False),
+    ("data/38416/cert_z.b128", "cert-n38416-d14-c1520-scale1000000000-f64.b128.xz",
+     "4b4c0c7abee955a13c17e9be44672dddd740060793ff30aacb7a156763f9f1be", True),
+    ("data/65536/rot_map.b85", "rot-n65536-d16.b85",
+     "abfce597189b6004ca71213b0ae97552fee10fb9f6bc60689cbf690d0c26df14", False),
+    ("data/65536/cert_z.b128x5", "cert-n65536-d16-c1650-scale2100000000-f64.b128x5.xz",
+     "8ee9ba4ae704595a89595340474ab931bc3aed3b2edf1df3d1a0433ad1e2a19b", True),
+]
+
+LOCK_DIR = "data/.download-lock"
+LOCK_TIMEOUT = 300  # seconds
+
+
+def download_streaming(url: str, dest: str, expected_sha: str, decompress: bool) -> None:
+    """Stream-download url into dest, overlapping network I/O with decompression.
+
+    For compressed files: HTTP response → sha256 + xz subprocess stdin → dest.tmp → dest.
+    For plain files:      HTTP response → sha256 + file write    → dest.tmp → dest.
+    Checksum is verified on the compressed (remote) bytes in both cases.
+    No intermediate .xz file is written to disk.
+    """
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req) as resp:
+        total = int(resp.headers.get("Content-Length", 0))
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        h = hashlib.sha256()
+        tmp = dest + ".tmp"
+
+        show_progress = total > 100_000
+        downloaded = 0
+        t0 = time.monotonic()
+
+        if decompress:
+            with open(tmp, "wb") as out_f:
+                proc = subprocess.Popen(
+                    ["xz", "-d", "-T0", "-c"],
+                    stdin=subprocess.PIPE,
+                    stdout=out_f,
+                )
+                try:
+                    while True:
+                        chunk = resp.read(1 << 20)
+                        if not chunk:
+                            break
+                        h.update(chunk)
+                        proc.stdin.write(chunk)
+                        downloaded += len(chunk)
+                        if show_progress:
+                            print(f"\r{_progress(downloaded, total, time.monotonic()-t0)}",
+                                  end="", flush=True)
+                except Exception:
+                    proc.kill()
+                    raise
+                finally:
+                    proc.stdin.close()
+                    if show_progress:
+                        print(f"\r  decompressing...{' ' * 46}", end="", flush=True)
+                    proc.wait()
+            if show_progress:
+                print()
+            if proc.returncode != 0:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                raise RuntimeError(f"xz exited with code {proc.returncode}")
+        else:
+            with open(tmp, "wb") as f:
+                while True:
+                    chunk = resp.read(1 << 20)
+                    if not chunk:
+                        break
+                    h.update(chunk)
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if show_progress:
+                        print(f"\r{_progress(downloaded, total, time.monotonic()-t0)}",
+                              end="", flush=True)
+            if show_progress:
+                print()
+
+    if expected_sha:
+        actual = h.hexdigest()
+        if actual != expected_sha:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise RuntimeError(f"CHECKSUM MISMATCH: expected {expected_sha}, got {actual}")
+
+    os.rename(tmp, dest)
+
+
+def all_present() -> bool:
+    return all(os.path.exists(local) for local, _, _, _ in FILES)
+
+
+def do_downloads() -> int:
+    """Download missing files. Returns number of failures."""
+    missing = [(l, r, s, d) for l, r, s, d in FILES if not os.path.exists(l)]
+    n = len(missing)
+    print(f"Downloading {n} certificate {'file' if n == 1 else 'files'}...")
+    fail = 0
+    for local, remote, expected_sha, decompress in missing:
+        print(f"  {local}")
+        url = f"{BUCKET}/{remote}"
+        try:
+            download_streaming(url, local, expected_sha, decompress)
+        except Exception as e:
+            print(f"  FAILED: {e}", file=sys.stderr)
+            fail += 1
+
+    ok = n - fail
+    if fail:
+        print(f"{ok} downloaded, {fail} failed.", file=sys.stderr)
+    else:
+        print(f"Done ({ok} {'file' if ok == 1 else 'files'} downloaded).")
+    return fail
+
+
+def main() -> None:
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(root)
+
+    if all_present():
+        print("All certificate files already present.")
+        return
+
+    # Acquire lock (mkdir is atomic on POSIX)
+    os.makedirs("data", exist_ok=True)
+    try:
+        os.mkdir(LOCK_DIR)
+    except FileExistsError:
+        # Another process is downloading; wait for it
+        print("Another download in progress, waiting...", file=sys.stderr)
+        waited = 0
+        while os.path.isdir(LOCK_DIR) and waited < LOCK_TIMEOUT:
+            time.sleep(1)
+            waited += 1
+        if os.path.isdir(LOCK_DIR):
+            print(f"Timed out waiting for lock after {LOCK_TIMEOUT}s", file=sys.stderr)
+            sys.exit(1)
+        if all_present():
+            print("All certificate files present after waiting.")
+            return
+        # Lock released but files still missing — try to acquire and download
+        try:
+            os.mkdir(LOCK_DIR)
+        except FileExistsError:
+            print("Could not acquire lock after wait", file=sys.stderr)
+            sys.exit(1)
+
+    # We hold the lock
+    try:
+        fail = do_downloads()
+    finally:
+        try:
+            os.rmdir(LOCK_DIR)
+        except OSError:
+            pass
+
+    if fail:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""Generate Random/Concrete/Rot<n>{a,b,c}.lean + Random/Concrete/Rot<n>.lean files.
+
+Usage: scripts/gen-rot-lean
+
+Reads data/<n>/rot_map.b85, converts to compact 4-byte encoding, splits into
+three Lean files (a/b/c) each under ~800 KB, plus a main file that concatenates.
+
+Compact encoding: 3 b85 bytes for vertex + 1 b85 byte for port = 4 bytes per
+half-edge (vs 10 bytes in standard b85).
+"""
+
+import os
+
+GRAPHS = [
+    (20736, 12, "data/20736"),
+    (38416, 14, "data/38416"),
+]
+
+NPARTS = 3
+
+
+def decode_b85_nat(data: bytes, k: int) -> int:
+    pos = 5 * k
+    c0 = data[pos] - 33
+    c1 = data[pos + 1] - 33
+    c2 = data[pos + 2] - 33
+    c3 = data[pos + 3] - 33
+    c4 = data[pos + 4] - 33
+    return c0 + 85 * (c1 + 85 * (c2 + 85 * (c3 + 85 * c4)))
+
+
+def b85_to_compact(data: bytes, n: int, d: int) -> bytes:
+    nd = n * d
+    assert len(data) == nd * 2 * 5, f"Expected {nd * 2 * 5} bytes, got {len(data)}"
+    result = bytearray(nd * 4)
+    for k in range(nd):
+        v = decode_b85_nat(data, 2 * k)
+        p = decode_b85_nat(data, 2 * k + 1)
+        assert v < 614125, f"vertex {v} >= 85^3=614125 at half-edge {k}"
+        assert p < 85, f"port {p} >= 85 at half-edge {k}"
+        pos = 4 * k
+        result[pos] = v % 85 + 33
+        result[pos + 1] = (v // 85) % 85 + 33
+        result[pos + 2] = (v // 7225) + 33
+        result[pos + 3] = p + 33
+    return bytes(result)
+
+
+def verify_roundtrip(b85_data: bytes, compact_data: bytes, n: int, d: int) -> bool:
+    nd = n * d
+    for k in range(nd):
+        v_orig = decode_b85_nat(b85_data, 2 * k)
+        p_orig = decode_b85_nat(b85_data, 2 * k + 1)
+        pos = 4 * k
+        c0 = compact_data[pos] - 33
+        c1 = compact_data[pos + 1] - 33
+        c2 = compact_data[pos + 2] - 33
+        v_compact = c0 + 85 * (c1 + 85 * c2)
+        p_compact = compact_data[pos + 3] - 33
+        if v_orig != v_compact or p_orig != p_compact:
+            print(f"  MISMATCH k={k}: ({v_orig},{p_orig}) vs ({v_compact},{p_compact})")
+            return False
+    return True
+
+
+def escape_lean_string(data: bytes) -> str:
+    parts = []
+    for b in data:
+        if b == ord('"'):
+            parts.append('\\"')
+        elif b == ord('\\'):
+            parts.append('\\\\')
+        elif 32 <= b < 127:
+            parts.append(chr(b))
+        else:
+            raise ValueError(f"Non-printable byte: {b}")
+    return ''.join(parts)
+
+
+def split_at_boundaries(data: bytes, nparts: int, chunk_size: int) -> list[bytes]:
+    """Split data into nparts pieces at chunk_size boundaries."""
+    total_chunks = len(data) // chunk_size
+    base = total_chunks // nparts
+    remainder = total_chunks % nparts
+    parts = []
+    offset = 0
+    for i in range(nparts):
+        n_chunks = base + (1 if i < remainder else 0)
+        end = offset + n_chunks * chunk_size
+        parts.append(data[offset:end])
+        offset = end
+    assert offset == len(data), f"Split error: {offset} != {len(data)}"
+    return parts
+
+
+SUFFIXES = "abc"
+
+
+def main():
+    for n, d, data_dir in GRAPHS:
+        b85_path = os.path.join(data_dir, "rot_map.b85")
+        if not os.path.exists(b85_path):
+            print(f"SKIP {b85_path} (not found)")
+            continue
+
+        print(f"Processing n={n}, d={d}...")
+        with open(b85_path, "rb") as f:
+            b85_data = f.read()
+
+        compact = b85_to_compact(b85_data, n, d)
+        assert verify_roundtrip(b85_data, compact, n, d), "Round-trip failed!"
+        print(f"  round-trip OK ({len(compact)} compact bytes)")
+
+        # Split into NPARTS at 4-byte (half-edge) boundaries
+        parts = split_at_boundaries(compact, NPARTS, 4)
+
+        # Write part files
+        for i, part in enumerate(parts):
+            suffix = SUFFIXES[i]
+            escaped = escape_lean_string(part)
+            name = f"rot{n}{suffix}"
+            content = f'module\n\nset_option maxHeartbeats 0 in\npublic def {name} : String := "{escaped}"\n'
+            path = f"Random/Concrete/Rot{n}{suffix}.lean"
+            with open(path, "w") as f:
+                f.write(content)
+            print(f"  {path}: {len(content)/1024:.1f} KB ({len(part)} bytes)")
+
+    print("Done!")
+
+
+if __name__ == "__main__":
+    main()

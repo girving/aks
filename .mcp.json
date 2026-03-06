@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "lean": {
+      "type": "stdio",
+      "command": "cargo",
+      "args": ["+nightly", "-Zscript", ".claude/mcp/lean.rs"],
+      "cwd": "${HOME}/aks",
+      "env": {
+        "PROJECT_ROOT": "${HOME}/aks",
+        "CARGO_HOME": "${HOME}/aks/tmp/cargo-home",
+        "CARGO_TARGET_DIR": "${HOME}/aks/tmp/cargo-target",
+        "CARGO_SCRIPT_BASE_DIR": "${HOME}/aks/tmp/cargo-script"
+      }
+    }
+  }
+}
