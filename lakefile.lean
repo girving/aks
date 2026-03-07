@@ -38,6 +38,8 @@ extern_lib «mmap» pkg := do
 @[default_target]
 lean_lib «AKS» where
 
+lean_lib «Challenge» where
+
 lean_exe «cert-bench» where
   root := `Random.Bench.CertBench
 

@@ -71,6 +71,14 @@ theorem network_size_le (n : ℕ) :
   have h2 : n * (141 * 10 ^ 62 * k) = 2 * (705 * 10 ^ 61 * n * k) := by ring
   linarith
 
+/-! **Existential version for `comparator` purposes** -/
+
+/-- A pure theorem (no defs) for use with https://github.com/leanprover/comparator -/
+theorem networks_exist (n : ℕ) : ∃ net : ComparatorNetwork n, net.Sorts ∧
+    net.depth ≤ 141 * 10 ^ 62 * Nat.clog 2 n ∧
+    net.size ≤ 705 * 10 ^ 61 * n * Nat.clog 2 n :=
+  ⟨network n, network_sorts n, network_depth_le n, network_size_le n⟩
+
 /-! **Axiom audit** -/
 
 /-- info: 'network' depends on axioms: [propext, Classical.choice, Quot.sound] -/
