@@ -59,7 +59,7 @@ and is used as a finish-up step after bag-tree sorting.
 The depth bound is `(network n).depth ≤ C · ⌈log₂ n⌉` where C is a computable constant.
 The current value is astronomically large:
 
-1. **2026-03-06**: C ≈ 1.4 × 10⁶⁴ (initial proof, unoptimised MGG path)
+1. **6 March 2026**: C ≈ 1.41 × 10⁶⁴ (initial proof, unoptimised MGG path)
 
 The large constant comes from **repeated graph squaring**: the MGG expander has spectral
 gap ≤ 5√2/8 ≈ 0.884, which is too weak for direct use as a halver. We square the graph
