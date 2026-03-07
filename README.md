@@ -6,11 +6,24 @@ construction in [Lean 4](https://lean-lang.org/) with
 separator-based correctness proof and the Margulis–Gabber–Galil (1973/1981) expander.
 All code and proofs were written by Claude Opus 4.6, with extensive human hand-holding throughout.
 
-The top-level results in [`AKS/Seiferas.lean`](AKS/Seiferas.lean) are:
+The toplevel results in [`AKS/Seiferas.lean`](AKS/Seiferas.lean) are:
 
-- **`network_sorts`**: Our comparator network sorts all inputs of every size
-- **`network_depth_le`**: `depth = O(log₂ n)`
-- **`network_size_le`**: `size = O(n log₂ n)`
+```lean4
+/-- Seiferas's network for large `n`, bitonic sort for small `n` -/
+def network (n : ℕ) : ComparatorNetwork n :=
+  ...  -- Here be dragons 🐉
+
+/-- We correctly sort all inputs -/
+theorem network_sorts (n : ℕ) : (network n).Sorts
+
+/-- Our network has `O(log n)` depth -/
+theorem network_depth_le (n : ℕ) :
+    (network n).depth ≤ 141 * 10 ^ 62 * Nat.clog 2 n
+
+/-- Our network has `O(n log n)` size -/
+theorem network_size_le (n : ℕ) :
+    (network n).size ≤ 705 * 10 ^ 61 * n * Nat.clog 2 n
+```
 
 The sorting network is a computable `def`, and the gate structure is computable in polylog parallel
 depth ([NC](https://en.wikipedia.org/wiki/NC_(complexity))), though we do not yet prove this.

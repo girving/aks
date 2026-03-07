@@ -449,7 +449,10 @@ theorem seiferasNetwork_depth_le (p : Params) (k : ℕ) (hk : 10 ≤ k) :
 
 /-! **Concrete Depth Bound** -/
 
-/-- `seiferasParams.depth ≤ 2^214`, proved by kernel evaluation. -/
-theorem seiferasParams_depth_le : seiferasParams.depth ≤ 2 ^ 214 := by decide +kernel
+/-- Concrete bound on `seiferasParams.depth` -/
+theorem seiferasParams_depth_le : seiferasParams.depth ≤ 141 * 10 ^ 62 := by decide +kernel
+
+/-- Our concrete bound is sharp -/
+theorem le_seiferasParams_depth : 140 * 10 ^ 62 ≤ seiferasParams.depth := by decide +kernel
 
 end
