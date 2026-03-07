@@ -4,7 +4,8 @@ A formal verification of the Ajtai–Komlós–Szemerédi (1983) `O(n log n)` so
 construction in [Lean 4](https://lean-lang.org/) with
 [Mathlib](https://github.com/leanprover-community/mathlib4), using the Seiferas (2009)
 separator-based correctness proof and the Margulis–Gabber–Galil (1973/1981) expander.
-All code and proofs were written by Claude Opus 4.6, with extensive human hand-holding throughout.
+All code and proofs were written by Claude Code + Claude Opus 4.6, with extensive human
+hand-holding throughout.
 
 The toplevel results in [`AKS/Seiferas.lean`](AKS/Seiferas.lean) are:
 
