@@ -213,14 +213,19 @@ as checked by `#guard_msgs in #print axioms` in [`AKS/Seiferas.lean`](AKS/Seifer
 
 [`Challenge.lean`](Challenge.lean) and [`challenge.json`](challenge.json) can be used to
 check the proof using [comparator](https://github.com/leanprover/comparator), which
-(successfully) reruns the generated proof terms through the Lean checker:
+(successfully) reruns the generated proof terms through the Lean checker and
+[nanoda](https://github.com/ammkrn/nanoda_lib) (use nanoda's master branch, not the
+debug branch that comparator suggests):
 
 ```bash
-lake env ~/comparator/.lake/build/bin/comparator challenge.json
+% lake env ~/comparator/.lake/build/bin/comparator challenge.json
+...
+Running nanoda kernel on solution
+Nanoda kernel accepts the solution
+Running Lean default kernel on solution.
+Lean default kernel accepts the solution
+Your solution is okay!
 ```
-
-Alas, the independent verifier [nanoda](https://github.com/ammkrn/nanoda_lib) hits an
-error, which I have to trace down (`invalid digit found in string`).
 
 The optional [`Random/`](Random/) library (base expander certificates) additionally uses
 `native_decide` and C FFI for loading large certificate data. See
