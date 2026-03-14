@@ -1,11 +1,8 @@
-name: Sorry Gate
+name: sorry-gate
 
 on:
   push:
-    branches: ["main"]
-    paths: ['*.lean', 'AKS/**/*.lean', 'scripts/sorry-gate', '.github/workflows/sorry-gate.yml']
   pull_request:
-    paths: ['*.lean', 'AKS/**/*.lean', 'scripts/sorry-gate', '.github/workflows/sorry-gate.yml']
   workflow_dispatch:
 
 jobs:
