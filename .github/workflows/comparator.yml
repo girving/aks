@@ -1,0 +1,52 @@
+name: comparator
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install landrun
+        run: |
+          curl -sSL -o /usr/local/bin/landrun \
+            https://github.com/Zouuup/landrun/releases/latest/download/landrun-linux-amd64
+          chmod +x /usr/local/bin/landrun
+
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Get Mathlib cache
+        run: lake exe cache get
+
+      - name: Build lean4export
+        run: |
+          LEAN_VERSION=$(sed 's|leanprover/lean4:||' lean-toolchain)
+          git clone --depth 1 --branch "$LEAN_VERSION" https://github.com/leanprover/lean4export
+          cd lean4export && lake build
+          echo "$GITHUB_WORKSPACE/lean4export/.lake/build/bin" >> $GITHUB_PATH
+
+      - name: Build comparator
+        run: |
+          git clone --depth 1 --branch github https://github.com/girving/comparator
+          cd comparator && lake build
+          echo "$GITHUB_WORKSPACE/comparator/.lake/build/bin" >> $GITHUB_PATH
+
+      - name: Build nanoda
+        run: |
+          git clone --depth 1 https://github.com/ammkrn/nanoda_lib
+          cd nanoda_lib && cargo build --release
+          cp target/release/nanoda_bin "$HOME/.elan/bin/" 2>/dev/null \
+            || cp target/release/nanoda "$HOME/.elan/bin/nanoda_bin" 2>/dev/null \
+            || (echo "nanoda binary not found:"; ls target/release/; exit 1)
+
+      - name: Run comparator
+        run: lake env comparator challenge.json
