@@ -1,5 +1,7 @@
 # AKS sorting network — Lean formalisation
 
+[![comparator](https://github.com/girving/aks/actions/workflows/comparator.yml/badge.svg)](https://github.com/girving/aks/actions/workflows/comparator.yml)
+
 A formal verification of the Ajtai–Komlós–Szemerédi (1983) `O(n log n)` sorting network
 construction in [Lean 4](https://lean-lang.org/) with
 [Mathlib](https://github.com/leanprover-community/mathlib4), using the Seiferas (2009)
