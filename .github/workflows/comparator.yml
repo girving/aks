@@ -12,12 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Build landrun from source
+      - name: Build landrun
         run: |
           git clone --depth 1 https://github.com/Zouuup/landrun
           cd landrun && go build -o /usr/local/bin/landrun ./cmd/landrun
