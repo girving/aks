@@ -12,11 +12,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install landrun
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build landrun from source
         run: |
-          curl -sSL -o /usr/local/bin/landrun \
-            https://github.com/Zouuup/landrun/releases/latest/download/landrun-linux-amd64
-          chmod +x /usr/local/bin/landrun
+          git clone --depth 1 https://github.com/Zouuup/landrun
+          cd landrun && go build -o /usr/local/bin/landrun ./cmd/landrun
+          landrun --version
 
       - name: Install elan
         run: |
@@ -36,7 +41,7 @@ jobs:
 
       - name: Build comparator
         run: |
-          git clone --depth 1 --branch github https://github.com/girving/comparator
+          git clone --depth 1 https://github.com/leanprover/comparator
           cd comparator && lake build
           echo "$GITHUB_WORKSPACE/comparator/.lake/build/bin" >> $GITHUB_PATH
 
